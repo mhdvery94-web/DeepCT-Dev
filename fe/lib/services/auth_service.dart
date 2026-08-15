@@ -151,11 +151,23 @@ class AuthService {
         return data['message'] ?? 'Validation error';
       }
 
+      // The account is already signed in elsewhere. The server explains what
+      // to do, so show its wording rather than inventing our own.
+      if (statusCode == 409) {
+        return data is Map && data['message'] != null
+            ? data['message'].toString()
+            : 'This account is already signed in on another device.';
+      }
+
       if (statusCode == 500) {
         return 'Server error. Please try again later.';
       }
 
-      return data['message'] ?? 'An error occurred';
+      if (data is Map && data['message'] != null) {
+        return data['message'].toString();
+      }
+
+      return 'An error occurred';
     }
 
     return 'An unexpected error occurred';

@@ -38,7 +38,17 @@ login · 403 bukan haknya · 404 tidak ada · 409 konflik · 410 sudah kedaluwar
 { "success": true, "data": { "user": { … }, "token": "64|abc…" } }
 ```
 
-⚠️ Login **mencabut seluruh token lain** milik akun itu.
+⚠️ **Satu sesi per akun.** Kalau akun sedang dipakai, login dijawab **409**:
+
+```json
+{ "success": false,
+  "message": "This account is already signed in on another device. Sign out there first, or try again in a few minutes." }
+```
+
+Perangkat yang sudah memegang sesi **tidak** ditendang. "Sedang dipakai"
+berarti token-nya terpakai dalam 15 menit terakhir; lewat dari itu dianggap
+ditinggalkan dan login baru mengambil alih. Berlaku sama untuk admin maupun
+peneliti.
 
 Akun nonaktif ditolak dengan pesan tersendiri, bukan "kredensial salah", supaya
 peneliti tahu harus menghubungi admin.

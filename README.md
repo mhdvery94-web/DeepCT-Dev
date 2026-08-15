@@ -82,7 +82,8 @@ bukan disalin dari catatan lama.
 
 | Bagian | Status |
 |---|---|
-| Autentikasi (Sanctum, token 7 hari, satu sesi per akun) | ✅ |
+| Autentikasi (Sanctum, token 7 hari) | ✅ |
+| Satu sesi per akun — login kedua ditolak 409, idle 15 menit bisa diambil alih | ✅ |
 | Admin console — user, model, activity log, CSV export | ✅ |
 | Researcher console — dashboard, upload, hasil, riwayat | ✅ |
 | Pipeline prediksi — upload → interpolasi rekursif → download | ✅ |
@@ -90,7 +91,7 @@ bukan disalin dari catatan lama.
 | Retensi 24 jam (`predictions:cleanup`) | ✅ |
 | 35 endpoint API + `/api/health` | ✅ |
 | `flutter analyze` 0 issue, 21 test Flutter lulus | ✅ |
-| **67 test backend lulus** (223 assertion, ~20 detik) | ✅ |
+| **71 test backend lulus** (238 assertion, ~22 detik) | ✅ |
 | Build web & APK release | ✅ (APK ~52 MB) |
 
 Terverifikasi end-to-end terhadap worker Kaggle sungguhan dengan dua frame
@@ -160,9 +161,10 @@ Kaggle, bukan backend.
 User baru dibuat admin dengan password `BrinResearch2026`. Tidak ada registrasi
 mandiri dan tidak ada alur "lupa password".
 
-⚠️ Login mencabut seluruh token lain milik akun itu — **satu sesi aktif per
-akun**. Dua terminal yang login sebagai peneliti yang sama akan saling
-menjatuhkan.
+⚠️ **Satu sesi per akun.** Login kedua saat akun sedang dipakai **ditolak
+(HTTP 409)** dengan pesan yang menjelaskan, dan perangkat yang sudah login tidak
+ditendang. Sesi yang menganggur lebih dari 15 menit dianggap ditinggalkan,
+sehingga akun tidak terkunci kalau aplikasi tertutup paksa.
 
 ---
 

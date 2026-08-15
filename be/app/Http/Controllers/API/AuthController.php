@@ -12,6 +12,30 @@ use Illuminate\Validation\ValidationException;
 class AuthController extends Controller
 {
     /**
+     * How long a token may sit unused before its session counts as abandoned.
+     *
+     * Sanctum stamps `last_used_at` on every authenticated request, so an app
+     * left open keeps its session alive simply by being used. The window only
+     * has to outlast normal idle gaps between requests, not a working day.
+     */
+    private const SESSION_IDLE_MINUTES = 15;
+
+    /**
+     * Is someone actually using this account right now?
+     *
+     * A token that was issued but never used counts as active too: it was
+     * handed out seconds ago to a client that is still starting up.
+     */
+    private function hasActiveSession(User $user): bool
+    {
+        $cutoff = now()->subMinutes(self::SESSION_IDLE_MINUTES);
+
+        return $user->tokens()
+            ->whereRaw('COALESCE(last_used_at, created_at) > ?', [$cutoff])
+            ->exists();
+    }
+
+    /**
      * Login user and generate token
      */
     public function login(Request $request)
@@ -43,8 +67,24 @@ class AuthController extends Controller
             ]);
         }
 
-        // SECURITY: Single session per account
-        // Revoke all existing tokens untuk user ini (force logout di device lain)
+        // SECURITY: one session per account.
+        //
+        // A login while the account is genuinely in use elsewhere is refused,
+        // so two people cannot share credentials without noticing. But a
+        // session that was merely abandoned -- app force-closed, browser shut,
+        // phone dead -- must not lock the account out until the token expires
+        // seven days later. So "in use" means the token was actually exercised
+        // recently; anything idle past that window is treated as abandoned and
+        // taken over.
+        if ($this->hasActiveSession($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This account is already signed in on another device. '
+                    . 'Sign out there first, or try again in a few minutes.',
+            ], 409);
+        }
+
+        // Nothing active: clear whatever was left behind and take over.
         $user->tokens()->delete();
 
         // Generate new token (expires in 7 days via sanctum config)
