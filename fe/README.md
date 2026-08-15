@@ -50,13 +50,19 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
   - Approving **creates the account** and shows the credentials once
   - Reject with a reviewer note, or delete
 
-- ✅ **Support Tickets**
-  - Every ticket, filterable by status or "needs reply"
-  - Reply in the conversation, change status and priority, delete
-  - Sidebar shows a **count of tickets waiting on an administrator**, refreshed
-    on each navigation rather than polled
-  - A guest ticket (raised from the sign-in page) is flagged, and the screen
+- ✅ **Messages** (replaced the ticket screens)
+  - An inbox of conversations, newest first, filterable to unread or archived
+  - Read ticks, unread counts, archive and delete
+  - Sidebar carries a **count of conversations waiting on a reply**
+  - A guest thread (written from the sign-in page) is flagged, and the screen
     says to answer by email — there is no account to show a reply in
+
+- ✅ **Notifications**
+  - A bell in the header with an unread badge, on both consoles
+  - New messages, access requests and model outages for an administrator;
+    finished and failed jobs, replies and expiring results for a researcher
+  - Tapping one navigates to what it is about
+  - Polls every 45s, and the same request feeds the Messages badge
 
 - ✅ **Research News**
   - Write a post, attach a photo (JPEG/PNG/WebP, ≤4 MB), set its slide order
@@ -75,7 +81,10 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
 - ✅ **New Analysis** — pick a model, pick a ZIP, upload with live progress
 - ✅ **Results & History** — job status with polling, dual download, delete
 - ✅ **My Activity** — full paginated audit trail of the signed-in account
-- ✅ **IT Support** — raise a ticket and talk to an administrator in the app
+- ✅ **Messages** — one conversation with the administrators. Nothing to
+  classify first: type the problem and send it
+- ✅ **Notifications** — the same bell, carrying finished jobs, failures,
+  replies and an expiry warning before results are deleted
 
 ### Public Landing Page
 - ✅ **Join form** — wired to `POST /api/access-requests`, with the server's own
@@ -205,7 +214,8 @@ lib/
 │   ├── activity_log.dart        # ActivityLog
 │   ├── me_stats.dart            # MeStats (researcher dashboard counters)
 │   ├── prediction.dart          # Prediction (one interpolation job)
-│   ├── support_ticket.dart      # SupportTicket + SupportMessage
+│   ├── chat_message.dart        # Conversation + ChatMessage
+│   ├── app_notification.dart    # AppNotification
 │   ├── news_post.dart           # NewsPost (research news)
 │   └── pagination.dart          # Pagination + PaginatedResult<T>
 │
@@ -219,7 +229,8 @@ lib/
 │   ├── activity_service.dart    # ActivityService   — activity logs API
 │   ├── me_service.dart          # MeService — /api/me, the only non-admin data
 │   ├── access_request_service.dart # Join form + admin review
-│   ├── support_service.dart     # SupportService — tickets, both sides
+│   ├── message_service.dart     # MessageService — thread, inbox, public
+│   ├── notification_service.dart # NotificationService — the bell
 │   ├── news_service.dart        # NewsService — public feed + admin CRUD
 │   └── prediction_service.dart  # PredictionService — upload, list, download
 │
@@ -236,10 +247,11 @@ lib/
 │   │   ├── access_requests_screen.dart
 │   │   ├── news_management_screen.dart
 │   │   └── activity_logs_screen.dart
-│   ├── support/                             # Shared by both roles
-│   │   ├── ticket_list_screen.dart          # asAdmin: true → the queue
-│   │   ├── ticket_conversation_screen.dart  # The back-and-forth
-│   │   └── public_ticket_sheet.dart         # From the sign-in page, no token
+│   ├── messages/
+│   │   ├── message_thread_screen.dart       # The researcher's one thread
+│   │   ├── admin_inbox_screen.dart          # Every conversation
+│   │   ├── admin_conversation_screen.dart   # One of them
+│   │   └── public_message_sheet.dart        # From the sign-in page, no token
 │   └── user/
 │       ├── user_shell.dart                  # Researcher layout with sidebar
 │       ├── user_home_screen.dart            # Stats + recent activity
@@ -254,6 +266,8 @@ lib/
 │   ├── pagination_bar.dart      # Pagination controls
 │   ├── news_carousel.dart       # Landing-page research-news slideshow
 │   ├── user_avatar.dart         # Photo or initials frame + AvatarButton
+│   ├── message_bubbles.dart     # Bubble list + composer, both sides
+│   ├── notification_bell.dart   # Bell, badge and panel
 │   ├── avatar_editor_sheet.dart # Change/remove a photo (self or, as admin, anyone)
 │   └── async_state_views.dart   # LoadingView / ErrorView / EmptyView
 │
@@ -503,7 +517,7 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 65 tests, passing
+- ✅ `flutter test` — 89 tests, passing
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
@@ -521,13 +535,17 @@ flutter build appbundle --release
   as a slideshow in the landing page's Research section
 
 ### Testing
-The suite is **65** tests across six files.
+The suite is **89** tests across eight files.
 `widget_test.dart` covers the landing page: a boot smoke test, a layout check at
 seven viewports (fails if any section overflows), a status-bar clearance check,
 and three header-navigation checks. `user_console_test.dart` covers the
 researcher console: `MeStats` payload parsing and `UserActivityTile` rendering.
 `support_test.dart` covers ticket parsing (including the guest fallback) and the
 public ticket sheet's validation and phone layout. `upload_resume_test.dart` covers the interrupted-upload record and its store.
+`messaging_test.dart` covers the thread payloads, which side a bubble sits on,
+the read ticks, and that the composer puts your text back when a send fails.
+`notification_test.dart` covers the payload, the icon/colour fallback for a type
+the client has never seen, and the bell's badge.
 `avatar_test.dart` covers the initials fallback (two-part names, one-word
 names, an empty name) and `UserModel`'s photo field. `news_test.dart` covers the
 news payload and the carousel: that it collapses to nothing when the feed is

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
-import '../../services/support_service.dart';
 import '../../widgets/avatar_editor_sheet.dart';
+import '../../widgets/notification_bell.dart';
 import '../../widgets/user_avatar.dart';
 import '../../theme/app_theme.dart';
 import '../landing/landing_page.dart';
-import '../support/ticket_list_screen.dart';
+import '../messages/admin_inbox_screen.dart';
 import 'access_requests_screen.dart';
 import 'activity_logs_screen.dart';
 import 'dashboard_home_screen.dart';
@@ -19,7 +19,7 @@ enum AdminSection {
   dashboard('Dashboard', Icons.dashboard_outlined),
   users('User Management', Icons.people_outline),
   accessRequests('Access Requests', Icons.how_to_reg_outlined),
-  support('Support Tickets', Icons.support_agent_outlined),
+  messages('Messages', Icons.forum_outlined),
   news('Research News', Icons.article_outlined),
   models('Model Management', Icons.memory_outlined),
   activities('Activity Logs', Icons.history);
@@ -47,34 +47,47 @@ class _AdminShellState extends State<AdminShell> {
   /// Below this width the sidebar collapses into a drawer.
   static const double _mobileBreakpoint = 1000;
 
-  /// Tickets waiting on an administrator, shown beside the sidebar entry.
+  /// Conversations waiting on a reply, shown beside the Messages entry.
   ///
-  /// Refreshed on every navigation rather than polled: a ticket answered in
-  /// the support screen should stop shouting as soon as you leave it, and an
-  /// admin console does not need second-by-second accuracy.
-  int _awaitingTickets = 0;
+  /// Comes from the bell's poll rather than a request of our own:
+  /// `/notifications/unread-count` returns both counts precisely so the two
+  /// badges cost one call between them.
+  int _unreadConversations = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _refreshTicketBadge();
-  }
-
-  Future<void> _refreshTicketBadge() async {
-    try {
-      final result = await SupportService().adminTickets(awaitingOnly: true);
-      if (!mounted) return;
-      setState(() => _awaitingTickets = result.awaitingCount);
-    } catch (_) {
-      // A badge is not worth an error banner; the screen itself will report
-      // the failure if the admin opens it.
-    }
-  }
+  final GlobalKey<NotificationBellState> _bell =
+      GlobalKey<NotificationBellState>();
 
   void _goTo(AdminSection section) {
     setState(() => _section = section);
-    _refreshTicketBadge();
+
+    // Navigating away from a screen that may have read something is the
+    // cheapest moment to re-check the counts.
+    _bell.currentState?.refresh();
   }
+
+  /// Where a tapped notification goes. The link vocabulary is the server's;
+  /// the mapping to sections is ours.
+  void _openLink(String link) {
+    if (link.startsWith('messages')) {
+      setState(() => _section = AdminSection.messages);
+    } else if (link.startsWith('access-requests')) {
+      setState(() => _section = AdminSection.accessRequests);
+    } else if (link.startsWith('models')) {
+      setState(() => _section = AdminSection.models);
+    } else if (link.startsWith('dashboard')) {
+      setState(() => _section = AdminSection.dashboard);
+    }
+  }
+
+  Widget _buildBell() => NotificationBell(
+    key: _bell,
+    onCounts: (_, messages) {
+      if (mounted && messages != _unreadConversations) {
+        setState(() => _unreadConversations = messages);
+      }
+    },
+    onOpenLink: _openLink,
+  );
 
   Widget _buildBody() {
     switch (_section) {
@@ -87,8 +100,12 @@ class _AdminShellState extends State<AdminShell> {
         return const UserManagementScreen();
       case AdminSection.accessRequests:
         return const AccessRequestsScreen();
-      case AdminSection.support:
-        return const TicketListScreen(asAdmin: true);
+      case AdminSection.messages:
+        return AdminInboxScreen(
+          onUnreadChanged: (unread) {
+            if (mounted) setState(() => _unreadConversations = unread);
+          },
+        );
       case AdminSection.news:
         return const NewsManagementScreen();
       case AdminSection.models:
@@ -218,7 +235,7 @@ class _AdminShellState extends State<AdminShell> {
             _NavItem(
               section: section,
               selected: _section == section,
-              badge: section == AdminSection.support ? _awaitingTickets : 0,
+              badge: section == AdminSection.messages ? _unreadConversations : 0,
               onTap: () {
                 _goTo(section);
                 if (isDrawer) Navigator.pop(context);
@@ -286,6 +303,7 @@ class _AdminShellState extends State<AdminShell> {
               title: Text(_section.label),
               backgroundColor: AppTheme.surface,
               shape: const Border(bottom: BorderSide(color: AppTheme.border)),
+              actions: [_buildBell(), const SizedBox(width: 4)],
             ),
       // Wide layouts have no AppBar, so nothing reserves room for the system
       // status bar and the sidebar would run underneath it on a tablet. On
@@ -313,23 +331,26 @@ class _AdminShellState extends State<AdminShell> {
                       ),
                       child: Row(
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                _section.label,
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.headlineLarge,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Administrator console',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _section.label,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.headlineLarge,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Administrator console',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
                           ),
+                          _buildBell(),
                         ],
                       ),
                     ),

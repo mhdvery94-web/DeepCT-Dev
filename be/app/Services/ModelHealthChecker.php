@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Model;
+use App\Services\Notifier;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -138,11 +139,24 @@ class ModelHealthChecker
         ?float $responseTime,
         ?string $error
     ): array {
+        $previous = $model->status;
+
         $model->update([
             'status' => $status,
             'last_health_check' => now(),
             'health_check_error' => $error,
         ]);
+
+        // Only on a *transition*. This runs every five minutes, so a model
+        // that is down overnight would otherwise wake the administrator up
+        // with 288 identical notifications.
+        if ($previous !== $status) {
+            if ($status === 'offline') {
+                Notifier::modelWentOffline($model, $error);
+            } elseif ($previous === 'offline' && $status === 'online') {
+                Notifier::modelBackOnline($model);
+            }
+        }
 
         $result = ['status' => $status];
 

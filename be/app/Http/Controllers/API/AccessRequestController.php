@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AccessRequest;
 use App\Models\User;
 use App\Models\UserActivity;
+use App\Services\Notifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -61,6 +62,10 @@ class AccessRequestController extends Controller
             'status' => 'pending',
             'ip_address' => $request->ip(),
         ]);
+
+        // Nobody sits watching the access-request screen; without this the
+        // application waits until an administrator happens to look.
+        Notifier::accessRequestSubmitted($accessRequest);
 
         return response()->json([
             'success' => true,
@@ -183,6 +188,10 @@ class AccessRequestController extends Controller
                 'username' => $user->username,
             ],
         ]);
+
+        // They cannot read this until they sign in, which is exactly when it
+        // is worth having: the first thing in their bell says they are in.
+        Notifier::accountApproved($user);
 
         return response()->json([
             'success' => true,

@@ -278,6 +278,39 @@ class PredictionPipelineTest extends TestCase
         $this->assertSame(1, $model->total_predictions);
     }
 
+    /**
+     * A job runs for minutes and nobody watches a progress bar that long, so
+     * the notification is how the researcher finds out at all.
+     */
+    public function test_a_finished_job_notifies_its_owner(): void
+    {
+        $this->fakeWorkerReturnsFrames();
+
+        $this->upload();
+
+        $notification = $this->user->fresh()->notifications->first();
+
+        $this->assertNotNull($notification, 'a completed job must notify its owner');
+        $this->assertSame('prediction.completed', $notification->data['type']);
+        $this->assertSame(
+            'predictions/' . AnalysisRecord::first()->id,
+            $notification->data['link'],
+        );
+    }
+
+    public function test_a_failed_job_notifies_its_owner_with_the_reason(): void
+    {
+        Http::fake(['worker.example/*' => Http::response('gateway down', 502)]);
+
+        $this->upload();
+
+        $notification = $this->user->fresh()->notifications->first();
+
+        $this->assertNotNull($notification, 'a failed job must notify its owner');
+        $this->assertSame('prediction.failed', $notification->data['type']);
+        $this->assertStringContainsString('502', $notification->data['body']);
+    }
+
     public function test_an_archive_with_one_frame_is_rejected(): void
     {
         $response = $this->apiAs($this->token)->post('/api/predictions', [

@@ -34,6 +34,7 @@ class AnalysisRecord extends EloquentModel
         'processing_time',
         'status',
         'expires_at',
+        'expiry_notified_at',
         'files_deleted_at',
     ];
 
@@ -48,6 +49,7 @@ class AnalysisRecord extends EloquentModel
         'output_files_count' => 'integer',
         'processing_time_seconds' => 'integer',
         'expires_at' => 'datetime',
+        'expiry_notified_at' => 'datetime',
         'files_deleted_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',

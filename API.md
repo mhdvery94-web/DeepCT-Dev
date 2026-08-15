@@ -1,6 +1,6 @@
 # Referensi API
 
-63 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
+71 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
 `php artisan route:list --path=api` per 15 Agustus 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 
@@ -32,7 +32,7 @@ login · 403 bukan haknya · 404 tidak ada · 409 konflik · 410 sudah kedaluwar
 | `GET` | `/health` | Liveness probe. Didefinisikan di `routes/web.php`, bukan `api.php`. |
 | `POST` | `/login` | Dibatasi 5 percobaan/menit/IP. |
 | `POST` | `/access-requests` | Formulir Join di landing page. 5/menit/IP. |
-| `POST` | `/support/tickets/public` | Tiket dari halaman login. 5/jam/IP. |
+| `POST` | `/messages/public` | Pesan dari halaman login. 5/jam/IP. |
 | `GET` | `/news` | Berita riset yang sudah terbit, urut slide. |
 | `GET` | `/news/{id}/image` | Fotonya. **404 untuk draf**, kecuali pemanggilnya admin. |
 
@@ -57,15 +57,14 @@ peneliti tahu harus menghubungi admin.
 sudah ada permintaan yang menunggu; pesannya ditulis untuk pemohon, jadi
 tampilkan apa adanya.
 
-**`POST /support/tickets/public`** — body `name`, `email`, `subject`,
-`message`, `category` (opsional). Untuk orang yang **tidak bisa login**, yaitu
-alasan paling umum menekan tombol IT Support di halaman itu. Tiketnya masuk
-antrean admin yang sama dengan `user_id` null; balasannya lewat email karena
-tidak ada akun untuk menampilkannya.
+**`POST /messages/public`** — body `name`, `email`, `body`. Untuk orang yang
+**tidak bisa login**, yaitu alasan paling umum menekan tombol IT Support di
+halaman itu. Pesannya masuk ke inbox admin yang sama dengan `user_id` null;
+balasannya lewat email karena tidak ada akun untuk menampilkannya.
 
-Tiket tamu **tidak** ditempelkan ke akun yang emailnya kebetulan cocok — email
-itu belum terverifikasi, jadi menempelkannya berarti siapa pun bisa menaruh
-pesan di daftar tiket peneliti lain.
+Percakapan tamu **tidak** ditempelkan ke akun yang emailnya kebetulan cocok —
+email itu belum terverifikasi, jadi menempelkannya berarti siapa pun bisa
+menaruh pesan di percakapan peneliti lain.
 
 **`GET /news`** — parameter opsional `limit` (1–50, default 20). Tidak
 berpaginasi: landing page menampilkan semuanya dalam satu carousel.
@@ -140,33 +139,97 @@ pantas dari akun orang lain.
 
 ---
 
-## Tiket dukungan — semua peran
+## Pesan ke admin — semua peran
 
 | Method | Path | Keterangan |
 |---|---|---|
-| `GET` | `/support/tickets` | Tiket milik pemanggil. Filter opsional `status`. |
-| `POST` | `/support/tickets` | Buat tiket |
-| `GET` | `/support/tickets/{id}` | Detail berikut percakapannya |
-| `POST` | `/support/tickets/{id}/reply` | Balas — dipakai kedua pihak |
+| `GET` | `/messages` | Percakapan milik pemanggil, beserta isinya |
+| `POST` | `/messages` | Kirim pesan; percakapan dibuat saat pertama kali |
+| `POST` | `/messages/read` | Tandai balasan admin sudah dibaca |
 
-Dibuat sebagai **percakapan**, bukan satu pesan: masalah teknis hampir selalu
-butuh pertanyaan balik.
+**Ini menggantikan sistem tiket.** Tiket memaksa orang yang sedang bermasalah
+mengklasifikasikan masalahnya dulu — pilih subjek, kategori, prioritas, lalu
+pantau status — itu bentuk helpdesk yang di belakangnya ada satu departemen. Di
+sini adminnya satu orang, dan yang orang butuhkan cuma bilang "ini rusak" lalu
+dijawab. Jadi seremoninya dibuang; sisanya percakapan, satu per akun.
 
-**`POST /support/tickets`** — body `subject`, `message`, `category`
-(`upload`/`prediction`/`download`/`account`/`other`), `priority`
-(`low`/`normal`/`high`), dan `analysis_record_id` opsional. Job yang bukan milik
-pemanggil **diabaikan diam-diam**, bukan ditolak — kalau ditolak, tiket bisa
-dipakai menebak id job mana yang ada.
+**Route peneliti tidak menerima id sama sekali.** Mereka cuma punya satu
+percakapan, jadi "punya saya" adalah satu-satunya arti yang mungkin — dan itu
+menghapus seluruh kelas bug "akun A membaca pesan akun B", karena tidak ada id
+yang bisa diutak-atik.
 
-**`awaiting_admin`** mencatat giliran siapa sekarang, dan itulah yang menyalakan
-penanda di sidebar admin. Pesan peneliti menyalakannya; balasan admin
-memadamkannya sekaligus memindahkan tiket `open` → `in_progress`.
+**`POST /messages`** — body `body` (maks 5000 karakter). Balasannya pesan yang
+baru dibuat.
 
-| Kondisi | Hasil |
+```json
+{ "id": 12, "body": "Frame preview kosong untuk job 12.",
+  "from_admin": false, "author": "Dr. Sample Researcher",
+  "author_avatar_url": "/users/2/avatar",
+  "read_at": null, "created_at": "2026-08-15T14:02:00+00:00" }
+```
+
+`read_at` berarti "sudah dibaca pihak seberang". Tiap pesan cuma punya satu
+pihak penerima, jadi satu kolom cukup untuk dua arah. **Membalas berarti
+membaca**: begitu admin menjawab, tidak ada lagi yang menunggu dia di percakapan
+itu.
+
+Menulis lagi setelah percakapannya diarsipkan admin mengembalikannya ke inbox —
+yang diarsipkan itu percakapan, bukan orangnya.
+
+---
+
+## Notifikasi — semua peran
+
+| Method | Path | Keterangan |
+|---|---|---|
+| `GET` | `/notifications` | Milik pemanggil. `?unread=1` untuk yang belum dibaca. |
+| `GET` | `/notifications/unread-count` | **Yang di-poll klien.** |
+| `POST` | `/notifications/{id}/read` | Tandai satu |
+| `POST` | `/notifications/read-all` | Tandai semua |
+| `DELETE` | `/notifications/{id}` | Buang satu |
+| `DELETE` | `/notifications` | Kosongkan daftar |
+
+**`GET /notifications/unread-count`** mengembalikan **dua** angka sekaligus:
+
+```json
+{ "notifications": 3, "messages": 1 }
+```
+
+`messages` berarti balasan yang belum dibaca (untuk peneliti) atau percakapan
+yang menunggu jawaban (untuk admin). Satu request memberi makan lonceng **dan**
+penanda menu Messages; klien mem-poll ini tiap 45 detik. Soal kenapa polling,
+bukan WebSocket, lihat ARCHITECTURE.md §4.
+
+Isi satu notifikasi:
+
+```json
+{ "id": "9f1c-…", "type": "prediction.completed",
+  "title": "Interpolation finished",
+  "body": "3 frame(s) generated for frames.zip…",
+  "link": "predictions/12", "meta": { "analysis_record_id": 12 },
+  "read": false, "created_at": "2026-08-15T14:02:00+00:00" }
+```
+
+`link` ditulis dalam kosakata klien (`messages`, `predictions/12`,
+`access-requests`, `models`, `dashboard`); shell yang menerjemahkannya jadi
+navigasi. Klien juga harus tahan `type` yang belum dikenalnya — server boleh
+menambah event tanpa menunggu rilis klien, jadi ikon dan warnanya punya
+fallback.
+
+**Apa yang dikirim, ke siapa** — semuanya di `app/Services/Notifier.php`:
+
+| Event | Tujuan |
 |---|---|
-| Balas tiket `resolved` | Terbuka lagi (`in_progress`) |
-| Balas tiket `closed` | **409** — buat tiket baru |
-| Tiket milik akun lain | **404**, bukan 403 (403 membocorkan bahwa id-nya ada) |
+| `message.received` / `message.guest` | Semua admin aktif |
+| `message.reply` | Peneliti yang bertanya |
+| `prediction.completed` / `prediction.failed` | Pemilik job |
+| `prediction.expiring` | Pemilik, ~3 jam sebelum berkasnya dihapus |
+| `access_request.submitted` | Semua admin aktif |
+| `account.approved` | Akun yang baru dibuat |
+| `model.offline` / `model.online` | Semua admin aktif |
+
+Semua di-scope lewat relasi `$request->user()->notifications()`, jadi **relasi
+itulah otorisasinya** — id milik akun lain menjawab 404, bukan 403.
 
 ---
 
@@ -354,21 +417,24 @@ berkas, bukan ekstensinya.
 terbit, jadi menyembunyikan lalu menampilkan lagi post lama tidak melemparkannya
 ke depan slideshow yang diurut tanggal.
 
-### Tiket dukungan (3)
+### Percakapan (6)
 
 | Method | Path |
 |---|---|
-| `GET` | `/admin/support/tickets` — filter `status`, `awaiting`, `search` |
-| `PATCH` | `/admin/support/tickets/{id}` — `status` dan/atau `priority` |
-| `DELETE` | `/admin/support/tickets/{id}` |
+| `GET` | `/admin/conversations` — filter `archived`, `unread`, `search` |
+| `GET` | `/admin/conversations/{id}` — satu percakapan berikut isinya |
+| `POST` | `/admin/conversations/{id}/reply` — jawab |
+| `POST` | `/admin/conversations/{id}/read` — tandai dibaca tanpa menjawab |
+| `PATCH` | `/admin/conversations/{id}` — `is_archived` |
+| `DELETE` | `/admin/conversations/{id}` — hapus beserta pesannya |
 
-Daftar admin menyertakan `meta.open_count` dan `meta.awaiting_admin_count` untuk
-penanda di sidebar. Tiket tamu ditandai `is_guest: true` dengan blok `guest`
-berisi nama dan email pelapor, dan `user: null`.
+Daftarnya menyertakan `meta.unread_conversations` dan `meta.unread_messages`,
+plus `preview` (baris pertama pesan terakhir) dan `last_from_admin` supaya
+sekilas terlihat mana yang masih menunggu jawaban.
 
-Menandai `resolved`/`closed` mengisi `resolved_at` + `resolved_by` dan mematikan
-`awaiting_admin`. Balasan admin dipakai `POST /support/tickets/{id}/reply` yang
-sama — controller-nya yang menentukan sisi mana yang menulis.
+Percakapan tamu ditandai `is_guest: true` dengan `guest_email` terisi dan
+`user: null`. Arsip **bukan** hapus: percakapan yang diarsipkan keluar dari
+inbox tapi tetap ada, dan pesan baru dari orangnya menariknya kembali.
 
 ### Activity log (3)
 

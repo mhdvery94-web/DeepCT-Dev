@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -64,6 +65,27 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'last_login_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Clean up what nothing else would.
+     *
+     * `notifications` and `personal_access_tokens` are polymorphic, so neither
+     * carries a foreign key back to this row and deleting an account leaves
+     * both behind forever — unreadable, uncollectable, and in the token's case
+     * a credential nobody owns. The avatar is a file rather than a row, so it
+     * has no cascade to inherit either.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(function (self $user) {
+            $user->notifications()->delete();
+            $user->tokens()->delete();
+
+            if ($user->avatar_path && Storage::exists($user->avatar_path)) {
+                Storage::delete($user->avatar_path);
+            }
+        });
     }
 
     /** Accepted profile-photo types. Nothing here can re-encode an upload. */

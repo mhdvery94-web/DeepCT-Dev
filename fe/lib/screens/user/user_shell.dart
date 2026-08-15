@@ -3,10 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../services/auth_provider.dart';
 import '../../widgets/avatar_editor_sheet.dart';
+import '../../widgets/notification_bell.dart';
 import '../../widgets/user_avatar.dart';
 import '../../theme/app_theme.dart';
 import '../landing/landing_page.dart';
-import '../support/ticket_list_screen.dart';
+import '../messages/message_thread_screen.dart';
 import 'prediction_history_screen.dart';
 import 'upload_screen.dart';
 import 'user_activity_screen.dart';
@@ -21,7 +22,7 @@ enum UserSection {
   analysis('New Analysis', Icons.auto_awesome_outlined),
   history('Results & History', Icons.folder_outlined),
   activity('My Activity', Icons.history),
-  support('IT Support', Icons.support_agent_outlined);
+  messages('Messages', Icons.forum_outlined);
 
   const UserSection(this.label, this.icon);
 
@@ -46,6 +47,38 @@ class _UserShellState extends State<UserShell> {
   /// Below this width the sidebar collapses into a drawer.
   static const double _mobileBreakpoint = 1000;
 
+  /// Unread replies from support, shown beside the Messages entry.
+  ///
+  /// Supplied by the bell's poll rather than a second request of our own --
+  /// `/notifications/unread-count` returns both counts precisely so the two
+  /// badges cost one call between them.
+  int _unreadMessages = 0;
+
+  final GlobalKey<NotificationBellState> _bell =
+      GlobalKey<NotificationBellState>();
+
+  /// Where a tapped notification goes. The link vocabulary is the server's;
+  /// the mapping to sections is ours.
+  void _openLink(String link) {
+    if (link.startsWith('messages')) {
+      setState(() => _section = UserSection.messages);
+    } else if (link.startsWith('predictions')) {
+      setState(() => _section = UserSection.history);
+    } else if (link.startsWith('dashboard')) {
+      setState(() => _section = UserSection.dashboard);
+    }
+  }
+
+  Widget _buildBell() => NotificationBell(
+    key: _bell,
+    onCounts: (_, messages) {
+      if (mounted && messages != _unreadMessages) {
+        setState(() => _unreadMessages = messages);
+      }
+    },
+    onOpenLink: _openLink,
+  );
+
   Widget _buildBody() {
     switch (_section) {
       case UserSection.dashboard:
@@ -64,8 +97,14 @@ class _UserShellState extends State<UserShell> {
         // The key forces a fresh State when arriving from a new upload, so the
         // list reloads instead of showing the previous page's cached items.
         return PredictionHistoryScreen(key: UniqueKey());
-      case UserSection.support:
-        return const TicketListScreen();
+      case UserSection.messages:
+        return MessageThreadScreen(
+          // Opening the thread reads it, so the badge should go with it
+          // rather than waiting for the next poll.
+          onUnreadChanged: (unread) {
+            if (mounted) setState(() => _unreadMessages = unread);
+          },
+        );
     }
   }
 
@@ -189,6 +228,7 @@ class _UserShellState extends State<UserShell> {
             _NavItem(
               section: section,
               selected: _section == section,
+              badge: section == UserSection.messages ? _unreadMessages : 0,
               onTap: () {
                 setState(() => _section = section);
                 if (isDrawer) Navigator.pop(context);
@@ -255,6 +295,7 @@ class _UserShellState extends State<UserShell> {
               title: Text(_section.label),
               backgroundColor: AppTheme.surface,
               shape: const Border(bottom: BorderSide(color: AppTheme.border)),
+              actions: [_buildBell(), const SizedBox(width: 4)],
             ),
       // The wide layout has no AppBar, so nothing reserves room for the system
       // status bar. See fe/README.md.
@@ -280,19 +321,28 @@ class _UserShellState extends State<UserShell> {
                           bottom: BorderSide(color: AppTheme.border),
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: Row(
                         children: [
-                          Text(
-                            _section.label,
-                            style: Theme.of(context).textTheme.headlineLarge,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _section.label,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.headlineLarge,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Researcher console',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Researcher console',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
+                          _buildBell(),
                         ],
                       ),
                     ),
@@ -312,10 +362,14 @@ class _NavItem extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// Shown as a count when above zero; hidden otherwise.
+  final int badge;
+
   const _NavItem({
     required this.section,
     required this.selected,
     required this.onTap,
+    this.badge = 0,
   });
 
   @override
@@ -352,6 +406,19 @@ class _NavItem extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (badge > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                color: AppTheme.primary,
+                child: Text(
+                  badge > 99 ? '99+' : '$badge',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
           ],
         ),
       ),

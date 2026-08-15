@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth_provider.dart';
 import '../admin/admin_shell.dart';
-import '../support/public_ticket_sheet.dart';
+import '../messages/public_message_sheet.dart';
 import '../user/user_shell.dart';
 
 class LoginPage extends StatefulWidget {
@@ -319,7 +319,7 @@ class _LoginPageState extends State<LoginPage> {
               TextButton(
                 // Opens the guest form, not the in-app one: the usual reason
                 // to press this is not being able to sign in.
-                onPressed: () => showPublicTicketSheet(context),
+                onPressed: () => showPublicMessageSheet(context),
                 child: Text(
                   'IT Support',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
