@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/file_download.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
+import 'frame_gallery_screen.dart';
 
 /// The researcher's jobs: what is running, what finished, and what can still
 /// be downloaded before the 24-hour window closes.
@@ -255,6 +256,12 @@ class _PredictionHistoryScreenState extends State<PredictionHistoryScreen> {
                 downloadProgress: _downloadingId == prediction.id
                     ? _downloadProgress
                     : null,
+                onPreview: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => FrameGalleryScreen(prediction: prediction),
+                  ),
+                ),
                 onDownloadResults: () => _download(prediction, 'results'),
                 onDownloadComplete: () => _download(prediction, 'complete'),
                 onDelete: () => _confirmDelete(prediction),
@@ -281,6 +288,7 @@ class _PredictionCard extends StatelessWidget {
   /// Non-null while this card's archive is downloading.
   final double? downloadProgress;
 
+  final VoidCallback onPreview;
   final VoidCallback onDownloadResults;
   final VoidCallback onDownloadComplete;
   final VoidCallback onDelete;
@@ -289,6 +297,7 @@ class _PredictionCard extends StatelessWidget {
     required this.prediction,
     required this.isNarrow,
     this.downloadProgress,
+    required this.onPreview,
     required this.onDownloadResults,
     required this.onDownloadComplete,
     required this.onDelete,
@@ -421,6 +430,11 @@ class _PredictionCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
+                ElevatedButton.icon(
+                  onPressed: onPreview,
+                  icon: const Icon(Icons.image_outlined, size: 16),
+                  label: const Text('PREVIEW'),
+                ),
                 OutlinedButton.icon(
                   onPressed: onDownloadResults,
                   icon: const Icon(Icons.download, size: 16),

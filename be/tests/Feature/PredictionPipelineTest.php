@@ -399,6 +399,105 @@ class PredictionPipelineTest extends TestCase
         $this->assertSame(0, AnalysisRecord::count());
     }
 
+    public function test_the_frame_list_covers_inputs_and_outputs(): void
+    {
+        $this->fakeWorkerReturnsFrames();
+        $this->upload();
+
+        $record = AnalysisRecord::first();
+
+        $frames = $this->apiAs($this->token)
+            ->getJson("/api/predictions/{$record->id}/frames")
+            ->assertOk()
+            ->json('data');
+
+        $names = array_column($frames, 'name');
+        $kinds = array_count_values(array_column($frames, 'kind'));
+
+        $this->assertContains('frame_001.tif', $names);
+        $this->assertContains('frame_003.tif', $names);
+        $this->assertSame(2, $kinds['input']);
+        $this->assertSame(3, $kinds['output']);
+    }
+
+    public function test_a_frame_renders_as_a_png(): void
+    {
+        $this->fakeWorkerReturnsFrames();
+        $this->upload();
+
+        $record = AnalysisRecord::first();
+
+        $response = $this->apiAs($this->token)
+            ->get("/api/predictions/{$record->id}/frames/frame_003.tif/preview");
+
+        $response->assertOk();
+        $this->assertSame('image/png', $response->headers->get('Content-Type'));
+        // Built from character codes: embedding the raw signature in source
+        // is a good way to have an editor or tool quietly rewrite it.
+        $signature = chr(0x89) . 'PNG' . chr(0x0D) . chr(0x0A) . chr(0x1A) . chr(0x0A);
+        $this->assertSame($signature, substr($response->getContent(), 0, 8));
+    }
+
+    /** Rendering is cached beside the job so a gallery does not redo the work. */
+    public function test_a_rendered_preview_is_cached(): void
+    {
+        $this->fakeWorkerReturnsFrames();
+        $this->upload();
+
+        $record = AnalysisRecord::first();
+
+        $this->apiAs($this->token)
+            ->get("/api/predictions/{$record->id}/frames/frame_003.tif/preview")
+            ->assertOk();
+
+        $cached = Storage::allFiles("{$record->storageDirectory()}/preview");
+        $this->assertNotEmpty($cached);
+    }
+
+    /** A crafted name must not reach outside the job's own folders. */
+    public function test_a_traversing_frame_name_is_rejected(): void
+    {
+        $this->fakeWorkerReturnsFrames();
+        $this->upload();
+
+        $record = AnalysisRecord::first();
+
+        $this->apiAs($this->token)
+            ->getJson("/api/predictions/{$record->id}/frames/" . urlencode('../../../.env') . '/preview')
+            ->assertNotFound();
+    }
+
+    public function test_frames_of_another_account_are_not_listed(): void
+    {
+        $this->fakeWorkerReturnsFrames();
+        $this->upload();
+
+        User::create([
+            'username' => 'other', 'name' => 'Other', 'email' => 'other@brin.go.id',
+            'password' => Hash::make('password123'), 'role' => 'user', 'is_active' => true,
+        ]);
+        $otherToken = $this->tokenFor('other@brin.go.id', 'password123');
+
+        $record = AnalysisRecord::first();
+
+        $this->apiAs($otherToken)
+            ->getJson("/api/predictions/{$record->id}/frames")
+            ->assertNotFound();
+    }
+
+    public function test_frames_are_gone_once_the_files_expire(): void
+    {
+        $this->fakeWorkerReturnsFrames();
+        $this->upload();
+
+        $record = AnalysisRecord::first();
+        $record->update(['files_deleted_at' => now()]);
+
+        $this->apiAs($this->token)
+            ->getJson("/api/predictions/{$record->id}/frames")
+            ->assertStatus(410);
+    }
+
     /** A crashed job must not be left sitting on `processing` forever. */
     public function test_the_failed_handler_marks_a_crashed_job(): void
     {

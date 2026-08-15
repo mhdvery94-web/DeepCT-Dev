@@ -8,6 +8,7 @@ use App\Models\Model;
 use App\Models\UserActivity;
 use App\Services\IntakeException;
 use App\Services\PredictionIntake;
+use App\Services\TiffPreview;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use ZipArchive;
@@ -183,6 +184,109 @@ class AnalysisController extends Controller
             'success' => true,
             'data' => $data,
         ]);
+    }
+
+    /**
+     * GET /api/predictions/{id}/frames
+     *
+     * What is on disk for this job, so the client can build a gallery without
+     * downloading a multi-megabyte archive first.
+     */
+    public function frames(Request $request, $id)
+    {
+        $prediction = $this->findOwned($request, $id);
+
+        if (!$prediction->hasFiles()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Files have expired and been deleted',
+            ], 410);
+        }
+
+        $describe = function (string $folder, string $kind) {
+            return collect(Storage::files($folder))
+                ->map(fn($path) => [
+                    'name' => basename($path),
+                    'kind' => $kind,
+                    'size' => Storage::size($path),
+                ])
+                ->sortBy('name')
+                ->values();
+        };
+
+        $frames = $describe($prediction->input_folder, 'input')
+            ->concat($describe($prediction->output_folder, 'output'));
+
+        return response()->json([
+            'success' => true,
+            'data' => $frames->values(),
+        ]);
+    }
+
+    /**
+     * GET /api/predictions/{id}/frames/{name}/preview
+     *
+     * A PNG rendering of one frame. Browsers and Flutter cannot display the
+     * 16-bit TIFFs the model produces, so they are converted here and cached
+     * beside the job — which means `predictions:cleanup` disposes of the
+     * previews along with everything else.
+     */
+    public function framePreview(Request $request, $id, string $name)
+    {
+        $prediction = $this->findOwned($request, $id);
+
+        if (!$prediction->hasFiles()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Files have expired and been deleted',
+            ], 410);
+        }
+
+        // basename() keeps a crafted name from escaping the job's folders.
+        $name = basename($name);
+        $size = (int) $request->input('size', 512);
+        $size = max(64, min($size, 2048));
+
+        $source = collect([$prediction->output_folder, $prediction->input_folder])
+            ->map(fn($folder) => "{$folder}/{$name}")
+            ->first(fn($path) => Storage::exists($path));
+
+        if ($source === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Frame not found',
+            ], 404);
+        }
+
+        $cachePath = "{$prediction->storageDirectory()}/preview/{$size}_{$name}.png";
+
+        if (!Storage::exists($cachePath)) {
+            try {
+                $png = app(TiffPreview::class)->toPng(Storage::get($source), $size);
+            } catch (Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Could not render this frame: ' . $e->getMessage(),
+                ], 422);
+            }
+
+            Storage::put($cachePath, $png);
+        }
+
+        return response(Storage::get($cachePath), 200, [
+            'Content-Type' => 'image/png',
+            // Frames never change once written, and the whole job disappears
+            // after 24 hours anyway.
+            'Cache-Control' => 'private, max-age=86400',
+        ]);
+    }
+
+    /** Fetch a record that belongs to the caller, or 404. */
+    private function findOwned(Request $request, $id): AnalysisRecord
+    {
+        return AnalysisRecord::where('id', $id)
+            ->where('user_id', $request->user()->id)
+            ->firstOrFail();
     }
 
     /**
