@@ -273,9 +273,14 @@ deepCT-gemini/
 - [x] ✅ Implement single session per account (security)
 - [x] ✅ Schedule daily token cleanup
 - [x] ✅ Fix the broken Flutter build (dashboard + `dart:html` CSV export)
-- [ ] 🔴 **Put this project under git** — no version control exists today
+- [x] ✅ **Put this project under git** — done 15 Aug 2026, initial commit of
+      289 files. Note: `be/` had a stray `laravel/laravel` skeleton repo inside
+      it that was hiding the entire backend from version control.
+- [x] ✅ Make the landing page responsive (it was desktop-only and overflowed)
 - [ ] 🔴 Run a scheduler process so the registered commands actually fire
-- [ ] 🟡 Write real automated tests (currently only framework stubs)
+- [ ] 🔴 Add a git remote — the repository is local-only, so there is still no
+      off-machine backup
+- [ ] 🟡 Write real backend tests (`be/tests/` is still only Laravel stubs)
 
 ### 2. SHORT TERM (Next 2 Weeks)
 - [ ] FASE 3 Backend: Upload & Download system

@@ -25,6 +25,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-08-15
+
+### 📱 Landing page made responsive + project put under version control
+
+#### Added
+
+**Version control**
+- The project had **no git repository**. `git init` on the root, with a
+  `.gitignore` covering `be/.env` (holds `APP_KEY` and the database password),
+  `vendor/`, `node_modules/`, `fe/build/`, the 64 MB `rr.exe` RoadRunner binary
+  and the 88 MB `.h5` model weights. Initial commit: 289 files.
+- `be/.gitignore` said `rr` but the file on disk is `rr.exe`, so the 64 MB
+  binary was not actually ignored. Fixed.
+- **`be/` contained its own `.git`** — not project history, but the upstream
+  `laravel/laravel` skeleton repository (7227 framework commits, remote
+  pointing at `github.com/laravel/laravel`, detached HEAD). Every backend
+  source file the team wrote was still *untracked* inside it, and the root
+  repo was recording `be/` as an empty submodule gitlink. The skeleton repo was
+  moved aside so the backend is tracked properly.
+
+**Layout regression tests**
+- `test/widget_test.dart` now renders the app at 360x640, 390x844, 768x1024,
+  1280x720 and 1440x1024 and fails if any section reports a layout overflow.
+  6 tests total, all passing.
+
+#### Fixed
+
+**`landing_page.dart` was a fixed desktop layout** — no breakpoints anywhere,
+so it overflowed on anything narrower or shorter than a desktop window:
+
+- **Hero**: hard-coded `height: 800` replaced with a desktop `minHeight` of
+  640. The fixed height overflowed vertically by ~146px whenever the headline
+  wrapped onto extra lines or the viewport was shorter than 800px. The
+  two-column `Row` now stacks below 1000px, and the 600px-tall visual
+  placeholder scales to 280px off desktop.
+- **Footer**: the bare `Row` holding the copyright line and three text buttons
+  overflowed horizontally by ~579px at phone widths. Links now use a `Wrap`,
+  the copyright is `Flexible` on desktop, and the two stack below 1000px.
+- **Header**: logo + four nav buttons + login button in a single `Row` with
+  40px gutters cannot fit a phone. Below 1000px the inline navigation collapses
+  into a `PopupMenuButton`, gutters tighten to 16px, and the brand text is
+  `Flexible` with ellipsis.
+- **About / Join**: the three-across feature cards and the 5:7 copy-and-form
+  split now stack below 1000px. At phone widths each feature card had been
+  allotted roughly 100px — less than its own 32px padding allowed for.
+- Section gutters drop from 40/96px to 20/56px below 600px.
+
+#### Verified
+
+- `flutter analyze` → **No issues found!**
+- `flutter test` → **All tests passed!** (6 tests, 5 viewports)
+- `flutter build web --release` → success
+- `flutter build apk --release` → success
+
+---
+
 ## [1.2.1] - 2026-08-15
 
 ### 🐛 Build Repair — v1.2.0 did not compile
@@ -106,12 +162,8 @@ failed. This release fixes them and adds verification.
 
 #### Known, not fixed
 
-- `landing_page.dart` has two responsive defects the new smoke test exposed:
-  the hero section uses a hard-coded `height: 800` and overflows vertically on
-  short viewports, and `_buildFooter` puts two children in a bare `Row` with no
-  `Flexible`/`Wrap`, which overflows horizontally by ~579px on phone widths.
-  The "responsive design" claim in the docs is therefore not fully true for the
-  landing page.
+- (Nothing outstanding from this release — the landing-page overflows found
+  here were fixed in v1.3.0 below.)
 
 #### Documentation
 

@@ -52,8 +52,8 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
 - ⏳ Prediction history
 
 ### Shared Features
-- ⚠️ Responsive design (mobile, tablet, desktop) — holds for the admin console;
-  the landing page still overflows at phone widths (see Development Status)
+- ✅ Responsive design (mobile, tablet, desktop) — covered by layout tests at
+  360x640, 390x844, 768x1024, 1280x720 and 1440x1024
 - ✅ Authentication with JWT token
 - ✅ Secure token storage
 - ✅ Role-based routing
@@ -415,10 +415,8 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 1 smoke test, passing
-- ⚠️ Responsive design — works in the admin console; the **landing page**
-  overflows (hero uses a hard-coded `height: 800`; `_buildFooter` is a bare
-  `Row` that overflows ~579px at phone widths)
+- ✅ `flutter test` — 6 tests, passing
+- ✅ Landing page made responsive (was a fixed desktop layout)
 
 ### Not Started (FASE 3)
 - ⏳ User dashboard (`screens/user/user_dashboard.dart` is a placeholder)
@@ -430,11 +428,23 @@ Blocked on the FASE 3 backend: the `predictions` routes are still commented out
 in `be/routes/api.php`.
 
 ### Testing
-`test/widget_test.dart` holds **one** smoke test (app boots to the landing page
-with no stored token). That is the entire automated suite — it was Flutter's
+`test/widget_test.dart` holds **6** tests: a boot smoke test plus a layout
+check of the landing page at five viewports, which fails if any section
+overflows. That is the entire automated suite — the file was Flutter's
 counter-app scaffold until 15 Aug 2026, and it *failed*. The "23/23 contract
 tests" in [test_auth.md](test_auth.md) are a manual `curl` checklist, not a
 runnable suite.
+
+```bash
+flutter test
+```
+
+### Responsive breakpoints
+
+`landing_page.dart` and `admin_shell.dart` both switch at **1000px**
+(`_desktopBreakpoint` / `_mobileBreakpoint`); the landing page additionally
+tightens its gutters below **600px**. Below 1000px the landing page stacks its
+two-column sections and collapses the header navigation into a menu button.
 
 ### Planned
 - ⏳ Image viewer/gallery
