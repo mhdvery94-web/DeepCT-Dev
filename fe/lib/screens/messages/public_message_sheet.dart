@@ -1,41 +1,39 @@
 import 'package:flutter/material.dart';
 
 import '../../services/api_client.dart';
-import '../../services/support_service.dart';
+import '../../services/message_service.dart';
 import '../../theme/app_theme.dart';
 
 /// Opens the sign-in-page support form.
 ///
-/// Kept separate from the in-app ticket form because the reporter here is by
+/// Kept separate from the in-app thread because the sender here is by
 /// definition not signed in: they have to say who they are, and the answer
 /// comes back by email rather than in the app.
-Future<void> showPublicTicketSheet(BuildContext context) {
+Future<void> showPublicMessageSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: AppTheme.surface,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-    builder: (_) => const PublicTicketSheet(),
+    builder: (_) => const PublicMessageSheet(),
   );
 }
 
-class PublicTicketSheet extends StatefulWidget {
-  const PublicTicketSheet({super.key});
+class PublicMessageSheet extends StatefulWidget {
+  const PublicMessageSheet({super.key});
 
   @override
-  State<PublicTicketSheet> createState() => _PublicTicketSheetState();
+  State<PublicMessageSheet> createState() => _PublicMessageSheetState();
 }
 
-class _PublicTicketSheetState extends State<PublicTicketSheet> {
-  final SupportService _service = SupportService();
+class _PublicMessageSheetState extends State<PublicMessageSheet> {
+  final MessageService _service = MessageService();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   final TextEditingController _name = TextEditingController();
   final TextEditingController _email = TextEditingController();
-  final TextEditingController _subject = TextEditingController();
-  final TextEditingController _message = TextEditingController();
+  final TextEditingController _body = TextEditingController();
 
-  String _category = 'account';
   bool _sending = false;
   String? _error;
   String? _done;
@@ -44,8 +42,7 @@ class _PublicTicketSheetState extends State<PublicTicketSheet> {
   void dispose() {
     _name.dispose();
     _email.dispose();
-    _subject.dispose();
-    _message.dispose();
+    _body.dispose();
     super.dispose();
   }
 
@@ -58,12 +55,10 @@ class _PublicTicketSheetState extends State<PublicTicketSheet> {
     });
 
     try {
-      final message = await _service.openPublic(
+      final message = await _service.sendPublic(
         name: _name.text.trim(),
         email: _email.text.trim(),
-        subject: _subject.text.trim(),
-        message: _message.text.trim(),
-        category: _category,
+        body: _body.text.trim(),
       );
 
       if (!mounted) return;
@@ -131,7 +126,7 @@ class _PublicTicketSheetState extends State<PublicTicketSheet> {
           Text('IT Support', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 4),
           Text(
-            'Cannot sign in, or something is broken? Describe it here and an '
+            'Cannot sign in, or something is broken? Write it here and an '
             'administrator will answer by email.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -161,50 +156,8 @@ class _PublicTicketSheetState extends State<PublicTicketSheet> {
           ),
           const SizedBox(height: 16),
 
-          // Side by side where there is room. On a phone the category dropdown
-          // is narrower than its own longest option ("prediction") and pushes
-          // the row 54px past the edge, so below 420px the two stack.
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final subject = TextFormField(
-                controller: _subject,
-                decoration: const InputDecoration(labelText: 'Subject'),
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'Subject is required'
-                    : null,
-              );
-
-              final category = DropdownButtonFormField<String>(
-                initialValue: _category,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Category'),
-                items: [
-                  for (final c in SupportService.categories)
-                    DropdownMenuItem(value: c, child: Text(c)),
-                ],
-                onChanged: (v) => setState(() => _category = v ?? 'account'),
-              );
-
-              if (constraints.maxWidth < 420) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [subject, const SizedBox(height: 16), category],
-                );
-              }
-
-              return Row(
-                children: [
-                  Expanded(flex: 3, child: subject),
-                  const SizedBox(width: 12),
-                  Expanded(flex: 2, child: category),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-
           TextFormField(
-            controller: _message,
+            controller: _body,
             minLines: 3,
             maxLines: 6,
             decoration: const InputDecoration(

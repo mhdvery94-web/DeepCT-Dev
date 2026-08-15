@@ -38,8 +38,12 @@ class ApiConfig {
   // Public: request an account from the landing page
   static const String accessRequests = '/access-requests';
 
-  // In-app IT support
-  static const String supportTickets = '/support/tickets';
+  // IT support, as messaging. The researcher's thread takes no id: they have
+  // exactly one, so "mine" is the only thing it could mean.
+  static const String messages = '/messages';
+
+  // The bell
+  static const String notifications = '/notifications';
 
   // Public: research news for the landing-page slideshow
   static const String news = '/news';
@@ -47,7 +51,7 @@ class ApiConfig {
   // Admin endpoints
   static const String adminUsers = '/admin/users';
   static const String adminAccessRequests = '/admin/access-requests';
-  static const String adminSupportTickets = '/admin/support/tickets';
+  static const String adminConversations = '/admin/conversations';
   static const String adminNews = '/admin/news';
   static const String adminModels = '/admin/models';
   static const String adminActivities = '/admin/activities';

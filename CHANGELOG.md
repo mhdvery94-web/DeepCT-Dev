@@ -33,6 +33,116 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.16.0] - 2026-08-15
+
+### 💬 Tickets became messages, and the app started telling people things
+
+Two changes, and the first is a retraction.
+
+#### Support is a conversation, not a ticket system
+
+v1.12.0 built IT support as tickets: subject, category, priority, a four-state
+status, and an `awaiting_admin` flag. The product owner's verdict was that it
+should be **messages** — "so a user can send a message to the admin if there is
+a problem, through IT support" — and they were right for a better reason than
+tidiness.
+
+A ticket model asks someone who already has a problem to **classify it first**.
+Pick a subject. Pick a category. Pick a priority. Then watch a status. That is
+the shape of a helpdesk with a support department and an SLA behind it. Here
+there is one administrator, and what people want is to say "this is broken" and
+be answered.
+
+So the ceremony is gone. `support_tickets` and `support_ticket_messages` became
+`conversations` and `messages`; `subject`, `category`, `priority`, `status`,
+`awaiting_admin`, `resolved_at`, `resolved_by` and `analysis_record_id` went
+with them. Existing rows were **carried over, not dropped**: several tickets
+from one person collapse into that person's single thread, and each ticket's
+subject is folded into the first message it carried so nothing anyone wrote was
+lost.
+
+Two things came out of it that are worth more than the simplification:
+
+- **The researcher's routes take no id at all.** One thread per account means
+  "mine" is the only thing they could mean. The entire class of bug where one
+  account reaches another's messages is gone — not guarded against, *absent*,
+  because there is no id to tamper with. The unique index on `user_id` is what
+  makes that true rather than hoped for.
+- **Archive replaced status.** An administrator still needs to tidy an inbox,
+  but four states for one person was theatre. One flag does it, and a new
+  message pulls the thread back out: they filed away a conversation, not a
+  person.
+
+What survived from the ticket design, because the reasons still hold: it is a
+back-and-forth (technical problems always need a question back), and the
+sign-in page can still write (the people who cannot log in are the ones who most
+need support). Read state is now tracked in both directions, with ticks.
+
+#### Notifications, for both consoles
+
+A bell with an unread badge, on the researcher console and the admin one.
+
+| Event | Goes to |
+|---|---|
+| New message / guest message | Every active administrator |
+| A reply | The researcher who asked |
+| Prediction finished or failed | The job's owner |
+| **Results expiring in ~3 hours** | The job's owner |
+| New access request | Every active administrator |
+| Account approved | The new account |
+| Model went offline / came back | Every active administrator |
+
+Laravel's own notification system rather than a hand-rolled table, so sending
+any of these by email later is `via() => ['database', 'mail']` and not a second
+delivery mechanism. What is *not* Laravel's convention is a class per event —
+that would be a dozen files differing only in strings. One
+`PlatformNotification` carries the payload and
+[`app/Services/Notifier.php`](be/app/Services/Notifier.php) holds every event in
+one place, so the question "what does this platform ever tell people?" has a
+single-file answer.
+
+Three decisions that matter more than the feature:
+
+- **A notification may never break its caller.** A prediction that finished must
+  not be marked failed because writing a row about it threw. Everything goes
+  through a `push()` that swallows and logs.
+- **Model status notifies on the transition only.** The health check runs every
+  five minutes; an overnight outage would otherwise produce 288 identical
+  notifications.
+- **The expiry warning rides the sweep that already exists.**
+  `predictions:cleanup` runs hourly anyway, so it now warns owners about output
+  due for deletion in ~3 hours, once, tracked by `expiry_notified_at`. Deleting
+  1.5 GB of results that nobody was told about is the most expensive thing this
+  platform can do to a researcher.
+
+The client polls — same reasoning as everywhere else, now written down in
+ARCHITECTURE.md §4 with the three intervals in one table. The bell's poll
+returns **both** the notification count and the unread message count, so the
+bell and the Messages badge cost one request between them rather than one each.
+
+#### Fixed — two leaks found while testing
+
+`notifications` and `personal_access_tokens` are polymorphic, so neither carries
+a foreign key back to `users`. Deleting an account left both behind **forever**:
+unreadable notifications, and in the token's case a credential with no owner.
+`User::booted()` now removes them along with the account's avatar file, which
+had the same problem for the same reason — it is a file, not a row, so it had no
+cascade to inherit either.
+
+#### Removed
+
+- `SupportTicket`, `SupportTicketMessage`, `SupportTicketController`,
+  `SupportTicketTest`, and the Flutter ticket screens, model and service.
+
+Verified live against the running server: a researcher's message reached the
+admin inbox and produced a `message.received` notification, the reply came back
+with the researcher's messages marked read, the unread counters moved in both
+directions and cleared on read, and a message from the sign-in page arrived
+flagged as having no account with the reply address inside the notification
+body.
+
+---
+
 ## [1.15.0] - 2026-08-15
 
 ### 🔁 Interrupted uploads can be continued, and the app has a real identity

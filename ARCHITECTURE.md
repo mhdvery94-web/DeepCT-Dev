@@ -111,7 +111,7 @@ sungguhan hanya untuk mengecek denyut.
 
 ## 3. Skema database
 
-17 tabel di `db_aict`. Yang relevan:
+18 tabel di `db_aict`. Yang relevan:
 
 ### `users`
 `username`, `name`, `email`, `password`, `role` (enum admin/user), `is_active`,
@@ -151,16 +151,32 @@ sengaja mengembalikan bentuk yang lebih sempit.
 (pending/approved/rejected), `reviewed_by`, `reviewed_at`, `review_note`.
 Menyetujui **membuat akun user-nya sekaligus**.
 
-### `support_tickets` / `support_ticket_messages` — dukungan IT
-Tiket: `user_id` (**nullable** — null untuk tiket tamu dari halaman login,
-dengan `guest_name` + `guest_email`), `subject`, `category`, `status`,
-`priority`, `analysis_record_id` (opsional), `last_reply_at`, `awaiting_admin`,
-`resolved_at`, `resolved_by`.
+### `conversations` / `messages` — dukungan IT
+Percakapan: `user_id` (**nullable dan unique** — satu percakapan per akun; null
+untuk percakapan tamu dari halaman login, dengan `guest_name` + `guest_email`),
+`last_message_at`, `is_archived`.
 
-Pesan: `support_ticket_id`, `user_id` (nullable), `body`, `from_admin`.
+Pesan: `conversation_id`, `user_id` (nullable), `body`, `from_admin`, `read_at`.
+
 `from_admin` dicap saat pesan ditulis, bukan diturunkan dari peran penulisnya
 sekarang — mempromosikan seseorang jadi admin tidak boleh mengubah pesan
-lamanya jadi balasan staf secara surut.
+lamanya jadi balasan staf secara surut. `read_at` berarti "sudah dibaca pihak
+seberang"; tiap pesan cuma punya satu pihak penerima, jadi satu kolom cukup
+untuk dua arah.
+
+> Ini dulunya `support_tickets` + `support_ticket_messages` dengan `subject`,
+> `category`, `priority`, `status`, `awaiting_admin`, `resolved_at`,
+> `resolved_by`, dan `analysis_record_id`. Semuanya dibuang — lihat §4.
+
+### `notifications` — lonceng
+Skema bawaan Laravel: `id` (uuid), `type`, `notifiable_type`/`notifiable_id`,
+`data` (json), `read_at`. Dipakai apa adanya supaya `$user->notify()` dan
+`$user->unreadNotifications` bekerja seperti dokumentasinya, dan supaya
+mengirimkan event yang sama lewat email nanti cuma menambah `'mail'` di `via()`.
+
+Tabelnya polimorfik, jadi **tidak punya foreign key** ke `users`. Karena itu
+`User::booted()` menghapus notifikasi (dan token, dan berkas avatar) saat akun
+dihapus — tanpa itu barisnya hidup selamanya tanpa ada yang bisa membacanya.
 
 ### `news_posts` — berita riset di landing page
 `title`, `summary`, `body`, `image_path`, `image_mime`, `is_published`,
@@ -211,10 +227,74 @@ sampai, dan mengirim ulang dari offset basi justru dijawab 409. Sesi hanya
 dihapus kalau server menolak secara tegas (mis. 422) — kalau kegagalannya
 berbau jaringan, sesi sengaja ditinggalkan supaya masih bisa dilanjutkan.
 
+### Kenapa tiket dukungan diganti jadi pesan biasa
+
+Model tiket memaksa orang yang sedang bermasalah **mengklasifikasikan
+masalahnya lebih dulu**: pilih subjek, kategori, prioritas, lalu pantau
+statusnya. Itu bentuk helpdesk yang di belakangnya ada satu departemen dengan
+SLA. Di sini adminnya satu orang, dan yang orang butuhkan cuma bilang "ini
+rusak" lalu dijawab.
+
+Yang dibuang: `subject`, `category`, `priority`, `status` (4 keadaan),
+`awaiting_admin`, `resolved_at`, `resolved_by`, `analysis_record_id`. Yang
+tersisa: siapa yang bicara, kapan terakhir, dan apakah admin sudah
+mengarsipkannya.
+
+**Satu percakapan per akun, dijamin unique index** — bukan sekadar diharapkan.
+Efek sampingnya yang paling berharga bukan soal tampilan: route peneliti jadi
+**tidak menerima id sama sekali**, karena "punya saya" satu-satunya arti yang
+mungkin. Seluruh kelas bug "akun A membaca pesan akun B" hilang bukan karena
+dijaga, tapi karena tidak ada id yang bisa diutak-atik.
+
+Yang tetap dipertahankan dari desain lama: percakapan bolak-balik (masalah
+teknis hampir selalu butuh pertanyaan balik) dan jalur tamu dari halaman login
+(orang yang tidak bisa masuk justru yang paling butuh bantuan).
+
+### Kenapa notifikasi memakai sistem bawaan Laravel
+
+Menulis baris sendiri ke tabel buatan sendiri sama mudahnya — sampai suatu saat
+notifikasinya harus dikirim lewat email juga. Dengan `Notification` bawaan,
+perubahan itu adalah menambah `'mail'` di `via()`; dengan tabel sendiri, itu
+sistem pengiriman kedua.
+
+Yang tidak diikuti dari konvensinya: satu kelas per event. Itu akan jadi
+selusin berkas yang bedanya cuma string. Yang berubah antar-event cuma
+payload-nya, jadi payload itu yang jadi konstruktor
+(`PlatformNotification`), dan **semantiknya dikumpulkan di satu berkas**
+(`app/Services/Notifier.php`) yang bisa menjawab "aplikasi ini pernah
+memberitahu orang soal apa saja?" dalam sekali baca.
+
+Dua aturan yang menopang desainnya:
+
+- **Notifikasi tidak boleh menjatuhkan pemanggilnya.** Prediksi yang sudah
+  selesai tidak boleh ditandai gagal cuma karena menulis baris notifikasi
+  gagal. Semua lewat `push()` yang menelan error dan mencatatnya di log.
+- **Status model diberitahukan hanya saat berubah.** Health check jalan tiap 5
+  menit; tanpa aturan ini, model yang mati semalaman menghasilkan 288
+  notifikasi identik.
+
+Notifikasi berbeda dari `user_activities`: yang satu jejak audit untuk
+diperiksa admin belakangan, yang lain pemberitahuan ke satu orang tentang
+sesuatu yang perlu ditindaklanjuti sekarang. Satu kejadian bisa menghasilkan
+keduanya.
+
 ### Kenapa polling, bukan WebSocket
 Job berjalan puluhan detik sampai menit, dan hanya ada satu klien yang peduli.
 Polling 10 detik yang berhenti sendiri saat semua job selesai jauh lebih murah
 daripada memelihara infrastruktur realtime.
+
+Keputusan yang sama berlaku untuk lonceng dan pesan, dengan interval berbeda
+sesuai apa yang ditunggu:
+
+| Yang dipantau | Interval | Alasan |
+|---|---|---|
+| Job prediksi | 10 detik | Hanya selama ada job pending/processing |
+| Percakapan yang sedang dibuka | 15 detik | Pembacanya sedang menatap layarnya |
+| Lonceng | 45 detik | Satu query count ber-index, dan membawa dua angka sekaligus |
+
+`GET /notifications/unread-count` sengaja mengembalikan jumlah notifikasi
+**dan** pesan, supaya lonceng dan penanda menu Messages tidak jadi dua request
+yang berjalan berdampingan selamanya.
 
 ### Kenapa retensi 24 jam
 Satu job bisa menghasilkan ~1,5 GB. Berkas dihapus, **record tetap disimpan**

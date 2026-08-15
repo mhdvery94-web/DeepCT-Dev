@@ -11,30 +11,41 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * [from_admin] is stamped when the message is written rather than derived from
  * the author's current role, so promoting someone to administrator later does
  * not turn their old messages into staff replies.
+ *
+ * [read_at] means "read by the other side". Every message has exactly one
+ * recipient side — a researcher's message is for the administrators, and a
+ * reply is for the researcher — so one column serves both directions.
  */
-class SupportTicketMessage extends EloquentModel
+class Message extends EloquentModel
 {
     protected $fillable = [
-        'support_ticket_id',
+        'conversation_id',
         'user_id',
         'body',
         'from_admin',
+        'read_at',
     ];
 
     protected $casts = [
         'from_admin' => 'boolean',
+        'read_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
 
-    public function ticket(): BelongsTo
+    public function conversation(): BelongsTo
     {
-        return $this->belongsTo(SupportTicket::class, 'support_ticket_id');
+        return $this->belongsTo(Conversation::class);
     }
 
-    /** Null once the author's account has been deleted. */
+    /** Null for a guest message, and once the author's account is deleted. */
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function isRead(): bool
+    {
+        return $this->read_at !== null;
     }
 }

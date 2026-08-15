@@ -18,7 +18,7 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (63 Total)
+### API Endpoints (71 Total)
 
 Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
@@ -42,34 +42,89 @@ Approving creates the account rather than just marking a row "approved" —
 otherwise the admin still has to add the user by hand and the request becomes a
 dead record. New accounts get the default password below.
 
-#### IT Support (8)
+#### IT Support — messaging (10)
 
-In-app tickets, modelled as a **conversation** rather than a single message:
-technical problems almost always need a question back, and with one field the
-admin would have to leave the app to ask it.
+**This replaced a ticket system.** Tickets asked a researcher with a problem to
+classify it first — pick a subject, a category, a priority, then watch a status
+— which is the shape of a helpdesk with a support department behind it. Here
+there is one administrator, and what people want is to say "this is broken" and
+get an answer. So the ceremony is gone and what is left is a conversation, one
+per account, exactly like a chat.
 
-- `POST /api/support/tickets/public` - **Public.** From the sign-in page, for
-  people who cannot get in. Throttled 5/hour
-- `GET /api/support/tickets` - The caller's own tickets
-- `POST /api/support/tickets` - Raise one
-- `GET /api/support/tickets/{id}` - With the full conversation
-- `POST /api/support/tickets/{id}/reply` - Either side replies here
-- `GET /api/admin/support/tickets` - Every ticket, plus `open_count` and
-  `awaiting_admin_count` in `meta` for the sidebar badge
-- `PATCH /api/admin/support/tickets/{id}` - Status and priority
-- `DELETE /api/admin/support/tickets/{id}` - Delete
+- `POST /api/messages/public` - **Public.** From the sign-in page, for people
+  who cannot get in. Throttled 5/hour
+- `GET /api/messages` - The caller's own thread, with every message in it
+- `POST /api/messages` - Say something. Creates the thread on first use
+- `POST /api/messages/read` - The caller has seen the replies
+- `GET /api/admin/conversations` - The inbox, with `unread_conversations` and
+  `unread_messages` in `meta`
+- `GET /api/admin/conversations/{id}` - One thread
+- `POST /api/admin/conversations/{id}/reply` - Answer
+- `POST /api/admin/conversations/{id}/read` - Mark it read without answering
+- `PATCH /api/admin/conversations/{id}` - Archive or restore
+- `DELETE /api/admin/conversations/{id}` - Delete the thread and its messages
 
-`awaiting_admin` records whose turn it is and drives the badge: a researcher's
-message sets it, an admin's reply clears it. Replying to a `resolved` ticket
-reopens it; a `closed` one refuses replies with **409**.
+**The researcher's routes take no id.** They have exactly one thread, so "mine"
+is the only thing they could mean — which removes the entire class of bug where
+one account reaches another's messages, because there is no id to tamper with.
 
-**Guest tickets.** A ticket from `/public` has `user_id = NULL` and carries
-`guest_name` + `guest_email` instead. It lands in the same admin queue, flagged
+**One thread per account, enforced by a unique index**, not by hope. Writing
+again after an administrator archived a thread pulls it back into the inbox:
+they filed away a conversation, not a person.
+
+`messages.read_at` means "read by the other side". Every message has exactly one
+recipient side, so one column serves both directions. Answering counts as
+reading — nothing in a thread is still waiting on the administrator once they
+have replied to it.
+
+**Guest threads.** A message from `/public` has `user_id = NULL` and carries
+`guest_name` + `guest_email` instead. It lands in the same inbox flagged
 `is_guest`, and the admin answers by email — there is no account session to show
-a reply in, and the conversation screen says so rather than letting them type
-into the void. Such a ticket is deliberately **not** attached to an account
-whose email happens to match: the address is unverified, so attaching it would
-let anyone plant messages in another researcher's ticket list.
+a reply in, and the screen says so rather than letting them type into the void.
+Such a thread is deliberately **not** attached to an account whose email happens
+to match: the address is unverified, so attaching it would let anyone plant
+messages in another researcher's thread.
+
+#### Notifications (6)
+
+- `GET /api/notifications` - The caller's own, `?unread=1` to filter
+- `GET /api/notifications/unread-count` - **What the client polls.** Returns
+  `notifications` *and* `messages`, so the bell and the Messages badge cost one
+  request between them
+- `POST /api/notifications/{id}/read`
+- `POST /api/notifications/read-all`
+- `DELETE /api/notifications/{id}`
+- `DELETE /api/notifications` - Clear the list
+
+Laravel's own `notifications` table and `$user->notify()`, not a hand-rolled
+one: sending the same event by email later becomes a one-word change to `via()`
+rather than a second delivery system.
+
+Everything is scoped through `$request->user()->notifications()`, so the
+relation *is* the authorisation — another account's id 404s.
+
+**What gets sent, and to whom** (all of it in `app/Services/Notifier.php`, one
+file that answers "what does this platform ever tell people?"):
+
+| Event | Goes to |
+|---|---|
+| `message.received` / `message.guest` | Every active administrator |
+| `message.reply` | The researcher who asked |
+| `prediction.completed` / `prediction.failed` | The job's owner |
+| `prediction.expiring` | The owner, ~3h before the files are deleted |
+| `access_request.submitted` | Every active administrator |
+| `account.approved` | The new account |
+| `model.offline` / `model.online` | Every active administrator |
+
+Two rules hold the design together. **A notification may never break its
+caller** — a prediction that finished must not be marked failed because writing
+a row about it threw, so `Notifier` swallows and logs. And **model status is
+notified on the transition only**: the health check runs every five minutes, so
+an overnight outage would otherwise produce 288 identical notifications.
+
+Distinct from `user_activities`, which is an audit trail: that records what
+happened for an administrator to inspect afterwards; this tells one person
+something they need to act on now. The same event can produce both.
 
 #### Research News (8)
 
@@ -352,9 +407,14 @@ Requires a running `php artisan schedule:work` — see *Scheduled Commands* abov
 - `analysis_records` - Prediction jobs
 - `user_activities` - Audit logs
 - `access_requests` - Landing-page Join submissions awaiting review
-- `support_tickets` - IT support tickets (`user_id` is null for guest tickets)
-- `support_ticket_messages` - One conversation turn; `from_admin` is stamped at
-  write time so promoting someone later does not rewrite history
+- `conversations` - One support thread per account (`user_id` is **unique**, and
+  null for a thread written from the sign-in page)
+- `messages` - One turn in a thread; `from_admin` is stamped at write time so
+  promoting someone later does not rewrite history, and `read_at` means "read
+  by the other side"
+- `notifications` - Laravel's own schema. Polymorphic, so it carries **no
+  foreign key** to `users` — `User::booted()` deletes them by hand, along with
+  the account's tokens and avatar file
 
 ### Queue Tables
 - `jobs` - Pending queue jobs
@@ -371,7 +431,7 @@ Requires a running `php artisan schedule:work` — see *Scheduled Commands* abov
   Not used for API auth. Safe to ignore; do **not** drop it without first
   switching `SESSION_DRIVER` to `array`.
 
-16 tables total, counting `migrations`. The schema and the reasoning behind it
+18 tables total, counting `migrations`. The schema and the reasoning behind it
 are documented in [../ARCHITECTURE.md](../ARCHITECTURE.md) §3.
 
 ---
@@ -415,7 +475,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**156 tests, 631 assertions, ~85s.** They run against MySQL, not sqlite: three
+**177 tests, 726 assertions, ~80s.** They run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:
@@ -429,7 +489,8 @@ CREATE DATABASE db_aict_test;
 | `AuthTest` | login, logout, token revocation, concurrent sessions on several devices, audit trail |
 | `AuthorizationTest` | every admin route refuses a researcher; `/me/*` is owner-scoped; `endpoint_url` never leaks |
 | `AccessRequestTest` | public submission, duplicates, existing account, the approve/reject flow |
-| `SupportTicketTest` | ownership scoping, status flow, who-replied stamping, guest tickets |
+| `MessagingTest` | one thread per account, unread in both directions, archiving, guest messages |
+| `NotificationTest` | who each event reaches, the unread counters, and that nobody can read another account's |
 | `NewsPostTest` | the publish switch, slide order, the upload guard, a draft's photo staying private |
 | `AvatarTest` | own vs anyone else's, the upload guard, `avatar_url` in every payload, the 404 for no photo |
 | `PredictionPipelineTest` | recursive interpolation, worker contract, failure paths, counter release |

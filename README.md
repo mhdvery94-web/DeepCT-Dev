@@ -91,10 +91,11 @@ bukan disalin dari catatan lama.
 | Retensi 24 jam (`predictions:cleanup`) | ✅ |
 | Pratinjau frame hasil di aplikasi (TIFF 16-bit → PNG) | ✅ |
 | Formulir Join → permintaan akses → admin menyetujui & akun dibuat | ✅ |
-| Tiket dukungan IT — di aplikasi, dan dari halaman login untuk yang terkunci | ✅ |
-| 63 endpoint API + `/api/health` | ✅ |
-| `flutter analyze` 0 issue, 65 test Flutter lulus | ✅ |
-| **156 test backend lulus** (631 assertion, ~85 detik) | ✅ |
+| Pesan ke admin di dalam aplikasi, dan dari halaman login untuk yang terkunci | ✅ |
+| Notifikasi in-app untuk admin dan peneliti (lonceng + penanda) | ✅ |
+| 71 endpoint API + `/api/health` | ✅ |
+| `flutter analyze` 0 issue, 89 test Flutter lulus | ✅ |
+| **177 test backend lulus** (726 assertion, ~80 detik) | ✅ |
 | Build web & APK release | ✅ (APK ~53 MB, `id.go.brin.neutronct`) |
 
 Terverifikasi end-to-end terhadap worker Kaggle sungguhan dengan dua frame
@@ -142,7 +143,7 @@ Kaggle, bukan backend.
 | [CLAUDE.md](CLAUDE.md) | Kontrak kerja untuk agent + jebakan yang memakan waktu |
 | [ROADMAP.md](ROADMAP.md) | Rencana kerja berurutan, dan apa yang sengaja tidak dikerjakan |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Komponen, alur data, skema database, keputusan teknis |
-| [API.md](API.md) | Referensi 63 endpoint |
+| [API.md](API.md) | Referensi 71 endpoint |
 | [be/README.md](be/README.md) | Setup, troubleshooting, dan perintah backend |
 | [fe/README.md](fe/README.md) | Struktur, breakpoint, dan konvensi frontend |
 | [CHANGELOG.md](CHANGELOG.md) | Riwayat perubahan beserta alasannya |

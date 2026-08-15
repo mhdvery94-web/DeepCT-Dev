@@ -35,18 +35,20 @@ testing.
 "approved". Kalau tidak, admin tetap harus membuat user manual dan permintaan
 itu jadi catatan mati.
 
-### 2. ✅ Tiket dukungan IT — SELESAI
+### 2. ✅ Dukungan IT — SELESAI (dibangun ulang jadi pesan, lihat no. 8)
 
-Tombol IT Support harus membuat tiket yang masuk ke admin **di dalam aplikasi**,
-bukan membuka email.
+Tombol IT Support harus sampai ke admin **di dalam aplikasi**, bukan membuka
+email.
 
-- [x] Tabel `support_tickets` — user, subjek, kategori, status, prioritas
-- [x] Tabel `support_ticket_messages` — percakapan bolak-balik
-- [x] User: buat tiket, lihat miliknya, balas
-- [x] Admin: lihat semua, balas, ubah status, hapus
-- [x] Penanda jumlah tiket menunggu balasan di sidebar admin
-- [x] Tiket tamu dari halaman login — untuk yang **tidak bisa masuk**
-- [x] Test: 23 test backend (scoping, alur status, balasan, tamu) + 7 Flutter
+Awalnya dibangun sebagai sistem tiket (subjek, kategori, prioritas, status).
+**Model itu diganti jadi pesan biasa di putaran berikutnya — lihat no. 8.**
+Yang bertahan dari desain ini, karena alasannya masih berlaku:
+
+- [x] Percakapan bolak-balik, bukan satu pesan sekali kirim
+- [x] User: kirim, lihat miliknya, balas
+- [x] Admin: lihat semua, balas, hapus
+- [x] Penanda jumlah yang menunggu balasan di sidebar admin
+- [x] Jalur tamu dari halaman login — untuk yang **tidak bisa masuk**
 
 **Keputusan 1 — percakapan, bukan satu pesan.** Masalah teknis hampir selalu
 butuh pertanyaan balik ("frame-nya berapa?", "pesan errornya apa?"), dan tanpa
@@ -54,15 +56,15 @@ balasan admin harus keluar aplikasi untuk bertanya.
 
 **Keputusan 2 — tombol IT Support ada di halaman login, dan alasan paling umum
 menekannya adalah tidak bisa login.** Endpoint yang butuh token jadi tidak
-berguna persis di saat paling dibutuhkan, jadi ada `POST
-/api/support/tickets/public` (throttle 5/jam): tiket masuk antrean admin yang
-sama, hanya `user_id`-nya null dan diganti nama + email pelapor. Balasannya
-lewat email, karena tidak ada akun untuk menampilkannya — layar percakapan
-memberitahu admin hal ini alih-alih membiarkannya membalas ke ruang kosong.
+berguna persis di saat paling dibutuhkan, jadi ada `POST /api/messages/public`
+(throttle 5/jam): pesannya masuk inbox admin yang sama, hanya `user_id`-nya null
+dan diganti nama + email pengirim. Balasannya lewat email, karena tidak ada akun
+untuk menampilkannya — layar percakapan memberitahu admin hal ini alih-alih
+membiarkannya membalas ke ruang kosong.
 
-**Keputusan 3 — tiket tamu tidak ditempelkan ke akun yang emailnya cocok.**
+**Keputusan 3 — percakapan tamu tidak ditempelkan ke akun yang emailnya cocok.**
 Email itu belum terverifikasi, jadi menempelkannya berarti siapa pun bisa
-menaruh pesan di daftar tiket peneliti lain.
+menaruh pesan di percakapan peneliti lain.
 
 ### 3. ✅ Berita riset dengan foto — SELESAI
 
@@ -124,9 +126,82 @@ interceptor Dio. Byte-nya diambil lewat `ApiClient` dan di-cache di memori
 
 ---
 
+### 8. ✅ Tiket dibangun ulang jadi pesan — SELESAI
+
+**Umpan balik dari pemilik produk:** "model tiketnya itu berupa pesan saja di
+dalam aplikasi, jadi user bisa kirim pesan ke admin jika ada kendala melalui IT
+support."
+
+Betul, dan alasannya lebih dalam daripada soal tampilan. Model tiket memaksa
+orang yang sedang bermasalah **mengklasifikasikan masalahnya lebih dulu** —
+subjek, kategori, prioritas — lalu memantau status. Itu bentuk helpdesk dengan
+satu departemen dan SLA di belakangnya. Di sini adminnya satu orang.
+
+- [x] Tabel `conversations` + `messages` menggantikan `support_tickets` +
+      `support_ticket_messages`; data lama **dipindahkan**, subjek tiket
+      dilipat jadi baris pertama pesannya supaya tidak ada tulisan yang hilang
+- [x] Dibuang: `subject`, `category`, `priority`, `status`, `awaiting_admin`,
+      `resolved_at`, `resolved_by`, `analysis_record_id`
+- [x] Satu percakapan per akun (unique index), tanda dibaca dua arah, arsip
+- [x] Layar: satu percakapan untuk peneliti, inbox untuk admin
+- [x] Test: 22 backend + 19 Flutter
+
+**Keputusan — route peneliti tidak menerima id sama sekali.** Karena percakapan
+per akun cuma satu, "punya saya" satu-satunya arti yang mungkin. Efeknya bukan
+sekadar rapi: seluruh kelas bug "akun A membaca pesan akun B" hilang bukan
+karena dijaga, tapi karena **tidak ada id yang bisa diutak-atik**.
+
+**Keputusan — arsip, bukan status.** Admin tetap butuh cara merapikan inbox,
+tapi empat keadaan (`open`/`in_progress`/`resolved`/`closed`) untuk satu orang
+itu berlebihan. Satu flag cukup, dan pesan baru menariknya kembali ke inbox:
+yang diarsipkan itu percakapan, bukan orangnya.
+
+### 9. ✅ Notifikasi untuk admin dan peneliti — SELESAI
+
+- [x] Tabel `notifications` (skema bawaan Laravel) + `PlatformNotification`
+- [x] `app/Services/Notifier.php` — semua event di satu berkas
+- [x] Lonceng dengan penanda di kedua konsol, panel isinya, tandai dibaca
+- [x] `GET /notifications/unread-count` memberi **dua** angka sekaligus
+- [x] Test: 20 backend + 12 Flutter
+
+Yang diberitahukan:
+
+| Event | Ke siapa |
+|---|---|
+| Pesan masuk / pesan tamu | Semua admin aktif |
+| Balasan admin | Peneliti yang bertanya |
+| Prediksi selesai / gagal | Pemilik job |
+| **Hasil akan kedaluwarsa** (~3 jam lagi) | Pemilik job |
+| Permintaan akses baru | Semua admin aktif |
+| Akun disetujui | Akun barunya |
+| Model mati / hidup lagi | Semua admin aktif |
+
+**Keputusan — notifikasi tidak boleh menjatuhkan pemanggilnya.** Prediksi yang
+sudah selesai tidak boleh ditandai gagal cuma karena menulis baris notifikasi
+gagal. Semua lewat `push()` yang menelan error dan mencatatnya di log.
+
+**Keputusan — status model diberitahukan hanya saat berubah.** Health check
+jalan tiap 5 menit; tanpa itu, model yang mati semalaman menghasilkan 288
+notifikasi identik.
+
+**Keputusan — peringatan kedaluwarsa dititipkan ke sweep yang sudah ada.**
+`predictions:cleanup` sudah jalan tiap jam; ia sekarang juga memperingatkan
+pemilik hasil yang akan dihapus ~3 jam lagi, sekali saja
+(`analysis_records.expiry_notified_at`). Menghapus 1,5 GB hasil riset tanpa
+pernah memberitahu pemiliknya adalah hal paling mahal yang bisa dilakukan
+platform ini kepada seseorang.
+
+**Temuan sampingan:** tabel `notifications` dan `personal_access_tokens`
+polimorfik, jadi **tidak punya foreign key** ke `users`. Menghapus akun
+meninggalkan keduanya hidup selamanya — token pun, yang artinya kredensial tanpa
+pemilik. `User::booted()` sekarang membersihkan keduanya beserta berkas
+avatarnya.
+
+---
+
 ## Berikutnya
 
-Kosong. Tujuh item terakhir sudah selesai; lihat "Sudah selesai" di bawah.
+Kosong. Sembilan item terakhir sudah selesai; lihat "Sudah selesai" di bawah.
 
 ---
 
@@ -137,7 +212,7 @@ Kosong. Tujuh item terakhir sudah selesai; lihat "Sudah selesai" di bawah.
 - [x] Konsol peneliti (dashboard, unggah, hasil, riwayat, aktivitas)
 - [x] Pratinjau frame — TIFF 16-bit dirender jadi PNG di server
 - [x] Sesi paralel — satu akun bisa aktif di beberapa perangkat
-- [x] Suite test backend (156 test) dan Flutter (65 test)
+- [x] Suite test backend (177 test) dan Flutter (89 test)
 - [x] Konsolidasi dokumentasi, 28 berkas jadi 10
 - [x] Git remote + cadangan lokal
 - [x] **5.** `applicationId` diganti dari `com.example.fe` jadi
@@ -173,6 +248,8 @@ yang hanya bisa dihilangkan lewat retrain. Lihat
 Skalanya setara seluruh FASE 3, ditambah notebook training yang harus ditulis
 lebih dulu sebagai pekerjaan riset. Karena itu ia berhenti di rancangan.
 
-**Notifikasi email.** Balasan tiket tamu sekarang dikirim admin dari email-nya
-sendiri; aplikasi belum mengirim apa pun. Ini yang paling masuk akal
-dikerjakan berikutnya, dan paling murah.
+**Notifikasi email.** Notifikasi in-app sudah ada (no. 9), tapi aplikasi belum
+mengirim satu email pun — balasan untuk pengirim tamu masih harus dikirim admin
+dari email-nya sendiri. Justru karena notifikasinya memakai sistem bawaan
+Laravel, ini tinggal menambah `'mail'` di `via()` plus konfigurasi SMTP. Paling
+masuk akal dikerjakan berikutnya, dan paling murah.

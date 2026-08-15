@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\AnalysisRecord;
+use App\Services\Notifier;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 
@@ -18,6 +19,9 @@ class CleanupExpiredPredictions extends Command
     protected $signature = 'predictions:cleanup {--dry-run : List what would be deleted without touching anything}';
 
     protected $description = 'Delete prediction files past their 24-hour retention window';
+
+    /** How long before deletion the owner is warned. */
+    private const EXPIRY_WARNING_HOURS = 3;
 
     public function handle(): int
     {
@@ -65,6 +69,8 @@ class CleanupExpiredPredictions extends Command
             }
         }
 
+        $this->warnAboutExpiringResults($dryRun);
+
         $freedBytes += $this->sweepStaleDownloads($dryRun);
         $freedBytes += $this->sweepAbandonedUploads($dryRun);
 
@@ -74,6 +80,52 @@ class CleanupExpiredPredictions extends Command
         );
 
         return $failures > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * Tell people their results are about to be deleted.
+     *
+     * Deleting a gigabyte of output the researcher never knew was expiring is
+     * the most expensive thing this platform can do to someone, and it happens
+     * silently 24 hours after a job they may have run overnight.
+     *
+     * Sent once per job — `expiry_notified_at` exists precisely because this
+     * command runs hourly and would otherwise repeat itself for three hours.
+     */
+    private function warnAboutExpiringResults(bool $dryRun): void
+    {
+        $window = now()->addHours(self::EXPIRY_WARNING_HOURS);
+
+        $expiring = AnalysisRecord::whereNotNull('expires_at')
+            ->where('expires_at', '>', now())
+            ->where('expires_at', '<=', $window)
+            ->whereNull('files_deleted_at')
+            ->whereNull('expiry_notified_at')
+            ->where('status', 'completed')
+            ->get();
+
+        if ($expiring->isEmpty()) {
+            return;
+        }
+
+        $this->info(
+            ($dryRun ? '[dry run] ' : '') .
+            "Warning {$expiring->count()} owner(s) about results expiring soon."
+        );
+
+        foreach ($expiring as $record) {
+            if ($dryRun) {
+                $this->line("  would warn about {$record->job_id}");
+                continue;
+            }
+
+            $hours = max(1, (int) round(now()->diffInMinutes($record->expires_at) / 60));
+
+            Notifier::resultsExpiringSoon($record, $hours);
+            $record->update(['expiry_notified_at' => now()]);
+
+            $this->line("  warned about {$record->job_id} ({$hours}h left)");
+        }
     }
 
     /**

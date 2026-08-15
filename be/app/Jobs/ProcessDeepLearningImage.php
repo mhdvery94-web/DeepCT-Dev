@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
 use App\Models\UserActivity;
+use App\Services\Notifier;
 use Exception;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -128,6 +129,11 @@ class ProcessDeepLearningImage implements ShouldQueue
                     'seconds' => $elapsed,
                 ],
             ]);
+
+            // A job runs for minutes and nobody watches the screen that long.
+            // Notifier swallows its own failures, so a successful prediction is
+            // never marked failed because a notification row would not write.
+            Notifier::predictionCompleted($this->record, count($generated));
         } catch (Exception $e) {
             $this->fail_($e->getMessage());
         } finally {
@@ -147,10 +153,16 @@ class ProcessDeepLearningImage implements ShouldQueue
         $this->record->refresh();
 
         if ($this->record->isProcessing() || $this->record->isPending()) {
+            $message = $e?->getMessage() ?? 'The job failed to run.';
+
             $this->record->update([
                 'status' => 'failed',
-                'error_message' => $e?->getMessage() ?? 'The job failed to run.',
+                'error_message' => $message,
             ]);
+
+            // A timeout or a crash lands here instead of fail_(), and it is
+            // the case where the researcher is *most* in the dark.
+            Notifier::predictionFailed($this->record, $message);
         }
     }
 
@@ -345,5 +357,7 @@ class ProcessDeepLearningImage implements ShouldQueue
                 'error' => $message,
             ],
         ]);
+
+        Notifier::predictionFailed($this->record, $message);
     }
 }
