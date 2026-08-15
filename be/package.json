@@ -6,7 +6,11 @@
         "build": "vite build",
         "dev": "vite",
         "octane": "php artisan octane:start --server=roadrunner --workers=4 --max-requests=250",
-        "octane:watch": "php artisan octane:start --server=roadrunner --workers=4 --max-requests=250 --watch"
+        "octane:watch": "php artisan octane:start --server=roadrunner --workers=4 --max-requests=250 --watch",
+        "octane:reset": "node scripts/octane-reset.mjs",
+        "queue": "php artisan queue:work --tries=1 --timeout=7200",
+        "schedule": "php artisan schedule:work",
+        "serve:all": "concurrently -k -n api,queue,cron -c blue,green,yellow \"npm:octane\" \"npm:queue\" \"npm:schedule\""
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
