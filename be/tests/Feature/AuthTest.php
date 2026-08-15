@@ -72,113 +72,53 @@ class AuthTest extends TestCase
     }
 
     /**
-     * One session per account: a second login while the account is genuinely
-     * in use is refused, rather than silently kicking the first device off.
+     * Concurrent sessions are allowed. A researcher on a laptop and a phone
+     * holds two tokens, and signing in on one must not disturb the other.
      */
-    public function test_a_second_login_is_refused_while_the_account_is_in_use(): void
+    public function test_two_devices_can_be_signed_in_at_once(): void
     {
         $user = $this->makeUser();
 
-        $first = $this->tokenFor('researcher@brin.go.id', 'user123');
-        $this->apiAs($first)->getJson('/api/user')->assertOk();
+        $laptop = $this->tokenFor('researcher@brin.go.id', 'user123');
+        $phone = $this->tokenFor('researcher@brin.go.id', 'user123');
 
-        $response = $this->postJson('/api/login', [
-            'email' => 'researcher@brin.go.id',
-            'password' => 'user123',
-        ]);
+        $this->assertNotSame($laptop, $phone, 'each login gets its own token');
+        $this->assertSame(2, $user->tokens()->count());
 
-        $response->assertStatus(409)
-            ->assertJsonPath('success', false);
-
-        $this->assertStringContainsString(
-            'already signed in',
-            $response->json('message')
-        );
-
-        // The device already holding a session must keep working.
-        $this->apiAs($first)->getJson('/api/user')->assertOk();
-        $this->assertSame(1, $user->tokens()->count());
+        $this->apiAs($laptop)->getJson('/api/user')->assertOk();
+        $this->apiAs($phone)->getJson('/api/user')->assertOk();
     }
 
-    /** The rule applies to administrators too, not just researchers. */
-    public function test_an_admin_is_refused_a_second_login_as_well(): void
+    public function test_an_admin_can_also_hold_several_sessions(): void
     {
-        $this->makeUser([
+        $admin = $this->makeUser([
             'username' => 'admin',
             'email' => 'admin@brin.go.id',
             'role' => 'admin',
         ]);
 
-        $this->tokenFor('admin@brin.go.id', 'user123');
+        $first = $this->tokenFor('admin@brin.go.id', 'user123');
+        $second = $this->tokenFor('admin@brin.go.id', 'user123');
 
-        $this->postJson('/api/login', [
-            'email' => 'admin@brin.go.id',
-            'password' => 'user123',
-        ])->assertStatus(409);
+        $this->assertSame(2, $admin->tokens()->count());
+        $this->apiAs($first)->getJson('/api/user')->assertOk();
+        $this->apiAs($second)->getJson('/api/user')->assertOk();
     }
 
-    /**
-     * The safety valve. A session nobody logged out of -- app force-closed,
-     * browser shut, phone dead -- must not lock the account until the token
-     * expires seven days later.
-     */
-    public function test_an_abandoned_session_can_be_taken_over(): void
+    /** Signing out on one device must not sign the others out. */
+    public function test_logging_out_on_one_device_leaves_the_others_alone(): void
     {
         $user = $this->makeUser();
 
-        $stale = $this->tokenFor('researcher@brin.go.id', 'user123');
+        $laptop = $this->tokenFor('researcher@brin.go.id', 'user123');
+        $phone = $this->tokenFor('researcher@brin.go.id', 'user123');
 
-        // Nobody has touched that token for longer than the idle window.
-        $user->tokens()->update([
-            'last_used_at' => now()->subMinutes(30),
-            'created_at' => now()->subMinutes(30),
-        ]);
+        $this->apiAs($laptop)->postJson('/api/logout')->assertOk();
 
-        $this->postJson('/api/login', [
-            'email' => 'researcher@brin.go.id',
-            'password' => 'user123',
-        ])->assertOk();
+        $this->apiAs($laptop)->getJson('/api/user')->assertUnauthorized();
+        $this->apiAs($phone)->getJson('/api/user')->assertOk();
 
-        $this->assertSame(1, $user->tokens()->count(), 'the stale token is cleared');
-        $this->apiAs($stale)->getJson('/api/user')->assertUnauthorized();
-    }
-
-    /** Logging out properly frees the account immediately. */
-    public function test_logging_out_allows_an_immediate_new_login(): void
-    {
-        $this->makeUser();
-
-        $token = $this->tokenFor('researcher@brin.go.id', 'user123');
-        $this->apiAs($token)->postJson('/api/logout')->assertOk();
-
-        $this->postJson('/api/login', [
-            'email' => 'researcher@brin.go.id',
-            'password' => 'user123',
-        ])->assertOk();
-    }
-
-    /**
-     * Using the app keeps the session alive: Sanctum stamps last_used_at on
-     * every authenticated request, so an idle window must not expire under an
-     * active user.
-     */
-    public function test_activity_keeps_a_session_from_being_taken_over(): void
-    {
-        $user = $this->makeUser();
-
-        $token = $this->tokenFor('researcher@brin.go.id', 'user123');
-
-        // Backdate, then use the token: last_used_at moves back to now.
-        $user->tokens()->update([
-            'last_used_at' => now()->subMinutes(30),
-            'created_at' => now()->subMinutes(30),
-        ]);
-        $this->apiAs($token)->getJson('/api/user')->assertOk();
-
-        $this->postJson('/api/login', [
-            'email' => 'researcher@brin.go.id',
-            'password' => 'user123',
-        ])->assertStatus(409);
+        $this->assertSame(1, $user->tokens()->count());
     }
 
     public function test_logout_revokes_the_current_token(): void

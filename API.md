@@ -38,17 +38,12 @@ login · 403 bukan haknya · 404 tidak ada · 409 konflik · 410 sudah kedaluwar
 { "success": true, "data": { "user": { … }, "token": "64|abc…" } }
 ```
 
-⚠️ **Satu sesi per akun.** Kalau akun sedang dipakai, login dijawab **409**:
+**Beberapa sesi sekaligus diizinkan.** Tiap login menerbitkan token sendiri dan
+tidak mengganggu token lain, jadi satu akun bisa aktif di laptop dan HP
+bersamaan. `POST /logout` hanya mencabut token yang dipakai request itu.
 
-```json
-{ "success": false,
-  "message": "This account is already signed in on another device. Sign out there first, or try again in a few minutes." }
-```
-
-Perangkat yang sudah memegang sesi **tidak** ditendang. "Sedang dipakai"
-berarti token-nya terpakai dalam 15 menit terakhir; lewat dari itu dianggap
-ditinggalkan dan login baru mengambil alih. Berlaku sama untuk admin maupun
-peneliti.
+Token berlaku **7 hari** (`config/sanctum.php`), dan `tokens:cleanup`
+membersihkan baris yang kedaluwarsa setiap hari.
 
 Akun nonaktif ditolak dengan pesan tersendiri, bukan "kredensial salah", supaya
 peneliti tahu harus menghubungi admin.
