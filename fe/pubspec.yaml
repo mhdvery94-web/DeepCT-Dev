@@ -44,17 +44,6 @@ dependencies:
   # Secure Storage for Token
   flutter_secure_storage: ^9.0.0
   
-  # NOTE: file_picker was removed here (was ^6.1.1). Nothing imported it, and
-  # 6.x still references the v1 embedding (PluginRegistry.Registrar) that
-  # Flutter 3.44 removed — it broke `flutter build apk` at the Java
-  # compilation step and produced the "references file_picker:linux as the
-  # default plugin" warnings on every build.
-  #
-  # The FASE 3 upload screen will need it back. Adding it is not a one-liner:
-  # file_picker >= 12 requires win32 ^6.3.0, while flutter_secure_storage 9.x
-  # pins win32 ^5.0.0, so both must be upgraded together
-  # (flutter_secure_storage ^11) and the token-storage code re-verified.
-
   # Image Display
   cached_network_image: ^3.3.1
   
@@ -75,6 +64,22 @@ dependencies:
 
   # Browser download for the CSV export (replaces the deprecated dart:html)
   web: ^1.1.1
+
+  # Picking the ZIP to upload.
+  #
+  # The 11.x line is bounded on both sides, so do not "just upgrade" this:
+  #
+  #  - 6.x and 8.x still reference the v1 embedding
+  #    (PluginRegistry.Registrar), which Flutter 3.44 removed. They fail
+  #    `flutter build apk` at Java compilation with
+  #    "cannot find symbol: class Registrar". Verified against 8.0.0.
+  #  - 12.x needs win32 ^6.3.0 while flutter_secure_storage 9.x pins
+  #    win32 ^5.0.0, so reaching it means upgrading token storage at the
+  #    same time and re-verifying the login flow.
+  #
+  # 11.0.0 has dropped the v1 embedding and still resolves against win32 5.x.
+  file_picker: ^11.0.0
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

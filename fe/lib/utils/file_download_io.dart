@@ -1,26 +1,40 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
 
-/// Writes [content] to a file named [filename] in the platform's download
+/// Writes [bytes] to a file named [filename] in the platform's download
 /// location and returns the full path, so the caller can show the user where
-/// the export ended up.
+/// it ended up.
 ///
 /// On Android this is the app's own external "Download" directory
 /// (`Android/data/<package>/files/Download`), which is readable by any file
 /// manager and needs no runtime storage permission.
-Future<String> saveTextFile({
+Future<String> saveBytesFile({
   required String filename,
-  required String content,
-  String mimeType = 'text/csv',
+  required Uint8List bytes,
+  String mimeType = 'application/octet-stream',
 }) async {
   final directory = await _downloadDirectory();
   final file = File('${directory.path}${Platform.pathSeparator}$filename');
 
-  await file.writeAsBytes(utf8.encode(content), flush: true);
+  await file.writeAsBytes(bytes, flush: true);
 
   return file.path;
+}
+
+/// Convenience wrapper for text payloads such as the CSV export.
+Future<String> saveTextFile({
+  required String filename,
+  required String content,
+  String mimeType = 'text/csv',
+}) {
+  return saveBytesFile(
+    filename: filename,
+    bytes: Uint8List.fromList(utf8.encode(content)),
+    mimeType: mimeType,
+  );
 }
 
 Future<Directory> _downloadDirectory() async {

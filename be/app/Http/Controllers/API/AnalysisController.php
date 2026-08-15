@@ -6,219 +6,69 @@ use App\Http\Controllers\Controller;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
 use App\Models\UserActivity;
+use App\Services\IntakeException;
+use App\Services\PredictionIntake;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use App\Jobs\ProcessDeepLearningImage;
 use ZipArchive;
 use Exception;
 
 class AnalysisController extends Controller
 {
+    public function __construct(private readonly PredictionIntake $intake) {}
+
     /**
      * Upload ZIP file dan mulai prediksi
      * POST /api/predictions
      */
     public function store(Request $request)
     {
-        // Validation
         $request->validate([
             'file' => 'required|file|mimes:zip|max:2097152', // Max 2GB
             'model_id' => 'required|exists:models,id',
         ]);
 
-        $user = auth()->user();
-        $jobId = (string) Str::uuid();
+        $user = $request->user();
+        $model = Model::findOrFail($request->model_id);
+        $uploaded = $request->file('file');
 
         try {
-            // Check if model is active and online
-            $model = Model::findOrFail($request->model_id);
-            if (!$model->is_active) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Selected model is not active',
-                ], 400);
-            }
-
-            if ($model->status === 'offline') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Selected model is currently offline',
-                ], 503);
-            }
-
-            // Save uploaded ZIP temporarily
-            $uploadedFile = $request->file('file');
-            $tempZipPath = $uploadedFile->storeAs(
-                "temp/uploads/{$user->id}",
-                "{$jobId}.zip",
-                'local'
+            // Extraction, validation, record creation and dispatch are shared
+            // with the chunked upload flow so the two cannot drift apart.
+            $prediction = $this->intake->fromZip(
+                $user,
+                $model,
+                $uploaded->getRealPath(),
+                $request->ip(),
+                $request->userAgent(),
+                $uploaded->getClientOriginalName()
             );
-
-            // Extract ZIP
-            $inputFolder = "predictions/{$user->id}/{$jobId}/input";
-            $filesExtracted = $this->extractZip($tempZipPath, $inputFolder);
-
-            if ($filesExtracted === 0) {
-                // Clean up
-                Storage::delete($tempZipPath);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'ZIP file is empty or contains no valid files',
-                ], 422);
-            }
-
-            // Validate extracted files
-            $validationError = $this->validateTifFiles($inputFolder);
-            if ($validationError) {
-                // Clean up
-                Storage::delete($tempZipPath);
-                Storage::deleteDirectory($inputFolder);
-                return response()->json([
-                    'success' => false,
-                    'message' => $validationError,
-                ], 422);
-            }
-
-            // Create analysis record
-            $prediction = AnalysisRecord::create([
-                'user_id' => $user->id,
-                'job_id' => $jobId,
-                'model_id' => $model->id,
-                'input_folder' => $inputFolder,
-                'output_folder' => "predictions/{$user->id}/{$jobId}/output",
-                'status' => 'pending',
-                'input_files_count' => $filesExtracted,
-                'expires_at' => now()->addHours(24),
-            ]);
-
-            // Delete temp ZIP
-            Storage::delete($tempZipPath);
-
-            // Dispatch job to queue
-            ProcessDeepLearningImage::dispatch($prediction);
-
-            // Log activity
-            UserActivity::create([
-                'user_id' => $user->id,
-                'model_id' => $model->id,
-                'activity_type' => 'prediction',
-                'description' => "Started prediction with {$filesExtracted} input files",
-                'ip_address' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-                'metadata' => [
-                    'job_id' => $jobId,
-                    'model_name' => $model->name,
-                    'file_count' => $filesExtracted,
-                ],
-            ]);
-
+        } catch (IntakeException $e) {
             return response()->json([
-                'success' => true,
-                'message' => 'Prediction started. Processing will begin shortly.',
-                'data' => [
-                    'id' => $prediction->id,
-                    'job_id' => $jobId,
-                    'status' => 'pending',
-                    'input_files_count' => $filesExtracted,
-                    'queue_position' => $this->getQueuePosition($prediction),
-                    'estimated_wait_minutes' => $this->estimateWaitTime($prediction),
-                    'expires_at' => $prediction->expires_at->toIso8601String(),
-                    'created_at' => $prediction->created_at->toIso8601String(),
-                ],
-            ], 201);
-
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $e->status());
         } catch (Exception $e) {
-            // Clean up on error
-            if (isset($tempZipPath)) Storage::delete($tempZipPath);
-            if (isset($inputFolder)) Storage::deleteDirectory($inputFolder);
-
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process upload: ' . $e->getMessage(),
             ], 500);
         }
-    }
 
-    /**
-     * Extract ZIP file to storage
-     */
-    private function extractZip($zipPath, $destinationFolder)
-    {
-        $zip = new ZipArchive();
-        $absoluteZipPath = Storage::path($zipPath);
-        $absoluteDestination = Storage::path($destinationFolder);
-
-        // Create destination directory
-        if (!Storage::exists($destinationFolder)) {
-            Storage::makeDirectory($destinationFolder);
-        }
-
-        if ($zip->open($absoluteZipPath) === true) {
-            $filesExtracted = 0;
-
-            for ($i = 0; $i < $zip->numFiles; $i++) {
-                $filename = $zip->getNameIndex($i);
-                
-                // Skip directories and hidden files
-                if (substr($filename, -1) === '/' || strpos($filename, '__MACOSX') !== false) {
-                    continue;
-                }
-
-                // Extract only .tif files
-                if (strtolower(pathinfo($filename, PATHINFO_EXTENSION)) === 'tif') {
-                    $zip->extractTo($absoluteDestination, $filename);
-                    $filesExtracted++;
-                }
-            }
-
-            $zip->close();
-            return $filesExtracted;
-        }
-
-        throw new Exception('Failed to open ZIP file');
-    }
-
-    /**
-     * Validate extracted TIF files
-     */
-    private function validateTifFiles($folder)
-    {
-        $files = Storage::files($folder);
-
-        if (count($files) < 2) {
-            return 'At least 2 TIF files are required for interpolation';
-        }
-
-        // Check if all files are .tif
-        foreach ($files as $file) {
-            $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-            if ($extension !== 'tif' && $extension !== 'tiff') {
-                return 'All files must be .tif or .tiff format';
-            }
-
-            // Check file size (max 50MB per file)
-            $fileSize = Storage::size($file);
-            if ($fileSize > 50 * 1024 * 1024) {
-                return 'Individual file size must not exceed 50MB';
-            }
-        }
-
-        // Check naming convention (should contain numbers)
-        $hasNumbers = false;
-        foreach ($files as $file) {
-            $basename = pathinfo($file, PATHINFO_FILENAME);
-            if (preg_match('/\d+/', $basename)) {
-                $hasNumbers = true;
-                break;
-            }
-        }
-
-        if (!$hasNumbers) {
-            return 'Files should contain frame numbers in their names (e.g., frame_001.tif, image_003.tif)';
-        }
-
-        return null; // No errors
+        return response()->json([
+            'success' => true,
+            'message' => 'Prediction started. Processing will begin shortly.',
+            'data' => [
+                'id' => $prediction->id,
+                'job_id' => $prediction->job_id,
+                'status' => 'pending',
+                'input_files_count' => $prediction->input_files_count,
+                'queue_position' => $this->getQueuePosition($prediction),
+                'estimated_wait_minutes' => $this->estimateWaitTime($prediction),
+                'expires_at' => $prediction->expires_at->toIso8601String(),
+                'created_at' => $prediction->created_at->toIso8601String(),
+            ],
+        ], 201);
     }
 
     /**

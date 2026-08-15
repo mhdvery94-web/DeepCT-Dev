@@ -1,20 +1,19 @@
 import 'dart:convert';
 import 'dart:js_interop';
+import 'dart:typed_data';
 
 import 'package:web/web.dart' as web;
 
-/// Hands [content] to the browser as a download named [filename].
+/// Hands [bytes] to the browser as a download named [filename].
 ///
 /// Uses `package:web` rather than the deprecated `dart:html`: the latter is a
 /// web-only library, and merely importing it breaks the Android/iOS build at
 /// the kernel-compilation step.
-Future<String> saveTextFile({
+Future<String> saveBytesFile({
   required String filename,
-  required String content,
-  String mimeType = 'text/csv',
+  required Uint8List bytes,
+  String mimeType = 'application/octet-stream',
 }) async {
-  final bytes = utf8.encode(content);
-
   final blob = web.Blob(
     <JSAny>[bytes.toJS].toJS,
     web.BlobPropertyBag(type: mimeType),
@@ -33,4 +32,17 @@ Future<String> saveTextFile({
   web.URL.revokeObjectURL(url);
 
   return filename;
+}
+
+/// Convenience wrapper for text payloads such as the CSV export.
+Future<String> saveTextFile({
+  required String filename,
+  required String content,
+  String mimeType = 'text/csv',
+}) {
+  return saveBytesFile(
+    filename: filename,
+    bytes: Uint8List.fromList(utf8.encode(content)),
+    mimeType: mimeType,
+  );
 }

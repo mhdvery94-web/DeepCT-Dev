@@ -43,7 +43,9 @@ class ApiConfig {
   // Self-service endpoints (any signed-in user, not admin-only)
   static const String meActivities = '/me/activities';
   static const String meStats = '/me/stats';
+  static const String meModels = '/me/models';
 
-  // User endpoints
+  // Prediction pipeline (FASE 3)
   static const String predictions = '/predictions';
+  static const String predictionUploads = '/predictions/uploads';
 }

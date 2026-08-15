@@ -48,14 +48,26 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
 ### Researcher Console (`UserShell`)
 - ✅ **Dashboard** — model availability, own analysis counters, activity today,
   and the 5 most recent actions
+- ✅ **New Analysis** — pick a model, pick a ZIP, upload with live progress
+- ✅ **Results & History** — job status with polling, dual download, delete
 - ✅ **My Activity** — full paginated audit trail of the signed-in account
-- ⏳ **New Analysis** — upload T0 & T2 (FASE 3)
-- ⏳ **Results & History** — preview and download (FASE 3)
 
-The two FASE 3 sections are listed but marked `SOON` rather than hidden, so the
-shape of the product is visible. Backed by `GET /api/me/stats` and
-`GET /api/me/activities` — the only data endpoints a non-admin account can
-reach, since everything under `/api/admin` requires the admin role.
+Backed by `/api/me/*` and `/api/predictions/*`; everything under `/api/admin`
+requires the admin role and is unreachable from this console.
+
+**Upload transport is automatic.** `PredictionService.upload()` sends archives
+under 1 MB in a single request and switches to the resumable chunked flow above
+that. The chunk size is whatever the server advertises in the session response,
+never hard-coded, so the client adapts to the server's PHP/RoadRunner limits.
+
+**Polling, not push.** `PredictionHistoryScreen` refreshes every 10s *only*
+while a job is pending or processing, and cancels the timer once everything has
+settled. A failed background refresh leaves the existing list on screen rather
+than blanking it.
+
+**Downloads are checksum-verified.** Every archive arrives with an
+`X-Checksum-MD5` header, which the client recomputes locally; a mismatch is
+surfaced to the user rather than silently saving a corrupt ZIP.
 
 ### Shared Features
 - ✅ Responsive design (mobile, tablet, desktop) — covered by layout tests at
@@ -149,6 +161,8 @@ lib/
 │   ├── user_model.dart          # UserModel
 │   ├── model_info.dart          # ModelInfo (AI model registry entry)
 │   ├── activity_log.dart        # ActivityLog
+│   ├── me_stats.dart            # MeStats (researcher dashboard counters)
+│   ├── prediction.dart          # Prediction (one interpolation job)
 │   └── pagination.dart          # Pagination + PaginatedResult<T>
 │
 ├── services/
@@ -158,7 +172,8 @@ lib/
 │   ├── admin_user_service.dart  # AdminUserService  — user management API
 │   ├── admin_model_service.dart # AdminModelService — model management API
 │   ├── activity_service.dart    # ActivityService   — activity logs API
-│   └── me_service.dart          # MeService — /api/me, the only non-admin data
+│   ├── me_service.dart          # MeService — /api/me, the only non-admin data
+│   └── prediction_service.dart  # PredictionService — upload, list, download
 │
 ├── screens/
 │   ├── landing/
@@ -172,10 +187,12 @@ lib/
 │   │   ├── model_management_screen.dart
 │   │   └── activity_logs_screen.dart
 │   └── user/
-│       ├── user_shell.dart              # Researcher layout with sidebar
-│       ├── user_home_screen.dart        # Stats + recent activity
-│       ├── user_activity_screen.dart    # Full paginated activity log
-│       └── user_activity_tile.dart      # Shared row widget
+│       ├── user_shell.dart                  # Researcher layout with sidebar
+│       ├── user_home_screen.dart            # Stats + recent activity
+│       ├── upload_screen.dart               # Start a new analysis
+│       ├── prediction_history_screen.dart   # Job status, polling, download
+│       ├── user_activity_screen.dart        # Full paginated activity log
+│       └── user_activity_tile.dart          # Shared row widget
 │
 ├── widgets/
 │   ├── status_badge.dart        # Status chip widget
@@ -193,7 +210,7 @@ lib/
 └── main.dart                    # App entry point
 ```
 
-**Service conventions.** All four API services are instantiated (`AdminUserService()`),
+**Service conventions.** Every API service is instantiated (`AdminUserService()`),
 not static, and every list endpoint returns `PaginatedResult<T>` — use
 `.items` for the rows and `.pagination.total` for the server-side count.
 

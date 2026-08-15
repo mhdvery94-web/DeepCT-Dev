@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
 import '../../theme/app_theme.dart';
 import '../landing/landing_page.dart';
+import 'prediction_history_screen.dart';
+import 'upload_screen.dart';
 import 'user_activity_screen.dart';
 import 'user_home_screen.dart';
 
@@ -14,8 +16,8 @@ import 'user_home_screen.dart';
 /// of the product is visible, and each explains what it will do.
 enum UserSection {
   dashboard('Dashboard', Icons.dashboard_outlined, available: true),
-  analysis('New Analysis', Icons.auto_awesome_outlined, available: false),
-  history('Results & History', Icons.folder_outlined, available: false),
+  analysis('New Analysis', Icons.auto_awesome_outlined, available: true),
+  history('Results & History', Icons.folder_outlined, available: true),
   activity('My Activity', Icons.history, available: true);
 
   const UserSection(this.label, this.icon, {required this.available});
@@ -54,22 +56,14 @@ class _UserShellState extends State<UserShell> {
       case UserSection.activity:
         return const UserActivityScreen();
       case UserSection.analysis:
-        return const _ComingSoonView(
-          icon: Icons.auto_awesome_outlined,
-          title: 'New Analysis',
-          description:
-              'Upload two boundary frames (T0 and T2) and the platform will '
-              'interpolate the frames between them using recursive '
-              'interpolation at t=0.5.',
+        return UploadScreen(
+          // Jump straight to the queue so the user sees their job progressing.
+          onQueued: (_) => setState(() => _section = UserSection.history),
         );
       case UserSection.history:
-        return const _ComingSoonView(
-          icon: Icons.folder_outlined,
-          title: 'Results & History',
-          description:
-              'Browse past analyses, preview the interpolated frames and '
-              'download the results before they expire after 24 hours.',
-        );
+        // The key forces a fresh State when arriving from a new upload, so the
+        // list reloads instead of showing the previous page's cached items.
+        return PredictionHistoryScreen(key: UniqueKey());
     }
   }
 
@@ -366,70 +360,6 @@ class _NavItem extends StatelessWidget {
                 ),
               ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Placeholder for a section whose backend does not exist yet.
-class _ComingSoonView extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-
-  const _ComingSoonView({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 520),
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            border: Border.all(color: AppTheme.border),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 48, color: AppTheme.borderDark),
-              const SizedBox(height: 20),
-              Text(title, style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 8),
-              Container(width: 40, height: 4, color: AppTheme.primary),
-              const SizedBox(height: 20),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: AppTheme.textMuted),
-              ),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                color: AppTheme.warningLight,
-                child: Text(
-                  'ARRIVING IN FASE 3',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.warning,
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
