@@ -42,12 +42,12 @@ class Pagination {
   }
 
   const Pagination.empty()
-      : total = 0,
-        perPage = 15,
-        currentPage = 1,
-        lastPage = 1,
-        from = null,
-        to = null;
+    : total = 0,
+      perPage = 15,
+      currentPage = 1,
+      lastPage = 1,
+      from = null,
+      to = null;
 
   bool get hasPrevious => currentPage > 1;
   bool get hasNext => currentPage < lastPage;
@@ -68,6 +68,6 @@ class PaginatedResult<T> {
   const PaginatedResult({required this.items, required this.pagination});
 
   const PaginatedResult.empty()
-      : items = const [],
-        pagination = const Pagination.empty();
+    : items = const [],
+      pagination = const Pagination.empty();
 }

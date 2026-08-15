@@ -52,10 +52,7 @@ class AuthService {
     try {
       final response = await _dio.post(
         ApiConfig.login,
-        data: {
-          'email': email,
-          'password': password,
-        },
+        data: {'email': email, 'password': password},
       );
 
       if (response.data['success'] == true) {
@@ -78,10 +75,7 @@ class AuthService {
         };
       }
     } on DioException catch (e) {
-      return {
-        'success': false,
-        'message': _handleError(e),
-      };
+      return {'success': false, 'message': _handleError(e)};
     }
   }
 
@@ -104,7 +98,7 @@ class AuthService {
   Future<UserModel?> getCurrentUser() async {
     try {
       final response = await _dio.get(ApiConfig.user);
-      
+
       if (response.data['success'] == true) {
         return UserModel.fromJson(response.data['data']);
       }

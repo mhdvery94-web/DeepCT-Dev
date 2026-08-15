@@ -98,8 +98,12 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
 
         _totalModels = models.pagination.total;
         _onlineModels = models.items.where((ModelInfo m) => m.isOnline).length;
-        _offlineModels = models.items.where((ModelInfo m) => m.isOffline).length;
-        _troubleModels = models.items.where((ModelInfo m) => m.isTrouble).length;
+        _offlineModels = models.items
+            .where((ModelInfo m) => m.isOffline)
+            .length;
+        _troubleModels = models.items
+            .where((ModelInfo m) => m.isTrouble)
+            .length;
 
         _recentActivities = recent.items;
         _todayActivityCount = todayActivities.pagination.total;
@@ -282,9 +286,9 @@ class _StatCard extends StatelessWidget {
               const Spacer(),
               Text(
                 value,
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      color: color,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.headlineLarge?.copyWith(color: color),
               ),
             ],
           ),

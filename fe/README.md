@@ -45,15 +45,21 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
   - Export the filtered page to CSV (browser download on web; saved to
     `Android/data/<package>/files/Download` on Android)
 
-### User Dashboard (Coming Soon)
-- ⏳ Upload CT images (T0 & T2)
-- ⏳ View prediction results
-- ⏳ Download results (2 options)
-- ⏳ Prediction history
+### Researcher Console (`UserShell`)
+- ✅ **Dashboard** — model availability, own analysis counters, activity today,
+  and the 5 most recent actions
+- ✅ **My Activity** — full paginated audit trail of the signed-in account
+- ⏳ **New Analysis** — upload T0 & T2 (FASE 3)
+- ⏳ **Results & History** — preview and download (FASE 3)
+
+The two FASE 3 sections are listed but marked `SOON` rather than hidden, so the
+shape of the product is visible. Backed by `GET /api/me/stats` and
+`GET /api/me/activities` — the only data endpoints a non-admin account can
+reach, since everything under `/api/admin` requires the admin role.
 
 ### Shared Features
 - ✅ Responsive design (mobile, tablet, desktop) — covered by layout tests at
-  360x640, 390x844, 768x1024, 1280x720 and 1440x1024
+  360x640, 390x844, 759x900, 760x900, 768x1024, 1280x720 and 1440x1024
 - ✅ Authentication with JWT token
 - ✅ Secure token storage
 - ✅ Role-based routing
@@ -151,7 +157,8 @@ lib/
 │   ├── auth_provider.dart       # ChangeNotifier holding the signed-in user
 │   ├── admin_user_service.dart  # AdminUserService  — user management API
 │   ├── admin_model_service.dart # AdminModelService — model management API
-│   └── activity_service.dart    # ActivityService   — activity logs API
+│   ├── activity_service.dart    # ActivityService   — activity logs API
+│   └── me_service.dart          # MeService — /api/me, the only non-admin data
 │
 ├── screens/
 │   ├── landing/
@@ -165,7 +172,10 @@ lib/
 │   │   ├── model_management_screen.dart
 │   │   └── activity_logs_screen.dart
 │   └── user/
-│       └── user_dashboard.dart  # Placeholder — FASE 3
+│       ├── user_shell.dart              # Researcher layout with sidebar
+│       ├── user_home_screen.dart        # Stats + recent activity
+│       ├── user_activity_screen.dart    # Full paginated activity log
+│       └── user_activity_tile.dart      # Shared row widget
 │
 ├── widgets/
 │   ├── status_badge.dart        # Status chip widget
@@ -415,7 +425,7 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 12 tests, passing
+- ✅ `flutter test` — 21 tests, passing
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
@@ -429,10 +439,12 @@ Blocked on the FASE 3 backend: the `predictions` routes are still commented out
 in `be/routes/api.php`.
 
 ### Testing
-`test/widget_test.dart` holds **12** tests: a boot smoke test, a layout check of
-the landing page at seven viewports (fails if any section overflows), a status
-bar clearance check, and three header-navigation checks. That is the entire
-automated suite — the file was Flutter's counter-app scaffold until
+The suite is **21** tests across two files.
+`widget_test.dart` covers the landing page: a boot smoke test, a layout check at
+seven viewports (fails if any section overflows), a status-bar clearance check,
+and three header-navigation checks. `user_console_test.dart` covers the
+researcher console: `MeStats` payload parsing and `UserActivityTile` rendering.
+That is the entire automated suite — the file was Flutter's counter-app scaffold until
 15 Aug 2026, and it *failed*. The "23/23 contract tests" in
 [test_auth.md](test_auth.md) are a manual `curl` checklist, not a runnable
 suite.

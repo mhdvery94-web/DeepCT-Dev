@@ -40,6 +40,10 @@ class ApiConfig {
   static const String adminModels = '/admin/models';
   static const String adminActivities = '/admin/activities';
 
+  // Self-service endpoints (any signed-in user, not admin-only)
+  static const String meActivities = '/me/activities';
+  static const String meStats = '/me/stats';
+
   // User endpoints
   static const String predictions = '/predictions';
 }

@@ -37,5 +37,6 @@ Future<Directory> _downloadDirectory() async {
   }
 
   // Desktop: a real Downloads folder exists, but it is not guaranteed.
-  return await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
+  return await getDownloadsDirectory() ??
+      await getApplicationDocumentsDirectory();
 }

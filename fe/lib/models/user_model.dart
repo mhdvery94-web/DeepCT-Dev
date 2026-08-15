@@ -27,11 +27,11 @@ class UserModel {
       email: json['email'],
       role: json['role'],
       isActive: json['is_active'] == 1 || json['is_active'] == true,
-      lastLoginAt: json['last_login_at'] != null 
-          ? DateTime.parse(json['last_login_at']) 
+      lastLoginAt: json['last_login_at'] != null
+          ? DateTime.parse(json['last_login_at'])
           : null,
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at']) 
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
           : null,
     );
   }

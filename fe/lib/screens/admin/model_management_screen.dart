@@ -270,8 +270,8 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
         final columns = constraints.maxWidth > 1250
             ? 3
             : constraints.maxWidth > 780
-                ? 2
-                : 1;
+            ? 2
+            : 1;
 
         return GridView.builder(
           padding: EdgeInsets.zero,
@@ -455,10 +455,13 @@ class _ModelCard extends StatelessWidget {
                 IconButton(
                   tooltip: model.isActive ? 'Deactivate' : 'Activate',
                   icon: Icon(
-                    model.isActive ? Icons.toggle_on : Icons.toggle_off_outlined,
+                    model.isActive
+                        ? Icons.toggle_on
+                        : Icons.toggle_off_outlined,
                     size: 22,
-                    color:
-                        model.isActive ? AppTheme.success : AppTheme.textMuted,
+                    color: model.isActive
+                        ? AppTheme.success
+                        : AppTheme.textMuted,
                   ),
                   onPressed: onToggle,
                 ),
@@ -492,10 +495,7 @@ class _ModelCard extends StatelessWidget {
         children: [
           SizedBox(
             width: 84,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
+            child: Text(label, style: Theme.of(context).textTheme.labelSmall),
           ),
           Expanded(
             child: Text(
@@ -650,7 +650,8 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
                   controller: _endpoint,
                   decoration: const InputDecoration(
                     labelText: 'ENDPOINT URL',
-                    helperText: 'Kaggle / Colab inference URL, e.g. .../predict',
+                    helperText:
+                        'Kaggle / Colab inference URL, e.g. .../predict',
                   ),
                   validator: (v) {
                     final value = v?.trim() ?? '';

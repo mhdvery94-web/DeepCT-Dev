@@ -18,7 +18,7 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (21 Total)
+### API Endpoints (23 Total)
 
 Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
@@ -47,6 +47,17 @@ Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 - `PATCH /api/admin/models/{id}/toggle` - Toggle active status
 - `POST /api/admin/models/{id}/health-check` - Manual health check
 - `POST /api/admin/models/{id}/test` - Test prediction
+
+#### Self-service (2) - Any authenticated user
+- `GET /api/me/stats` - Counters for the caller's own dashboard
+- `GET /api/me/activities` - The caller's own audit trail, paginated
+
+Both are scoped server-side to `$request->user()`, so there is no id to pass
+and no way to read another account's data. `me/stats` reports model
+availability as a **count only** — endpoint URLs stay admin-only.
+
+Without these an ordinary researcher could reach nothing but `GET /user`,
+since everything under `/admin` requires the admin role.
 
 #### Activity Logs (3) - Admin Only
 - `GET /api/admin/activities` - List all activities with filters
@@ -345,6 +356,28 @@ php artisan octane:stop
 
 ### SIGINT Error on Windows
 Already patched in `vendor/laravel/octane/src/Commands/Concerns/InteractsWithServers.php`
+
+### New route returns 404 after you added it
+
+Octane holds the booted application in memory, and **`php artisan octane:reload`
+does not work on Windows** (it relies on PCNTL signals). A new route stays
+invisible until the RoadRunner process itself is replaced:
+
+```bash
+php artisan octane:stop     # or close the terminal running it
+npm run octane
+```
+
+Confirm you are actually looking at a fresh process — compare its start time
+against the file you edited:
+
+```bash
+netstat -ano | findstr :8000
+php artisan route:list --path=api/me     # proves the route is registered on disk
+```
+
+`route:list` runs in its own process, so it can happily show a route that the
+running server has never loaded.
 
 ### Slow Response Times
 - Use Octane instead of `php artisan serve`

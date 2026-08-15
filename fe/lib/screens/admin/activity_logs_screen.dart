@@ -168,7 +168,9 @@ class _ActivityLogsScreenState extends State<ActivityLogsScreen> {
       // Data rows
       for (final log in _logs) {
         rows.add([
-          log.createdAt != null ? _display.format(log.createdAt!.toLocal()) : '-',
+          log.createdAt != null
+              ? _display.format(log.createdAt!.toLocal())
+              : '-',
           log.actorLabel,
           log.typeLabel,
           log.description ?? '-',
@@ -186,10 +188,7 @@ class _ActivityLogsScreenState extends State<ActivityLogsScreen> {
           'activity_logs_${DateFormat('yyyyMMdd_HHmmss').format(now)}.csv';
 
       // Browser download on web, a file on disk everywhere else.
-      final location = await saveTextFile(
-        filename: filename,
-        content: csvData,
-      );
+      final location = await saveTextFile(filename: filename, content: csvData);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -411,24 +410,26 @@ class _ActivityLogsScreenState extends State<ActivityLogsScreen> {
                 ),
                 if (log.description != null) ...[
                   const SizedBox(height: 3),
-                  Text(
-                    log.description!,
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  Text(log.description!, style: const TextStyle(fontSize: 13)),
                 ],
                 const SizedBox(height: 5),
                 Wrap(
                   spacing: 14,
                   runSpacing: 4,
                   children: [
-                    _meta(Icons.schedule,
-                        log.createdAt != null
-                            ? _display.format(log.createdAt!.toLocal())
-                            : '-'),
+                    _meta(
+                      Icons.schedule,
+                      log.createdAt != null
+                          ? _display.format(log.createdAt!.toLocal())
+                          : '-',
+                    ),
                     if (log.ipAddress != null)
                       _meta(Icons.lan_outlined, log.ipAddress!),
                     if (log.userAgent != null && log.userAgent!.isNotEmpty)
-                      _meta(Icons.devices_outlined, _shortAgent(log.userAgent!)),
+                      _meta(
+                        Icons.devices_outlined,
+                        _shortAgent(log.userAgent!),
+                      ),
                   ],
                 ),
               ],

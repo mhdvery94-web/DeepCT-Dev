@@ -21,7 +21,9 @@ class HealthCheckResult {
     final rt = json['response_time_ms'];
     return HealthCheckResult(
       status: json['status']?.toString() ?? 'offline',
-      responseTimeMs: rt is num ? rt.toDouble() : double.tryParse('${rt ?? ''}'),
+      responseTimeMs: rt is num
+          ? rt.toDouble()
+          : double.tryParse('${rt ?? ''}'),
       checkedAt: json['checked_at'] != null
           ? DateTime.tryParse(json['checked_at'].toString())
           : null,
@@ -67,7 +69,9 @@ class AdminModelService {
     return PaginatedResult(
       items: items,
       pagination: body['pagination'] != null
-          ? Pagination.fromJson(Map<String, dynamic>.from(body['pagination'] as Map))
+          ? Pagination.fromJson(
+              Map<String, dynamic>.from(body['pagination'] as Map),
+            )
           : const Pagination.empty(),
     );
   }
@@ -174,8 +178,9 @@ class AdminModelService {
 
       return TestPredictionResult(
         success: true,
-        responseTimeMs:
-            rt is num ? rt.toDouble() : double.tryParse('${rt ?? ''}'),
+        responseTimeMs: rt is num
+            ? rt.toDouble()
+            : double.tryParse('${rt ?? ''}'),
         modelResponse: data['model_response'],
       );
     } on ApiException catch (e) {

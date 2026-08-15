@@ -7,7 +7,7 @@ class AppTheme {
   static const Color primaryHover = Color(0xFF991B1B);
   static const Color primaryLight = Color(0xFFFEF2F2);
   static const Color primaryDark = Color(0xFF7F1D1D);
-  
+
   // Neutral Colors
   static const Color background = Color(0xFFF8FAFC); // Cool slate off-white
   static const Color surface = Color(0xFFFFFFFF); // White
@@ -15,7 +15,7 @@ class AppTheme {
   static const Color textMuted = Color(0xFF64748B); // Steel gray
   static const Color border = Color(0xFFE2E8F0);
   static const Color borderDark = Color(0xFFCBD5E1);
-  
+
   // Semantic Colors
   static const Color success = Color(0xFF059669);
   static const Color successLight = Color(0xFFD1FAE5);
@@ -61,7 +61,7 @@ class AppTheme {
         fontWeight: FontWeight.w700,
         color: textPrimary,
       ),
-      
+
       // Body - IBM Plex Sans
       bodyLarge: GoogleFonts.ibmPlexSans(
         fontSize: 18,
@@ -78,7 +78,7 @@ class AppTheme {
         fontWeight: FontWeight.w400,
         color: textMuted,
       ),
-      
+
       // Labels
       labelLarge: GoogleFonts.ibmPlexSans(
         fontSize: 14,
@@ -116,7 +116,7 @@ class AppTheme {
         onError: surface,
       ),
       textTheme: textTheme,
-      
+
       // AppBar Theme
       appBarTheme: AppBarTheme(
         backgroundColor: surface,
@@ -129,7 +129,7 @@ class AppTheme {
         ),
         iconTheme: const IconThemeData(color: textPrimary),
       ),
-      
+
       // Button Theme
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -147,14 +147,12 @@ class AppTheme {
           elevation: 0,
         ),
       ),
-      
+
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: textPrimary,
           side: const BorderSide(color: textPrimary, width: 1),
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
-          ),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           textStyle: GoogleFonts.ibmPlexSans(
             fontSize: 14,
@@ -163,12 +161,15 @@ class AppTheme {
           ),
         ),
       ),
-      
+
       // Input Decoration Theme
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: const OutlineInputBorder(
           borderRadius: BorderRadius.zero,
           borderSide: BorderSide(color: textMuted, width: 1),
@@ -195,12 +196,9 @@ class AppTheme {
           color: textMuted,
           letterSpacing: 1.0,
         ),
-        hintStyle: GoogleFonts.ibmPlexSans(
-          fontSize: 16,
-          color: textMuted,
-        ),
+        hintStyle: GoogleFonts.ibmPlexSans(fontSize: 16, color: textMuted),
       ),
-      
+
       // Card Theme
       cardTheme: CardThemeData(
         color: surface,
@@ -210,7 +208,7 @@ class AppTheme {
           side: BorderSide(color: border, width: 1),
         ),
       ),
-      
+
       // Divider Theme
       dividerTheme: const DividerThemeData(
         color: border,

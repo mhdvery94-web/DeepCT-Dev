@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\MeController;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\ModelController;
 use App\Http\Controllers\API\UserActivityController;
@@ -25,7 +26,16 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth routes
     Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
     Route::get('/user', [AuthController::class, 'me'])->name('api.user');
-    
+
+    // Self-service routes for the signed-in user (any role). Everything here is
+    // scoped to the caller, so no admin middleware — a researcher needs these
+    // for their own dashboard.
+    Route::prefix('me')->group(function () {
+        Route::get('/activities', [MeController::class, 'activities'])->name('api.me.activities');
+        Route::get('/stats', [MeController::class, 'stats'])->name('api.me.stats');
+    });
+
+
     // Admin routes
     Route::middleware('role:admin')->prefix('admin')->group(function () {
         // User management

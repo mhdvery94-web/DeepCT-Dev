@@ -233,7 +233,7 @@ deepCT-gemini/
 
 ### Root Documentation
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Arsitektur sistem dan flow diagram
-- [API_DOCS.md](API_DOCS.md) - Dokumentasi API endpoint (21 endpoints + `/api/health`)
+- [API_DOCS.md](API_DOCS.md) - Dokumentasi API endpoint (23 endpoints + `/api/health`)
 - [DESIGN.md](DESIGN.md) - Design system dan UI/UX guidelines
 - [PRD.md](PRD.md) - Product Requirements Document
 - [SETUP.md](SETUP.md) - Panduan instalasi detail
@@ -394,7 +394,7 @@ Diverifikasi langsung terhadap aplikasi yang berjalan, bukan dari catatan lama:
 | Tunnel ngrok backend | ✅ hidup (domain reserved, tetap sama antar restart) |
 | Endpoint model AI (Kaggle) | ✅ `online` — **mati saat sesi Kaggle putus**, cek ulang dengan `php artisan models:health-check` |
 | `flutter analyze` | ✅ 0 issues |
-| `flutter test` | ✅ 12 test lulus (boot, layout 7 viewport, status bar, nav) |
+| `flutter test` | ✅ 21 test lulus (layout, status bar, nav, parsing, tile) |
 | `flutter build apk --release` | ✅ `app-release.apk` 51 MB |
 | `flutter build web --release` | ✅ `build/web` (`--wasm` belum bisa, lihat fe/README) |
 | Test otomatis backend | ❌ belum ada — `be/tests/` cuma stub bawaan Laravel |
