@@ -25,6 +25,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2026-08-15
+
+### 👤 Researcher console (web + mobile)
+
+Replaces the "Under Construction" placeholder with a working console for
+non-admin accounts.
+
+#### Added — Backend
+
+**`GET /api/me/stats` and `GET /api/me/activities`** (`MeController`)
+- Before this, an ordinary researcher could reach exactly **three** endpoints:
+  `POST /login`, `POST /logout` and `GET /user`. Everything else sat behind
+  `role:admin`, so a user dashboard had no data to show at all.
+- Both are scoped server-side to `$request->user()`, so there is no id
+  parameter and no way to read another account's rows.
+- `me/stats` returns activity counters, per-status analysis counters, and model
+  availability **as a count only** — endpoint URLs stay admin-only.
+- The analysis counters read zero until the FASE 3 pipeline starts writing
+  `analysis_records`; the response shape is already final, so the UI will not
+  need changing then.
+- `per_page` is clamped to 1..100.
+
+#### Added — Frontend
+
+- `UserShell` — responsive researcher console mirroring `AdminShell`:
+  persistent sidebar at ≥1000px, drawer + AppBar below that.
+- `UserHomeScreen` — model availability, own analysis counters, today's
+  activity, and the five most recent actions.
+- `UserActivityScreen` — full paginated audit trail.
+- `UserActivityTile` — shared row widget, relative time on the dashboard and
+  absolute time in the full log.
+- `MeStats` model and `MeService`.
+- The two FASE 3 sections (New Analysis, Results & History) are listed with a
+  `SOON` badge and an explanation rather than hidden, so the shape of the
+  product is visible.
+
+#### Removed
+
+- `user_dashboard.dart`, the static "Under Construction" placeholder.
+  `main.dart` and `login_page.dart` now route to `UserShell`.
+
+#### Verified
+
+- `flutter analyze` → **No issues found!**
+- `flutter test` → **All tests passed!** (12 tests)
+- `GET /api/me/stats` → 200, counters correct
+- `GET /api/me/activities` → 200, paginated and scoped to the caller
+- A researcher token against `GET /api/admin/users` → **403** (boundary intact)
+- No token against `GET /api/me/stats` → **401**
+
+> **Note on testing these routes:** Octane keeps the booted app in memory and
+> `octane:reload` does not work on Windows, so a newly added route 404s until
+> the RoadRunner process is genuinely replaced. See the troubleshooting entry
+> in `be/README.md`.
+
+---
+
 ## [1.3.1] - 2026-08-15
 
 ### 📱 UI/UX pass on the public shell

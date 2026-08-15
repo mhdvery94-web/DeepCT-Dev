@@ -1,7 +1,7 @@
 # 🎯 Project Status Summary
 
 **Last Updated:** 15 Agustus 2026  
-**Version:** 1.2.1  
+**Version:** 1.4.0  
 **Status:** 🟢 Active Development - 72% Complete
 
 > Figures below were re-verified against the running application on
@@ -31,7 +31,7 @@ test suite that half of that phase refers to does not exist yet.
 ## ✅ What's Working (Completed)
 
 ### Backend ✅
-- **21 API Endpoints** (Auth, User, Model, Activity management) + `/api/health`
+- **23 API Endpoints** (Auth, User, Model, Activity, self-service) + `/api/health`
 - **Laravel Octane + RoadRunner** (84-86% faster than php artisan serve)
 - **Database** (13 tables, all 16 migrations complete)
 - **Health Check System** (command + 5-minute schedule registered — needs a
@@ -64,15 +64,17 @@ test suite that half of that phase refers to does not exist yet.
 - **23/23 Contract checks** PASS — manual `curl`, see fe/test_auth.md
 - **175+ requests** without crash
 - **flutter analyze** 0 issues
-- **flutter test** 1 smoke test, passing
+- **flutter test** 21 tests, passing
 - **flutter build apk --release** 51 MB APK produced
 - **flutter build web --release** succeeds
 
 **There is almost no automated test coverage.** `be/tests/` holds only
 Laravel's `ExampleTest` stubs, so `php artisan test` proves nothing.
-`fe/test/widget_test.dart` was the Flutter counter scaffold and was *failing*
-until 15 Aug 2026; it now holds a single boot smoke test. A real suite is
-FASE 5 work.
+`fe/test/` was the Flutter counter scaffold and was *failing* until
+15 Aug 2026; it now holds 21 tests covering landing-page layout, status-bar
+clearance, header navigation, `MeStats` parsing and activity-tile rendering.
+Screens that fetch data are still untested — that needs API mocking, which is
+FASE 5 work, as is the entire backend suite.
 
 ---
 
@@ -91,10 +93,13 @@ FASE 5 work.
 ## ⏳ What's Planned
 
 ### FASE 3 Frontend - User Dashboard
-- [ ] Upload screen (drag-and-drop)
-- [ ] Prediction results screen
-- [ ] History screen
-- [ ] Download functionality
+- [x] ✅ Researcher console shell (`UserShell`, responsive web + mobile)
+- [x] ✅ Dashboard home with live counters from `/api/me/stats`
+- [x] ✅ My Activity screen with pagination
+- [ ] Upload screen (drag-and-drop) — blocked on FASE 3 backend
+- [ ] Prediction results screen — blocked on FASE 3 backend
+- [ ] History screen — blocked on FASE 3 backend
+- [ ] Download functionality — blocked on FASE 3 backend
 
 ### FASE 4 - Polish
 - [ ] Recursive interpolation optimization
@@ -176,7 +181,7 @@ deepCT-gemini/
 
 ### Technical
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System design
-- [API_DOCS.md](API_DOCS.md) - API reference (21 endpoints)
+- [API_DOCS.md](API_DOCS.md) - API reference (23 endpoints)
 - [TESTING_RESULTS.md](TESTING_RESULTS.md) - Performance benchmark
 
 ### Backend Specific
@@ -205,7 +210,7 @@ deepCT-gemini/
 - Concurrent handling improved
 
 ### 2. Backend Complete (FASE 2) ✅
-- 21 API endpoints tested & working
+- 23 API endpoints tested & working
 - Health check system with auto-scheduling
 - Activity logging for all admin actions
 - Database structure complete & optimized

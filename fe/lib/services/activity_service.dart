@@ -62,7 +62,9 @@ class ActivityService {
     return PaginatedResult(
       items: items,
       pagination: body['pagination'] != null
-          ? Pagination.fromJson(Map<String, dynamic>.from(body['pagination'] as Map))
+          ? Pagination.fromJson(
+              Map<String, dynamic>.from(body['pagination'] as Map),
+            )
           : const Pagination.empty(),
     );
   }

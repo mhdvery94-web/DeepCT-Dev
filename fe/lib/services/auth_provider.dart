@@ -4,7 +4,7 @@ import 'auth_service.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
-  
+
   UserModel? _user;
   bool _isLoading = false;
   String? _errorMessage;
@@ -24,7 +24,7 @@ class AuthProvider with ChangeNotifier {
 
     try {
       final result = await _authService.login(email, password);
-      
+
       if (result['success'] == true) {
         _user = result['user'];
         _isLoading = false;
@@ -55,7 +55,7 @@ class AuthProvider with ChangeNotifier {
   /// Check auth status on app start
   Future<void> checkAuthStatus() async {
     final isLoggedIn = await _authService.isLoggedIn();
-    
+
     if (isLoggedIn) {
       final user = await _authService.getCurrentUser();
       if (user != null) {

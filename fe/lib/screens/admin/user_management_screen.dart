@@ -188,8 +188,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Future<void> _delete(UserModel user) async {
     final confirmed = await _confirm(
       title: 'Delete user',
-      message:
-          'Permanently delete "${user.username}"? This cannot be undone.',
+      message: 'Permanently delete "${user.username}"? This cannot be undone.',
       confirmLabel: 'DELETE',
       destructive: true,
     );
@@ -442,8 +441,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                                     ? AppTheme.success
                                     : AppTheme.textMuted,
                               ),
-                              onPressed:
-                                  isSelf ? null : () => _toggleStatus(user),
+                              onPressed: isSelf
+                                  ? null
+                                  : () => _toggleStatus(user),
                             ),
                             IconButton(
                               tooltip: 'Reset password',
@@ -457,7 +457,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               icon: Icon(
                                 Icons.delete_outline,
                                 size: 18,
-                                color: isSelf ? AppTheme.borderDark : AppTheme.error,
+                                color: isSelf
+                                    ? AppTheme.borderDark
+                                    : AppTheme.error,
                               ),
                               onPressed: isSelf ? null : () => _delete(user),
                             ),
@@ -507,10 +509,8 @@ class _FilterDropdown extends StatelessWidget {
           items: [
             DropdownMenuItem<String?>(value: null, child: Text(hint)),
             ...items.entries.map(
-              (e) => DropdownMenuItem<String?>(
-                value: e.key,
-                child: Text(e.value),
-              ),
+              (e) =>
+                  DropdownMenuItem<String?>(value: e.key, child: Text(e.value)),
             ),
           ],
           onChanged: onChanged,
@@ -591,7 +591,9 @@ class _UserFormDialogState extends State<_UserFormDialog> {
           username: _username.text.trim(),
           email: _email.text.trim(),
           role: _role,
-          password: _password.text.trim().isEmpty ? null : _password.text.trim(),
+          password: _password.text.trim().isEmpty
+              ? null
+              : _password.text.trim(),
         );
 
         if (!mounted) return;
@@ -602,9 +604,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
         if (defaultPassword != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                'User created. Default password: $defaultPassword',
-              ),
+              content: Text('User created. Default password: $defaultPassword'),
               backgroundColor: AppTheme.success,
               duration: const Duration(seconds: 6),
               behavior: SnackBarBehavior.floating,
@@ -675,7 +675,9 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                   validator: (v) {
                     final value = v?.trim() ?? '';
                     if (value.isEmpty) return 'Email is required';
-                    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value)) {
+                    if (!RegExp(
+                      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                    ).hasMatch(value)) {
                       return 'Enter a valid email address';
                     }
                     return null;

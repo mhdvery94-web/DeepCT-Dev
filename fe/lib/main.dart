@@ -5,7 +5,7 @@ import 'theme/app_theme.dart';
 import 'services/auth_provider.dart';
 import 'screens/landing/landing_page.dart';
 import 'screens/admin/admin_shell.dart';
-import 'screens/user/user_dashboard.dart';
+import 'screens/user/user_shell.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -78,7 +78,7 @@ class _AppInitializerState extends State<AppInitializer> {
           if (authProvider.isAdmin) {
             return const AdminShell();
           } else {
-            return const UserDashboard();
+            return const UserShell();
           }
         }
 

@@ -172,7 +172,10 @@ class ApiClient {
       });
 
       final first = fieldErrors.values
-          .firstWhere((l) => l.isNotEmpty, orElse: () => const ['Validation failed'])
+          .firstWhere(
+            (l) => l.isNotEmpty,
+            orElse: () => const ['Validation failed'],
+          )
           .first;
 
       return ApiException(first, statusCode: 422, fieldErrors: fieldErrors);

@@ -35,7 +35,9 @@ class AdminUserService {
     return PaginatedResult(
       items: items,
       pagination: body['pagination'] != null
-          ? Pagination.fromJson(Map<String, dynamic>.from(body['pagination'] as Map))
+          ? Pagination.fromJson(
+              Map<String, dynamic>.from(body['pagination'] as Map),
+            )
           : const Pagination.empty(),
     );
   }
@@ -84,12 +86,7 @@ class AdminUserService {
   }) async {
     final body = await _api.put(
       '${ApiConfig.adminUsers}/$id',
-      data: {
-        'name': name,
-        'username': username,
-        'email': email,
-        'role': role,
-      },
+      data: {'name': name, 'username': username, 'email': email, 'role': role},
     );
 
     return UserModel.fromJson(Map<String, dynamic>.from(body['data'] as Map));
