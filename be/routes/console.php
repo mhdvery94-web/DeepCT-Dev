@@ -13,3 +13,8 @@ Schedule::command('models:health-check')->everyFiveMinutes();
 
 // Schedule: Cleanup expired tokens daily (7-day expiration)
 Schedule::command('tokens:cleanup')->daily();
+
+// Schedule: Delete prediction output past its 24-hour retention window.
+// Hourly rather than daily so files expire close to their stated deadline
+// instead of lingering until the next 02:00.
+Schedule::command('predictions:cleanup')->hourly();

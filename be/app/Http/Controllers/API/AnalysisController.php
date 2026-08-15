@@ -405,21 +405,33 @@ class AnalysisController extends Controller
                 ],
             ]);
 
-            // Stream download
-            return response()->streamDownload(
-                function() use ($zipPath) {
-                    $stream = Storage::readStream($zipPath);
-                    fpassthru($stream);
-                    fclose($stream);
-                },
+            $absolutePath = Storage::path($zipPath);
+
+            // Delete the on-demand ZIP once the response has gone out.
+            //
+            // `deleteFileAfterSend(true)` is NOT enough here: Symfony performs
+            // that unlink inside BinaryFileResponse::sendContent(), which
+            // Octane never calls -- it converts the response to PSR-7 for
+            // RoadRunner instead. Relying on it leaks a full-size ZIP per
+            // download. A terminating callback does run under Octane.
+            app()->terminating(function () use ($absolutePath) {
+                if (is_file($absolutePath)) {
+                    @unlink($absolutePath);
+                }
+            });
+
+            // BinaryFileResponse rather than streamDownload: it honours HTTP
+            // Range requests, which is what lets an interrupted download
+            // resume.
+            return response()->download(
+                $absolutePath,
                 $zipName,
                 [
                     'Content-Type' => 'application/zip',
-                    'Content-Length' => $size,
                     'X-Checksum-MD5' => $md5,
                     'Content-MD5' => base64_encode(hex2bin($md5)),
                 ]
-            )->deleteFileAfterSend(true);
+            );
 
         } catch (Exception $e) {
             return response()->json([
