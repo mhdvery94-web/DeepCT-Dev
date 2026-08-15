@@ -45,15 +45,49 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
   - Export the filtered page to CSV (browser download on web; saved to
     `Android/data/<package>/files/Download` on Android)
 
+- ✅ **Access Requests**
+  - Landing-page Join submissions, filtered by status
+  - Approving **creates the account** and shows the credentials once
+  - Reject with a reviewer note, or delete
+
+- ✅ **Support Tickets**
+  - Every ticket, filterable by status or "needs reply"
+  - Reply in the conversation, change status and priority, delete
+  - Sidebar shows a **count of tickets waiting on an administrator**, refreshed
+    on each navigation rather than polled
+  - A guest ticket (raised from the sign-in page) is flagged, and the screen
+    says to answer by email — there is no account to show a reply in
+
+- ✅ **Research News**
+  - Write a post, attach a photo (JPEG/PNG/WebP, ≤4 MB), set its slide order
+  - **Publish switch is separate from save**, so a draft is never put on the
+    public site by accident
+  - Filter by published/draft; drafts show their photo to an admin only
+
+- ✅ **Profile photos**
+  - Change or remove your own from the sidebar avatar
+  - An admin can set or clear anyone's from the user list
+  - Accounts with no photo show an **initials frame**, not a placeholder
+
 ### Researcher Console (`UserShell`)
 - ✅ **Dashboard** — model availability, own analysis counters, activity today,
   and the 5 most recent actions
 - ✅ **New Analysis** — pick a model, pick a ZIP, upload with live progress
 - ✅ **Results & History** — job status with polling, dual download, delete
 - ✅ **My Activity** — full paginated audit trail of the signed-in account
+- ✅ **IT Support** — raise a ticket and talk to an administrator in the app
 
-Backed by `/api/me/*` and `/api/predictions/*`; everything under `/api/admin`
-requires the admin role and is unreachable from this console.
+### Public Landing Page
+- ✅ **Join form** — wired to `POST /api/access-requests`, with the server's own
+  message shown on a duplicate or existing account
+- ✅ **IT Support** — from the sign-in page and the footer, for people who
+  cannot sign in; the reply comes by email
+- ✅ **Research news slideshow** — auto-advancing every 7s, arrows on pointer
+  devices, swipe on a phone. Renders **nothing** when the feed is empty or the
+  request fails: a visitor must not meet an error box over something optional
+
+Backed by `/api/me/*`, `/api/predictions/*` and `/api/support/*`; everything
+under `/api/admin` requires the admin role and is unreachable from this console.
 
 **Upload transport is automatic.** `PredictionService.upload()` sends archives
 under 1 MB in a single request and switches to the resumable chunked flow above
@@ -68,6 +102,14 @@ than blanking it.
 **Downloads are checksum-verified.** Every archive arrives with an
 `X-Checksum-MD5` header, which the client recomputes locally; a mismatch is
 surfaced to the user rather than silently saving a corrupt ZIP.
+
+**Interrupted uploads can be continued.** A failing chunk is retried three
+times, re-reading the server's `received` first — a request that timed out may
+well have landed, and re-sending from a stale offset earns a 409. If the upload
+dies anyway, the session is remembered on the device and the screen offers to
+continue it: the bytes are gone (an archive is tens of megabytes, and on web
+there is no path to re-read), so the user picks the same file again and an MD5
+check proves it is the same one.
 
 ### Shared Features
 - ✅ Responsive design (mobile, tablet, desktop) — covered by layout tests at
@@ -163,16 +205,22 @@ lib/
 │   ├── activity_log.dart        # ActivityLog
 │   ├── me_stats.dart            # MeStats (researcher dashboard counters)
 │   ├── prediction.dart          # Prediction (one interpolation job)
+│   ├── support_ticket.dart      # SupportTicket + SupportMessage
+│   ├── news_post.dart           # NewsPost (research news)
 │   └── pagination.dart          # Pagination + PaginatedResult<T>
 │
 ├── services/
 │   ├── api_client.dart          # Dio HTTP client wrapper (ApiClient.instance)
+│   ├── avatar_service.dart      # Profile photos + AvatarCache
 │   ├── auth_service.dart        # Authentication service
 │   ├── auth_provider.dart       # ChangeNotifier holding the signed-in user
 │   ├── admin_user_service.dart  # AdminUserService  — user management API
 │   ├── admin_model_service.dart # AdminModelService — model management API
 │   ├── activity_service.dart    # ActivityService   — activity logs API
 │   ├── me_service.dart          # MeService — /api/me, the only non-admin data
+│   ├── access_request_service.dart # Join form + admin review
+│   ├── support_service.dart     # SupportService — tickets, both sides
+│   ├── news_service.dart        # NewsService — public feed + admin CRUD
 │   └── prediction_service.dart  # PredictionService — upload, list, download
 │
 ├── screens/
@@ -185,18 +233,28 @@ lib/
 │   │   ├── dashboard_home_screen.dart   # Stats + recent activities
 │   │   ├── user_management_screen.dart
 │   │   ├── model_management_screen.dart
+│   │   ├── access_requests_screen.dart
+│   │   ├── news_management_screen.dart
 │   │   └── activity_logs_screen.dart
+│   ├── support/                             # Shared by both roles
+│   │   ├── ticket_list_screen.dart          # asAdmin: true → the queue
+│   │   ├── ticket_conversation_screen.dart  # The back-and-forth
+│   │   └── public_ticket_sheet.dart         # From the sign-in page, no token
 │   └── user/
 │       ├── user_shell.dart                  # Researcher layout with sidebar
 │       ├── user_home_screen.dart            # Stats + recent activity
 │       ├── upload_screen.dart               # Start a new analysis
 │       ├── prediction_history_screen.dart   # Job status, polling, download
+│       ├── frame_gallery_screen.dart        # Frame previews for one job
 │       ├── user_activity_screen.dart        # Full paginated activity log
 │       └── user_activity_tile.dart          # Shared row widget
 │
 ├── widgets/
 │   ├── status_badge.dart        # Status chip widget
 │   ├── pagination_bar.dart      # Pagination controls
+│   ├── news_carousel.dart       # Landing-page research-news slideshow
+│   ├── user_avatar.dart         # Photo or initials frame + AvatarButton
+│   ├── avatar_editor_sheet.dart # Change/remove a photo (self or, as admin, anyone)
 │   └── async_state_views.dart   # LoadingView / ErrorView / EmptyView
 │
 ├── utils/
@@ -378,10 +436,13 @@ flutter run
   (`android/app/build.gradle.kts` uses `flutter.minSdkVersion` etc.)
 - Uses Material Design 3
 - `android:usesCleartextTraffic="true"` is set, so plain-HTTP backends work
-- ⚠️ `applicationId` is still the scaffold default **`com.example.fe`** —
-  must be changed before any real distribution
+- `applicationId` is **`id.go.brin.neutronct`** — reverse-DNS of the institution
+  that owns the app. Changing it after a release installs a second copy
+  alongside the first rather than updating it, which is why it was settled
+  before distribution. The iOS/macOS/Linux/Windows scaffolds were renamed at the
+  same time so the same trap is not waiting there.
 - CSV exports land in `Android/data/<applicationId>/files/Download`
-- APK size: **~51 MB** for the universal release APK. Use
+- APK size: **~53 MB** for the universal release APK. Use
   `flutter build apk --split-per-abi` to cut this to roughly a third per
   device architecture.
 
@@ -442,28 +503,46 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 21 tests, passing
+- ✅ `flutter test` — 65 tests, passing
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
-### Not Started (FASE 3)
-- ⏳ User dashboard (`screens/user/user_dashboard.dart` is a placeholder)
-- ⏳ Upload screen
-- ⏳ Prediction results
-- ⏳ History screen
+### Completed (FASE 3)
+- ✅ Researcher console shell with sidebar/drawer
+- ✅ Dashboard, upload (direct + chunked), results & history with polling
+- ✅ Frame gallery with server-rendered PNG previews
+- ✅ Checksum-verified downloads on web and Android
 
-Blocked on the FASE 3 backend: the `predictions` routes are still commented out
-in `be/routes/api.php`.
+### Completed since
+- ✅ Join form wired to `POST /api/access-requests` + admin review screen
+- ✅ IT support tickets, in-app for signed-in users and public from the
+  sign-in page
+- ✅ Research news: admin editor with photo upload and a publish switch, shown
+  as a slideshow in the landing page's Research section
 
 ### Testing
-The suite is **21** tests across two files.
+The suite is **65** tests across six files.
 `widget_test.dart` covers the landing page: a boot smoke test, a layout check at
 seven viewports (fails if any section overflows), a status-bar clearance check,
 and three header-navigation checks. `user_console_test.dart` covers the
 researcher console: `MeStats` payload parsing and `UserActivityTile` rendering.
-That is the entire automated suite — the file was Flutter's counter-app scaffold until
-15 Aug 2026, and it *failed*. The "23/23 contract tests" quoted in older notes
-were a manual `curl` checklist, not a runnable suite.
+`support_test.dart` covers ticket parsing (including the guest fallback) and the
+public ticket sheet's validation and phone layout. `upload_resume_test.dart` covers the interrupted-upload record and its store.
+`avatar_test.dart` covers the initials fallback (two-part names, one-word
+names, an empty name) and `UserModel`'s photo field. `news_test.dart` covers the
+news payload and the carousel: that it collapses to nothing when the feed is
+empty *or* fails, that it advances on its own, and that a slide fits four
+viewports — the landing-page layout tests run with an empty feed, so the slide's
+own layout is only covered here.
+
+That is the entire automated suite — the file was Flutter's counter-app scaffold
+until 15 Aug 2026, and it *failed*. The "23/23 contract tests" quoted in older
+notes were a manual `curl` checklist, not a runnable suite.
+
+**A layout test earns its place.** The phone-width check on `PublicTicketSheet`
+caught a real 54px overflow: `DropdownButtonFormField` sizes itself to its
+longest option rather than the space it is given, so "prediction" pushed the row
+off the edge. Pass `isExpanded: true` on every dropdown in a constrained row.
 
 ```bash
 flutter test
@@ -495,11 +574,12 @@ simulated 44px inset.
 Scaffold only applies the inset automatically when an `AppBar` is present.
 
 ### Planned
-- ⏳ Image viewer/gallery
-- ⏳ Download progress
-- ⏳ Real-time status updates
+- ⏳ Real-time status updates (polling today — see ARCHITECTURE.md §4)
 - ⏳ Push notifications
 - ⏳ Dark mode
+
+Image viewing and download progress are done: `FrameGalleryScreen` renders
+server-side previews, and both upload and download report progress.
 
 ---
 

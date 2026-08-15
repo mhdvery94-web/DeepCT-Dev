@@ -38,13 +38,22 @@ class ApiConfig {
   // Public: request an account from the landing page
   static const String accessRequests = '/access-requests';
 
+  // In-app IT support
+  static const String supportTickets = '/support/tickets';
+
+  // Public: research news for the landing-page slideshow
+  static const String news = '/news';
+
   // Admin endpoints
   static const String adminUsers = '/admin/users';
   static const String adminAccessRequests = '/admin/access-requests';
+  static const String adminSupportTickets = '/admin/support/tickets';
+  static const String adminNews = '/admin/news';
   static const String adminModels = '/admin/models';
   static const String adminActivities = '/admin/activities';
 
   // Self-service endpoints (any signed-in user, not admin-only)
+  static const String meAvatar = '/me/avatar';
   static const String meActivities = '/me/activities';
   static const String meStats = '/me/stats';
   static const String meModels = '/me/models';

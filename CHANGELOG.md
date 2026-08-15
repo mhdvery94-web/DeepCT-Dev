@@ -33,6 +33,259 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.15.0] - 2026-08-15
+
+### 🔁 Interrupted uploads can be continued, and the app has a real identity
+
+The last three items on the roadmap, which had been carried for a while.
+
+#### Client-side upload resume
+
+The server had supported resuming since the chunked flow was built —
+`GET /predictions/uploads/{id}` reports how many bytes landed — but the client
+threw the session away on the first error and started from zero.
+
+Now:
+
+- A failing chunk is **retried three times**, and the offset is re-read from
+  the server before each attempt. A request that timed out may well have landed;
+  re-sending from a stale offset earns a 409, which is exactly the failure this
+  avoids.
+- The session is **remembered on the device**, so an upload killed by a dropped
+  connection or a closed app is offered back on the upload screen.
+- Only the *description* is stored — `upload_id`, filename, size, MD5 — never
+  the bytes. An archive runs to tens of megabytes and on web there is no path to
+  re-read it from, so resuming asks for the same file again and the MD5 proves
+  it is the same one. Splicing a different file into a half-written session
+  produces a corrupt ZIP that only fails much later, inside the worker.
+- A session is discarded only when the server **refuses outright** (422 and
+  friends). A failure that smells like network trouble leaves it intact, since
+  that is precisely the case worth resuming.
+- 11 tests.
+
+#### `applicationId` is no longer `com.example.fe`
+
+It is now `id.go.brin.neutronct` — reverse-DNS of the institution that owns the
+app. This had to be settled before any APK went out: changing it after a release
+installs a second copy alongside the first rather than updating it. The
+iOS/macOS/Linux/Windows scaffolds were renamed at the same time so the same trap
+is not left waiting there.
+
+#### Model training system — designed, not built
+
+Written into [ARCHITECTURE.md](ARCHITECTURE.md) §7 rather than as a new file.
+The short version: the platform would **manage** training, never run it. Three
+constraints force that shape — the notebook in this repo has no training code,
+Kaggle sessions die every 9–12 hours while training takes days, and this machine
+has no GPU and a PHP backend.
+
+The design's centre is the pair **heartbeat + checkpoint**: a job whose worker
+goes quiet returns to `queued` with its checkpoint intact, rather than failing.
+A session dying is not an edge case there, it is the normal course of events,
+and without recovery a multi-day training would never finish. That is the
+opposite of the prediction flow, which may fail freely because a frame costs
+~20 seconds.
+
+Worth recording because it is the reason the recursive method exists: a model
+retrained on a balanced-t dataset could interpolate at arbitrary t, and the
+whole recursion tree in §2 would become unnecessary.
+
+---
+
+## [1.14.0] - 2026-08-15
+
+### 👤 Profile photos, with an initials frame when there is none
+
+Accounts were a person-shaped icon everywhere they appeared. They now carry a
+photo, and the fallback is designed rather than left over.
+
+#### The fallback is the point
+
+Most accounts will never upload anything, so the no-photo state is the one most
+people see. A grey box or a broken-image glyph reads as a fault; **initials on
+the account's own colour** reads as deliberate and stays legible at 22px. The
+colour is derived from the name, so a face keeps its tile between sessions
+instead of shuffling on every load — and it works for a support ticket raised
+by a guest, where there is no id to hash.
+
+An account with no photo returns **404**, not a stock image. The client draws
+the frame; a server-side placeholder would be a second opinion about what "no
+photo" looks like.
+
+#### Added — Backend
+
+- `users.avatar_path` + `avatar_mime`, and five routes: serve, set/remove your
+  own, set/remove anyone's as an admin. Somebody has to be able to take down an
+  inappropriate picture from an account that is not theirs.
+- **Serving is authenticated.** Avatars appear beside activity logs and in the
+  user list, so every signed-in account needs them — but an anonymous visitor
+  should not be able to harvest photos of the research staff by walking the ids.
+- `avatar_url` is appended to the User model, so it appears in every payload
+  that returns a user, including the ones that just hand back
+  `paginate()->items()`. `avatar_path` and `avatar_mime` are hidden.
+- Same upload guard as research news: 2 MB, and `mimetypes:` reading the file's
+  bytes rather than its extension.
+- 15 tests.
+
+#### Added — Frontend
+
+- `UserAvatar` (photo or initials), `AvatarButton` for the sidebar, and one
+  `AvatarEditorSheet` serving both the self case and the admin case — the
+  endpoints differ, the form does not.
+- Shown in both sidebars, the admin user table, and the admin activity log,
+  where the action icon says *what* happened and the avatar says *who*.
+- `AvatarCache` fetches bytes through `ApiClient` because the endpoint is
+  authenticated and `Image.network` cannot read a token out of secure storage.
+  Misses are cached too, or a list of twenty rows would re-request on every
+  rebuild.
+- 11 tests.
+
+Verified live: upload returned the new URL, the image served 200 to a signed-in
+caller and **401 to an anonymous one**, the admin list showed the URL without
+leaking `avatar_path`, and removal took it back to 404.
+
+---
+
+## [1.13.0] - 2026-08-15
+
+### 📰 Research news, published by an administrator
+
+The landing page's "Research Applications" section was a heading and one
+paragraph of fixed copy. It now carries a slideshow of research news that an
+administrator writes, photographs and switches on.
+
+#### Added — Backend
+
+- `news_posts`, and `NewsController` behind eight routes: a public feed, a
+  public image, and six admin ones.
+- **Saving is not publishing.** The toggle is a separate action, so a draft can
+  be prepared ahead of an announcement without any risk of it appearing.
+  `published_at` is stamped only the first time — otherwise hiding and
+  re-showing an old post would throw it to the front of a date-ordered
+  slideshow, and there is a test for exactly that.
+- **A draft's photo 404s to the public** and is served only to an admin. The
+  route carries no auth middleware but resolves the token itself, which is what
+  makes the admin preview work. A draft readable by guessing an id would leak an
+  unannounced result.
+- 17 tests.
+
+#### Added — Frontend
+
+- `NewsCarousel` on the landing page: auto-advancing every 7s, arrows on
+  pointer devices, swipe on a phone, dots that restart the clock when tapped.
+- It **renders nothing** when the feed is empty or the request fails. A visitor
+  must never meet an error box on the front page over something optional.
+- `NewsManagementScreen` for the admin: write, attach a photo, reorder,
+  publish, delete.
+- Posts with no photo get an empty frame rather than a blank rectangle — a
+  blank reads as a bug.
+- 15 tests.
+
+#### Constraint worth recording
+
+This machine has neither GD nor Imagick, so **the server cannot resize or
+re-encode an uploaded image**. The whole defence is a 4 MB cap and a
+`mimetypes:` rule, which reads the file's actual bytes rather than trusting its
+extension. Images are stored byte-for-byte and streamed through the API rather
+than published under `public/`: there is no `storage:link` here and the app is
+reached over ngrok, where a symlinked path is one more thing to get wrong.
+
+#### Changed — test harness
+
+- `TestCase::apiAs(null)` now *removes* the Authorization header as well as
+  forgetting the guard. `withHeader` writes to `$defaultHeaders`, which persists
+  for the rest of the test method, so an "anonymous" request after an
+  authenticated one still carried the old token. The draft-photo test passed
+  through this and reported a 200 that had nothing to do with the application.
+- `NewsCarousel.debugLoader` is a test seam in the same spirit as
+  `GoogleFonts.config.allowRuntimeFetching = false`: the widget loads itself, so
+  without it every landing-page test starts a real HTTP request whose timeout
+  timer is still pending when the test ends — and Flutter fails a test with
+  pending timers, whatever it was actually asserting.
+
+Verified live: a draft was invisible in the public feed, its photo 404'd
+anonymously and 200'd as an admin, the toggle published it, and the served image
+came back byte-identical to the upload.
+
+---
+
+## [1.12.0] - 2026-08-15
+
+### 🎫 IT support that reaches an administrator inside the app
+
+The "IT Support" button on the sign-in page had `// TODO: Navigate to IT
+support` behind it, and there was nowhere for a researcher to report a problem
+at all. Tickets now exist on both sides.
+
+Built as a **conversation**, not a single message. Technical problems almost
+always need a question back — *which frames? what did the error say?* — and with
+one field the administrator would have to leave the app to ask.
+
+#### The awkward part: the button is on the sign-in page
+
+The most common reason to press "IT Support" there is **not being able to sign
+in**, which is exactly when an authenticated endpoint is useless. So there are
+two ways in:
+
+| Route | Who | Reply arrives |
+|---|---|---|
+| `POST /api/support/tickets` | Signed-in researcher | In the app |
+| `POST /api/support/tickets/public` | Anyone, throttled 5/hour | By email |
+
+A guest ticket has `user_id = NULL` and carries the reporter's name and address
+instead. It lands in the same admin queue flagged `is_guest`, and the
+conversation screen tells the administrator to answer by email rather than
+letting them type into a thread nobody can read.
+
+It is deliberately **not** attached to an account whose email happens to match.
+The address is unverified, so attaching it would let anyone plant messages in
+another researcher's ticket list — there is a test asserting exactly that.
+
+#### Added — Backend
+
+- `support_tickets` and `support_ticket_messages`. `from_admin` is stamped when
+  the message is written, not derived from the author's current role: promoting
+  someone later must not turn their old messages into staff replies.
+- `awaiting_admin` records whose turn it is, and drives the sidebar badge. A
+  researcher's message sets it; an administrator's reply clears it and moves an
+  `open` ticket to `in_progress`.
+- Replying to a `resolved` ticket reopens it. A `closed` one refuses with 409.
+- Ownership is scoped **in the query**, so another account's ticket 404s rather
+  than 403s — a 403 would confirm the id exists.
+- 23 tests (131 assertions), including the guest paths.
+
+#### Added — Frontend
+
+- `TicketListScreen`, one screen for both sides: `asAdmin: true` switches it to
+  the full queue with a "needs reply" filter and status controls.
+- `TicketConversationScreen` — staff replies left, your own right.
+- `PublicTicketSheet`, opened from the sign-in page and the landing footer.
+- The admin sidebar shows a count of tickets waiting on a reply, refreshed on
+  navigation rather than polled; a failed refresh is swallowed, since a badge is
+  not worth an error banner.
+- 7 Flutter tests.
+
+#### Fixed
+
+- **A 54px overflow on a phone**, caught by the new layout test.
+  `DropdownButtonFormField` sizes itself to its longest option instead of the
+  space it is given, so the category dropdown ("prediction") pushed its row off
+  the edge. Fixed with `isExpanded: true` on every dropdown in a constrained
+  row, plus stacking below 420px.
+
+#### Documentation
+
+- `be/README.md`: the endpoint list said **35 total** and documented neither the
+  access-request nor the support routes. It is now 50, verified against
+  `route:list`, with both families written up. Table count corrected 13 → 16,
+  and `Predictions (6)` → `(8)`, which had always listed eight.
+- `fe/README.md`: the "Not Started (FASE 3)" section still claimed the upload
+  and results screens did not exist and that the backend routes were commented
+  out. Both have been true-since-v1.8 for some time; replaced with what is
+  actually there.
+
+---
+
 ## [1.11.0] - 2026-08-15
 
 ### 🔓 Concurrent sessions restored, on request

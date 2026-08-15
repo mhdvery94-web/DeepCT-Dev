@@ -19,7 +19,7 @@ class UserActivityController extends Controller
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
 
-        $query = UserActivity::with('user:id,username,name,email');
+        $query = UserActivity::with('user:id,username,name,email,avatar_path');
 
         // Filter by user
         if ($userId) {
@@ -64,7 +64,7 @@ class UserActivityController extends Controller
         $type = $request->input('type');
 
         $query = UserActivity::where('user_id', $userId)
-            ->with('user:id,username,name,email');
+            ->with('user:id,username,name,email,avatar_path');
 
         // Filter by activity type
         if ($type) {

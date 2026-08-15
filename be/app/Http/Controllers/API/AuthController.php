@@ -70,13 +70,7 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Login successful',
             'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'username' => $user->username,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->role,
-                    'is_active' => $user->is_active,
+                'user' => $user->toPublicArray() + [
                     'last_login_at' => $user->last_login_at,
                 ],
                 'token' => $token,
@@ -116,13 +110,7 @@ class AuthController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => [
-                'id' => $user->id,
-                'username' => $user->username,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
-                'is_active' => $user->is_active,
+            'data' => $user->toPublicArray() + [
                 'last_login_at' => $user->last_login_at,
                 'created_at' => $user->created_at,
             ],

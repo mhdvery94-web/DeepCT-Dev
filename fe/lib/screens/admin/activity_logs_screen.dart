@@ -12,6 +12,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/file_download.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
+import '../../widgets/user_avatar.dart';
 
 /// Admin audit trail: who did what, when, and from which IP.
 ///
@@ -383,6 +384,16 @@ class _ActivityLogsScreenState extends State<ActivityLogsScreen> {
               children: [
                 Row(
                   children: [
+                    // The action icon on the left says *what* happened; this
+                    // says *who*, which is the question an audit log gets
+                    // asked most often.
+                    UserAvatar(
+                      avatarPath: log.userAvatarPath,
+                      name: log.userName ?? log.actorLabel,
+                      size: 22,
+                      bordered: false,
+                    ),
+                    const SizedBox(width: 8),
                     Text(
                       log.actorLabel,
                       style: const TextStyle(

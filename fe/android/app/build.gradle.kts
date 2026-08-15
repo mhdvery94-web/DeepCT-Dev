@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.fe"
+    namespace = "id.go.brin.neutronct"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,8 +15,10 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.fe"
+        // Reverse-DNS of the institution that owns the app. Changing this
+        // after a release installs a second copy alongside the first rather
+        // than updating it, so it had to be settled before distribution.
+        applicationId = "id.go.brin.neutronct"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

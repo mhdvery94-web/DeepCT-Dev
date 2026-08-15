@@ -1,7 +1,8 @@
 /// A single audit-trail entry from `user_activities`.
 ///
-/// The backend eager-loads `user:id,username,name,email`, so [userName] and
-/// [userUsername] are populated whenever the actor still exists.
+/// The backend eager-loads `user:id,username,name,email,avatar_path`, so
+/// [userName], [userUsername] and [userAvatarPath] are populated whenever the
+/// actor still exists.
 class ActivityLog {
   final int id;
   final int? userId;
@@ -17,6 +18,9 @@ class ActivityLog {
   final String? userName;
   final String? userEmail;
 
+  /// The actor's profile photo, or null for the initials frame.
+  final String? userAvatarPath;
+
   const ActivityLog({
     required this.id,
     this.userId,
@@ -30,6 +34,7 @@ class ActivityLog {
     this.userUsername,
     this.userName,
     this.userEmail,
+    this.userAvatarPath,
   });
 
   static int _toInt(dynamic v, [int fallback = 0]) {
@@ -66,6 +71,7 @@ class ActivityLog {
       userUsername: user is Map ? user['username']?.toString() : null,
       userName: user is Map ? user['name']?.toString() : null,
       userEmail: user is Map ? user['email']?.toString() : null,
+      userAvatarPath: user is Map ? user['avatar_url']?.toString() : null,
     );
   }
 
