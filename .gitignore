@@ -1,0 +1,46 @@
+# Repository-wide ignores.
+# `be/.gitignore` and `fe/.gitignore` cover their own build output, vendor
+# directories and secrets; this file only handles what sits at the root or
+# spans both.
+
+# --- Secrets -----------------------------------------------------------------
+# be/.gitignore already excludes be/.env, but be explicit: an APP_KEY and a
+# database password live in there and must never be committed.
+.env
+.env.*
+!.env.example
+
+# --- Large binaries ----------------------------------------------------------
+# Trained model weights (~88 MB). Git handles large binaries badly and GitHub
+# rejects files over 100 MB. Keep the weights alongside the repo, not in it.
+#
+# The file the platform expects is:
+#   models-ai/generator(Salinan 3 Ginet TC-D_Revisi).h5
+#
+# It is uploaded to the Kaggle/Colab notebook at runtime, not read by Laravel.
+# If it must be versioned, use Git LFS:
+#   git lfs install && git lfs track "*.h5"
+*.h5
+*.hdf5
+*.keras
+*.ckpt
+*.pb
+
+# RoadRunner server binary (~64 MB). Reinstall instead of committing:
+#   php artisan octane:install --server=roadrunner
+rr.exe
+rr
+
+# --- OS / editor -------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Scratch -----------------------------------------------------------------
+*.tmp
+*.bak

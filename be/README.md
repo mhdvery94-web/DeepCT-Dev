@@ -1,0 +1,400 @@
+# 🔬 Backend - Platform Analisis Citra Neutron CT
+
+Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis citra Neutron CT.
+
+---
+
+## 🚀 Tech Stack
+
+- **Framework:** Laravel 12.66.0
+- **PHP:** 8.2.30
+- **Web Server:** Laravel Octane + RoadRunner 2025.1.15
+- **Database:** MySQL 8.x
+- **Authentication:** Laravel Sanctum
+- **Queue:** Database driver
+- **Cache:** File driver
+
+---
+
+## 📦 Features
+
+### API Endpoints (21 Total)
+
+Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
+`routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
+`/up`. Verify the full list at any time with `php artisan route:list --path=api`.
+
+#### Authentication (3)
+- `POST /api/login` - Login with email & password
+- `POST /api/logout` - Logout (revoke token)
+- `GET /api/user` - Get authenticated user info
+
+#### User Management (7) - Admin Only
+- `GET /api/admin/users` - List users with pagination & filters
+- `POST /api/admin/users` - Create new user
+- `GET /api/admin/users/{id}` - Get user detail
+- `PUT /api/admin/users/{id}` - Update user
+- `DELETE /api/admin/users/{id}` - Delete user
+- `PATCH /api/admin/users/{id}/toggle` - Toggle active status
+- `POST /api/admin/users/{id}/reset-password` - Reset to default
+
+#### Model Management (8) - Admin Only
+- `GET /api/admin/models` - List models
+- `POST /api/admin/models` - Add new model
+- `GET /api/admin/models/{id}` - Get model detail
+- `PUT /api/admin/models/{id}` - Update model
+- `DELETE /api/admin/models/{id}` - Delete model
+- `PATCH /api/admin/models/{id}/toggle` - Toggle active status
+- `POST /api/admin/models/{id}/health-check` - Manual health check
+- `POST /api/admin/models/{id}/test` - Test prediction
+
+#### Activity Logs (3) - Admin Only
+- `GET /api/admin/activities` - List all activities with filters
+- `GET /api/admin/activities/types` - Get activity types
+- `GET /api/users/{id}/activities` - Get user activities
+
+### Background Jobs
+- `ProcessDeepLearningImage` - Process prediction job
+- `CheckModelsHealth` - Auto health check (scheduled every 5 minutes)
+
+### Scheduled Commands
+Registered in `routes/console.php` (Laravel 12 has no `app/Console/Kernel.php`):
+
+- `php artisan models:health-check` - Check all models health status (every 5 min)
+- `php artisan tokens:cleanup` - Delete tokens older than 7 days (daily)
+
+⚠️ **These only run if a scheduler process is running.** Neither Laragon nor
+Octane starts one. Without it, `models.status` in the database goes stale — it
+keeps whatever value the last manual check wrote. Start one with:
+
+```bash
+php artisan schedule:work     # foreground, dev
+```
+
+Run `php artisan models:health-check` by hand to refresh statuses on demand.
+
+---
+
+## 🛠️ Installation
+
+### 1. Prerequisites
+- PHP 8.2+
+- Composer
+- MySQL 8.x
+- Node.js & npm (for Octane)
+
+### 2. Install Dependencies
+```bash
+composer install
+npm install
+```
+
+### 3. Environment Configuration
+```bash
+cp .env.example .env
+php artisan key:generate
+```
+
+Configure `.env`:
+```env
+# Database
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=db_aict
+DB_USERNAME=root
+DB_PASSWORD=
+
+# Server (Octane)
+OCTANE_SERVER=roadrunner
+CACHE_STORE=file
+
+# Queue
+QUEUE_CONNECTION=database
+
+# Session — only the `/` welcome route uses it; the API is stateless.
+SESSION_DRIVER=database
+```
+
+### 4. Database Setup
+```bash
+php artisan migrate
+php artisan db:seed
+php artisan storage:link
+```
+
+### 5. Start Server
+
+**Production/Development (Recommended):**
+```bash
+npm run octane
+```
+
+Server running at: `http://127.0.0.1:8000`
+
+**Development Alternative:**
+```bash
+php artisan serve
+```
+
+**Note:** Octane provides 84-86% faster response times.
+
+---
+
+## 🔧 Configuration
+
+### Octane Configuration
+
+**File:** `config/octane.php`
+```php
+'max_execution_time' => 300,  // 5 minutes (for long-running predictions)
+'garbage' => 100,              // GC threshold
+```
+
+**Workers:** 4 workers, max 250 requests per worker
+
+### Health Check Schedule
+
+**File:** `routes/console.php`
+```php
+Schedule::command('models:health-check')->everyFiveMinutes();
+Schedule::command('tokens:cleanup')->daily();
+```
+
+Requires a running `php artisan schedule:work` — see *Scheduled Commands* above.
+
+---
+
+## 📊 Database Structure
+
+### Core Tables
+- `users` - User accounts (admin & researcher)
+- `personal_access_tokens` - API tokens (Sanctum)
+- `models` - AI model registry
+- `analysis_records` - Prediction jobs
+- `user_activities` - Audit logs
+
+### Queue Tables
+- `jobs` - Pending queue jobs
+- `job_batches` - Batch processing
+- `failed_jobs` - Failed jobs log
+
+### Cache Tables
+- `cache` - Application cache
+- `cache_locks` - Cache locking
+
+### Legacy Tables
+- `password_reset_tokens` - Not used (admin resets only), 0 rows
+- `sessions` - Written to by the `/` welcome route, since `SESSION_DRIVER=database`.
+  Not used for API auth. Safe to ignore; do **not** drop it without first
+  switching `SESSION_DRIVER` to `array`.
+
+13 tables total. See [DATABASE_CLEANUP.md](DATABASE_CLEANUP.md) for detailed analysis.
+
+---
+
+## 👥 Default Users
+
+### Admin Account
+- **Email:** admin@brin.go.id
+- **Password:** admin123
+- **Role:** admin
+
+### Sample Researcher
+- **Email:** researcher@brin.go.id
+- **Password:** user123
+- **Role:** user
+
+### Default Password (New Users)
+- **Password:** BrinResearch2026
+
+---
+
+## 🧪 Testing
+
+### API Testing
+```bash
+# Health check
+curl http://127.0.0.1:8000/api/health
+
+# Login
+curl -X POST http://127.0.0.1:8000/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@brin.go.id","password":"admin123"}'
+
+# Get models (with token)
+curl http://127.0.0.1:8000/api/admin/models \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Run Tests
+```bash
+php artisan test
+```
+
+⚠️ `tests/` contains only Laravel's stock `ExampleTest` stubs — there is **no
+real test suite yet**. The "30/30 API tests PASS" figure in the root docs refers
+to the manual `curl` checklist recorded in
+[../TESTING_RESULTS.md](../TESTING_RESULTS.md), not to `php artisan test`.
+
+### Performance Testing
+See [../TESTING_RESULTS.md](../TESTING_RESULTS.md) for benchmark results.
+
+---
+
+## 📝 Common Commands
+
+### Octane
+```bash
+# Start server
+npm run octane
+
+# Check status
+php artisan octane:status
+
+# Stop server
+php artisan octane:stop
+
+# Reload workers (after code changes)
+php artisan octane:reload
+```
+
+### Database
+```bash
+# Run migrations
+php artisan migrate
+
+# Fresh migration with seed
+php artisan migrate:fresh --seed
+
+# Rollback
+php artisan migrate:rollback
+```
+
+### Cache & Config
+```bash
+# Clear config cache
+php artisan config:clear
+
+# Clear application cache
+php artisan cache:clear
+
+# Clear route cache
+php artisan route:clear
+```
+
+### Queue
+```bash
+# List jobs
+php artisan queue:work
+
+# Process failed jobs
+php artisan queue:retry all
+```
+
+---
+
+## 🔐 Security
+
+### Authentication
+- Laravel Sanctum for API token authentication
+- Token stored in `personal_access_tokens` table
+- Token expires after **7 days** (10080 minutes)
+- **Single session per account**: Login baru otomatis revoke semua token lama (force logout di device lain)
+- Auto cleanup expired tokens (scheduled daily via `tokens:cleanup` command)
+
+### Authorization
+- Role-based middleware (`role:admin`)
+- Self-protection: Admin cannot delete/disable own account
+
+### Rate Limiting
+- Login endpoint: 5 attempts per minute per IP (`throttle:5,1`)
+
+---
+
+## 📄 API Documentation
+
+Full API documentation available at: [../API_DOCS.md](../API_DOCS.md)
+
+**Quick Reference:**
+- Base URL: `http://127.0.0.1:8000/api`
+- Authentication: Bearer token in `Authorization` header
+- Content-Type: `application/json`
+- All responses follow standard format:
+  ```json
+  {
+    "success": true,
+    "message": "Success message",
+    "data": {}
+  }
+  ```
+
+---
+
+## 🐛 Troubleshooting
+
+### Port 8000 Already in Use
+```bash
+# Windows
+netstat -ano | findstr :8000
+taskkill /PID <PID> /F
+
+# Stop Octane properly
+php artisan octane:stop
+```
+
+### SIGINT Error on Windows
+Already patched in `vendor/laravel/octane/src/Commands/Concerns/InteractsWithServers.php`
+
+### Slow Response Times
+- Use Octane instead of `php artisan serve`
+- Check database queries (N+1 problem)
+- Enable opcache in production
+
+### Migration Errors
+```bash
+# Clear config cache first
+php artisan config:clear
+php artisan migrate
+```
+
+---
+
+## 📚 Additional Documentation
+
+- [DATABASE_CLEANUP.md](DATABASE_CLEANUP.md) - Database structure analysis
+- [CHANGELOG.md](CHANGELOG.md) - Version history
+- [../TESTING_RESULTS.md](../TESTING_RESULTS.md) - Performance testing
+- [../API_DOCS.md](../API_DOCS.md) - Complete API documentation
+- [../ARCHITECTURE.md](../ARCHITECTURE.md) - System architecture
+
+---
+
+## 🚀 Deployment
+
+### Production Checklist
+- [ ] Set `APP_ENV=production`
+- [ ] Set `APP_DEBUG=false`
+- [ ] Configure proper `APP_URL`
+- [ ] Use Redis for cache (`CACHE_DRIVER=redis`)
+- [ ] Setup queue worker with Supervisor
+- [ ] Enable opcache
+- [ ] Configure database backup
+- [ ] Setup monitoring (logs, errors)
+- [ ] Configure CORS properly
+- [ ] SSL certificate
+- [ ] Rate limiting tuning
+
+---
+
+## 📞 Support
+
+- **Documentation:** See `docs/` folder in root
+- **Issues:** Report via project repository
+- **Contact:** admin@brin.go.id
+
+---
+
+**Last Updated:** August 14, 2026  
+**Laravel Version:** 12.66.0  
+**Status:** Production Ready

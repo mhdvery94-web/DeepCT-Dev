@@ -1,0 +1,62 @@
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\UserController;
+use App\Http\Controllers\API\ModelController;
+use App\Http\Controllers\API\UserActivityController;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+*/
+
+// Public routes (no authentication required)
+// Rate limited to 5 attempts per minute per IP (PRD NFR-AUTH-005) to block
+// credential brute-forcing.
+Route::post('/login', [AuthController::class, 'login'])
+    ->middleware('throttle:5,1')
+    ->name('api.login');
+
+// Protected routes (authentication required)
+Route::middleware('auth:sanctum')->group(function () {
+    // Auth routes
+    Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
+    Route::get('/user', [AuthController::class, 'me'])->name('api.user');
+    
+    // Admin routes
+    Route::middleware('role:admin')->prefix('admin')->group(function () {
+        // User management
+        Route::get('/users', [UserController::class, 'index'])->name('api.admin.users.index');
+        Route::post('/users', [UserController::class, 'store'])->name('api.admin.users.store');
+        Route::get('/users/{id}', [UserController::class, 'show'])->name('api.admin.users.show');
+        Route::put('/users/{id}', [UserController::class, 'update'])->name('api.admin.users.update');
+        Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('api.admin.users.destroy');
+        Route::patch('/users/{id}/toggle', [UserController::class, 'toggleStatus'])->name('api.admin.users.toggle');
+        Route::post('/users/{id}/reset-password', [UserController::class, 'resetPassword'])->name('api.admin.users.reset');
+        
+        // Model management
+        Route::get('/models', [ModelController::class, 'index'])->name('api.admin.models.index');
+        Route::post('/models', [ModelController::class, 'store'])->name('api.admin.models.store');
+        Route::get('/models/{id}', [ModelController::class, 'show'])->name('api.admin.models.show');
+        Route::put('/models/{id}', [ModelController::class, 'update'])->name('api.admin.models.update');
+        Route::delete('/models/{id}', [ModelController::class, 'destroy'])->name('api.admin.models.destroy');
+        Route::patch('/models/{id}/toggle', [ModelController::class, 'toggleStatus'])->name('api.admin.models.toggle');
+        Route::post('/models/{id}/health-check', [ModelController::class, 'healthCheck'])->name('api.admin.models.health');
+        Route::post('/models/{id}/test', [ModelController::class, 'testPrediction'])->name('api.admin.models.test');
+        
+        // Activity logs
+        Route::get('/activities', [UserActivityController::class, 'index'])->name('api.admin.activities.index');
+        Route::get('/activities/types', [UserActivityController::class, 'getTypes'])->name('api.admin.activities.types');
+        Route::get('/users/{id}/activities', [UserActivityController::class, 'userActivities'])->name('api.admin.activities.user');
+    });
+    
+    // User routes (coming soon)
+    // Route::prefix('predictions')->group(function () {
+    //     // Upload & predict
+    //     // View results
+    //     // History
+    // });
+});
