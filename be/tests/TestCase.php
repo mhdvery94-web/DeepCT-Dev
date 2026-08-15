@@ -18,14 +18,18 @@ abstract class TestCase extends BaseTestCase
      * Verified: after a logout the token row is gone from the database, yet
      * `/api/user` still answered 200 until `forgetGuards()` was called.
      *
-     * Pass null to send the request anonymously.
+     * Pass null to send the request anonymously. That also *removes* the
+     * Authorization header: `withHeader` writes to `$defaultHeaders`, which
+     * persists for the rest of the test method, so a plain `$this->get(…)`
+     * after an authenticated call still carries the old token and an
+     * "anonymous" assertion would be testing nothing.
      */
     protected function apiAs(?string $token): static
     {
         $this->app['auth']->forgetGuards();
 
         if ($token === null) {
-            return $this;
+            return $this->withoutHeader('Authorization');
         }
 
         return $this->withHeader('Authorization', "Bearer {$token}");

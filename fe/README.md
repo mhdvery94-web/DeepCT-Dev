@@ -58,6 +58,12 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
   - A guest ticket (raised from the sign-in page) is flagged, and the screen
     says to answer by email — there is no account to show a reply in
 
+- ✅ **Research News**
+  - Write a post, attach a photo (JPEG/PNG/WebP, ≤4 MB), set its slide order
+  - **Publish switch is separate from save**, so a draft is never put on the
+    public site by accident
+  - Filter by published/draft; drafts show their photo to an admin only
+
 ### Researcher Console (`UserShell`)
 - ✅ **Dashboard** — model availability, own analysis counters, activity today,
   and the 5 most recent actions
@@ -65,6 +71,15 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
 - ✅ **Results & History** — job status with polling, dual download, delete
 - ✅ **My Activity** — full paginated audit trail of the signed-in account
 - ✅ **IT Support** — raise a ticket and talk to an administrator in the app
+
+### Public Landing Page
+- ✅ **Join form** — wired to `POST /api/access-requests`, with the server's own
+  message shown on a duplicate or existing account
+- ✅ **IT Support** — from the sign-in page and the footer, for people who
+  cannot sign in; the reply comes by email
+- ✅ **Research news slideshow** — auto-advancing every 7s, arrows on pointer
+  devices, swipe on a phone. Renders **nothing** when the feed is empty or the
+  request fails: a visitor must not meet an error box over something optional
 
 Backed by `/api/me/*`, `/api/predictions/*` and `/api/support/*`; everything
 under `/api/admin` requires the admin role and is unreachable from this console.
@@ -178,6 +193,7 @@ lib/
 │   ├── me_stats.dart            # MeStats (researcher dashboard counters)
 │   ├── prediction.dart          # Prediction (one interpolation job)
 │   ├── support_ticket.dart      # SupportTicket + SupportMessage
+│   ├── news_post.dart           # NewsPost (research news)
 │   └── pagination.dart          # Pagination + PaginatedResult<T>
 │
 ├── services/
@@ -190,6 +206,7 @@ lib/
 │   ├── me_service.dart          # MeService — /api/me, the only non-admin data
 │   ├── access_request_service.dart # Join form + admin review
 │   ├── support_service.dart     # SupportService — tickets, both sides
+│   ├── news_service.dart        # NewsService — public feed + admin CRUD
 │   └── prediction_service.dart  # PredictionService — upload, list, download
 │
 ├── screens/
@@ -203,6 +220,7 @@ lib/
 │   │   ├── user_management_screen.dart
 │   │   ├── model_management_screen.dart
 │   │   ├── access_requests_screen.dart
+│   │   ├── news_management_screen.dart
 │   │   └── activity_logs_screen.dart
 │   ├── support/                             # Shared by both roles
 │   │   ├── ticket_list_screen.dart          # asAdmin: true → the queue
@@ -220,6 +238,7 @@ lib/
 ├── widgets/
 │   ├── status_badge.dart        # Status chip widget
 │   ├── pagination_bar.dart      # Pagination controls
+│   ├── news_carousel.dart      # Landing-page research-news slideshow
 │   └── async_state_views.dart   # LoadingView / ErrorView / EmptyView
 │
 ├── utils/
@@ -465,7 +484,7 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 28 tests, passing
+- ✅ `flutter test` — 39 tests, passing
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
@@ -479,15 +498,21 @@ flutter build appbundle --release
 - ✅ Join form wired to `POST /api/access-requests` + admin review screen
 - ✅ IT support tickets, in-app for signed-in users and public from the
   sign-in page
+- ✅ Research news: admin editor with photo upload and a publish switch, shown
+  as a slideshow in the landing page's Research section
 
 ### Testing
-The suite is **28** tests across three files.
+The suite is **39** tests across four files.
 `widget_test.dart` covers the landing page: a boot smoke test, a layout check at
 seven viewports (fails if any section overflows), a status-bar clearance check,
 and three header-navigation checks. `user_console_test.dart` covers the
 researcher console: `MeStats` payload parsing and `UserActivityTile` rendering.
 `support_test.dart` covers ticket parsing (including the guest fallback) and the
-public ticket sheet's validation and phone layout.
+public ticket sheet's validation and phone layout. `news_test.dart` covers the
+news payload and the carousel: that it collapses to nothing when the feed is
+empty *or* fails, that it advances on its own, and that a slide fits four
+viewports — the landing-page layout tests run with an empty feed, so the slide's
+own layout is only covered here.
 
 That is the entire automated suite — the file was Flutter's counter-app scaffold
 until 15 Aug 2026, and it *failed*. The "23/23 contract tests" quoted in older

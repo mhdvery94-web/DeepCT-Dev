@@ -33,6 +33,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.0] - 2026-08-15
+
+### 📰 Research news, published by an administrator
+
+The landing page's "Research Applications" section was a heading and one
+paragraph of fixed copy. It now carries a slideshow of research news that an
+administrator writes, photographs and switches on.
+
+#### Added — Backend
+
+- `news_posts`, and `NewsController` behind eight routes: a public feed, a
+  public image, and six admin ones.
+- **Saving is not publishing.** The toggle is a separate action, so a draft can
+  be prepared ahead of an announcement without any risk of it appearing.
+  `published_at` is stamped only the first time — otherwise hiding and
+  re-showing an old post would throw it to the front of a date-ordered
+  slideshow, and there is a test for exactly that.
+- **A draft's photo 404s to the public** and is served only to an admin. The
+  route carries no auth middleware but resolves the token itself, which is what
+  makes the admin preview work. A draft readable by guessing an id would leak an
+  unannounced result.
+- 17 tests.
+
+#### Added — Frontend
+
+- `NewsCarousel` on the landing page: auto-advancing every 7s, arrows on
+  pointer devices, swipe on a phone, dots that restart the clock when tapped.
+- It **renders nothing** when the feed is empty or the request fails. A visitor
+  must never meet an error box on the front page over something optional.
+- `NewsManagementScreen` for the admin: write, attach a photo, reorder,
+  publish, delete.
+- Posts with no photo get an empty frame rather than a blank rectangle — a
+  blank reads as a bug.
+- 15 tests.
+
+#### Constraint worth recording
+
+This machine has neither GD nor Imagick, so **the server cannot resize or
+re-encode an uploaded image**. The whole defence is a 4 MB cap and a
+`mimetypes:` rule, which reads the file's actual bytes rather than trusting its
+extension. Images are stored byte-for-byte and streamed through the API rather
+than published under `public/`: there is no `storage:link` here and the app is
+reached over ngrok, where a symlinked path is one more thing to get wrong.
+
+#### Changed — test harness
+
+- `TestCase::apiAs(null)` now *removes* the Authorization header as well as
+  forgetting the guard. `withHeader` writes to `$defaultHeaders`, which persists
+  for the rest of the test method, so an "anonymous" request after an
+  authenticated one still carried the old token. The draft-photo test passed
+  through this and reported a 200 that had nothing to do with the application.
+- `NewsCarousel.debugLoader` is a test seam in the same spirit as
+  `GoogleFonts.config.allowRuntimeFetching = false`: the widget loads itself, so
+  without it every landing-page test starts a real HTTP request whose timeout
+  timer is still pending when the test ends — and Flutter fails a test with
+  pending timers, whatever it was actually asserting.
+
+Verified live: a draft was invisible in the public feed, its photo 404'd
+anonymously and 200'd as an admin, the toggle published it, and the served image
+came back byte-identical to the upload.
+
+---
+
 ## [1.12.0] - 2026-08-15
 
 ### 🎫 IT support that reaches an administrator inside the app

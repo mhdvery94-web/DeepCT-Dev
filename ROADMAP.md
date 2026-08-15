@@ -60,18 +60,34 @@ memberitahu admin hal ini alih-alih membiarkannya membalas ke ruang kosong.
 Email itu belum terverifikasi, jadi menempelkannya berarti siapa pun bisa
 menaruh pesan di daftar tiket peneliti lain.
 
-### 3. Berita riset dengan foto
+### 3. ✅ Berita riset dengan foto — SELESAI
 
-- [ ] Tabel `news_posts` — judul, ringkasan, isi, gambar, terbit, urutan
-- [ ] Admin: CRUD, unggah gambar, **toggle terbit/tidak**
-- [ ] `GET /api/news` — publik, hanya yang terbit
-- [ ] Landing page: carousel/slide
-- [ ] Test: hanya yang terbit yang tampil, urutan, validasi gambar
+- [x] Tabel `news_posts` — judul, ringkasan, isi, gambar, terbit, urutan
+- [x] Admin: CRUD, unggah gambar, **toggle terbit/tidak**
+- [x] `GET /api/news` — publik, hanya yang terbit
+- [x] Landing page: slideshow di bagian Research, auto-advance 7 detik
+- [x] Test: 17 backend + 15 Flutter
 
 **Kendala nyata:** mesin ini tidak punya GD maupun Imagick, jadi **gambar tidak
-bisa diubah ukurannya di server**. Unggahan disimpan apa adanya dengan batas
-ukuran dan validasi tipe. Kalau nanti butuh thumbnail, ekstensi harus dipasang
-lebih dulu.
+bisa diubah ukurannya di server**. Unggahan disimpan apa adanya dengan batas 4
+MB dan validasi `mimetypes:` (membaca isi berkas, bukan ekstensinya). Kalau
+nanti butuh thumbnail, ekstensi harus dipasang lebih dulu.
+
+**Keputusan 1 — gambar dialirkan lewat API, bukan `public/`.** Tidak ada
+`storage:link` di mesin ini dan aplikasi diakses lewat ngrok; jalur simbolik
+cuma satu hal lagi yang bisa salah. `GET /api/news/{id}/image` publik untuk
+post yang terbit, dan **404 untuk draf** kecuali pemanggilnya admin — draf yang
+bisa dibaca dengan menebak id berarti hasil riset bocor sebelum diumumkan.
+
+**Keputusan 2 — menyimpan tidak sama dengan menerbitkan.** Tombol terbit
+terpisah dari tombol simpan, jadi draf bisa disiapkan tanpa risiko tak sengaja
+muncul di situs. `published_at` hanya diisi saat pertama kali terbit, supaya
+menyembunyikan lalu menampilkan lagi post lama tidak melemparkannya ke depan
+slideshow.
+
+**Keputusan 3 — carousel diam kalau gagal.** Kalau feed-nya kosong atau
+request-nya gagal, widget-nya tidak merender apa pun. Pengunjung tidak boleh
+disuguhi kotak error di halaman depan gara-gara hal opsional.
 
 ### 4. Foto profil pengguna
 
@@ -107,7 +123,7 @@ Belum menyentuh kode — rancangan dulu. Lihat catatan di bawah.
 - [x] Konsol peneliti (dashboard, unggah, hasil, riwayat, aktivitas)
 - [x] Pratinjau frame — TIFF 16-bit dirender jadi PNG di server
 - [x] Sesi paralel — satu akun bisa aktif di beberapa perangkat
-- [x] Suite test backend (124 test) dan Flutter (28 test)
+- [x] Suite test backend (141 test) dan Flutter (39 test)
 - [x] Konsolidasi dokumentasi, 28 berkas jadi 10
 - [x] Git remote + cadangan lokal
 

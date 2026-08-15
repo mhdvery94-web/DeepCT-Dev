@@ -6,6 +6,7 @@ use App\Http\Controllers\API\AccessRequestController;
 use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\MeController;
+use App\Http\Controllers\API\NewsController;
 use App\Http\Controllers\API\PredictionUploadController;
 use App\Http\Controllers\API\SupportTicketController;
 use App\Http\Controllers\API\UserController;
@@ -37,6 +38,12 @@ Route::post('/access-requests', [AccessRequestController::class, 'store'])
 Route::post('/support/tickets/public', [SupportTicketController::class, 'storePublic'])
     ->middleware('throttle:5,60')
     ->name('api.support.tickets.public');
+
+// Research news for the landing page slideshow. Read-only and published-only;
+// the image route serves a draft to an administrator, which is why it resolves
+// the token itself rather than sitting behind auth middleware.
+Route::get('/news', [NewsController::class, 'index'])->name('api.news.index');
+Route::get('/news/{id}/image', [NewsController::class, 'image'])->name('api.news.image');
 
 // Protected routes (authentication required)
 Route::middleware('auth:sanctum')->group(function () {
@@ -80,6 +87,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/access-requests/{id}/approve', [AccessRequestController::class, 'approve'])->name('api.admin.access-requests.approve');
         Route::post('/access-requests/{id}/reject', [AccessRequestController::class, 'reject'])->name('api.admin.access-requests.reject');
         Route::delete('/access-requests/{id}', [AccessRequestController::class, 'destroy'])->name('api.admin.access-requests.destroy');
+
+        // Research news. `update` is POST, not PUT: a photo arrives as
+        // multipart and PHP does not populate $_FILES for PUT.
+        Route::get('/news', [NewsController::class, 'adminIndex'])->name('api.admin.news.index');
+        Route::post('/news', [NewsController::class, 'store'])->name('api.admin.news.store');
+        Route::get('/news/{id}', [NewsController::class, 'show'])->name('api.admin.news.show');
+        Route::post('/news/{id}', [NewsController::class, 'update'])->name('api.admin.news.update');
+        Route::patch('/news/{id}/toggle', [NewsController::class, 'toggle'])->name('api.admin.news.toggle');
+        Route::delete('/news/{id}', [NewsController::class, 'destroy'])->name('api.admin.news.destroy');
 
         // Support tickets
         Route::get('/support/tickets', [SupportTicketController::class, 'adminIndex'])->name('api.admin.support.index');

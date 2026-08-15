@@ -18,7 +18,7 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (50 Total)
+### API Endpoints (58 Total)
 
 Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
@@ -70,6 +70,35 @@ a reply in, and the conversation screen says so rather than letting them type
 into the void. Such a ticket is deliberately **not** attached to an account
 whose email happens to match: the address is unverified, so attaching it would
 let anyone plant messages in another researcher's ticket list.
+
+#### Research News (8)
+
+Posts shown as a slideshow on the landing page. Nothing is visible until an
+administrator publishes it, so drafts can be prepared ahead of an announcement.
+
+- `GET /api/news` - **Public.** Published posts only, in slide order
+- `GET /api/news/{id}/image` - **Public for a published post.** A draft's photo
+  404s unless the caller is an admin
+- `GET /api/admin/news` - Everything, with `published_count` / `draft_count`
+- `POST /api/admin/news` - Create
+- `GET /api/admin/news/{id}` - Detail
+- `POST /api/admin/news/{id}` - Update (POST, not PUT: see below)
+- `PATCH /api/admin/news/{id}/toggle` - The publish switch
+- `DELETE /api/admin/news/{id}` - Delete, photo included
+
+**Update is POST, not PUT.** A photo arrives as multipart and PHP does not
+populate `$_FILES` for a PUT body, so a PUT route could never receive one.
+
+**Photos are stored byte-for-byte.** There is no GD and no Imagick here, so
+nothing can resize or re-encode an upload — the whole defence is a 4 MB cap and
+a `mimetypes:` rule, which reads the file's actual bytes rather than trusting
+its extension. Images stream through the API instead of `public/`: there is no
+`storage:link` on this machine and the app is reached over ngrok, where a
+symlinked path is one more thing to get wrong.
+
+**Saving is not publishing.** The toggle is a separate action, and
+`published_at` is only stamped the first time — hiding and re-showing an old
+post must not throw it to the front of a date-ordered slideshow.
 
 #### User Management (7) - Admin Only
 - `GET /api/admin/users` - List users with pagination & filters
@@ -367,7 +396,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**124 tests, 489 assertions, ~90s.** They run against MySQL, not sqlite: three
+**141 tests, 562 assertions, ~126s.** They run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:

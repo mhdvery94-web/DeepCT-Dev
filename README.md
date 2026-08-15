@@ -92,9 +92,9 @@ bukan disalin dari catatan lama.
 | Pratinjau frame hasil di aplikasi (TIFF 16-bit → PNG) | ✅ |
 | Formulir Join → permintaan akses → admin menyetujui & akun dibuat | ✅ |
 | Tiket dukungan IT — di aplikasi, dan dari halaman login untuk yang terkunci | ✅ |
-| 50 endpoint API + `/api/health` | ✅ |
-| `flutter analyze` 0 issue, 28 test Flutter lulus | ✅ |
-| **124 test backend lulus** (489 assertion, ~90 detik) | ✅ |
+| 58 endpoint API + `/api/health` | ✅ |
+| `flutter analyze` 0 issue, 39 test Flutter lulus | ✅ |
+| **141 test backend lulus** (562 assertion, ~126 detik) | ✅ |
 | Build web & APK release | ✅ (APK ~52 MB) |
 
 Terverifikasi end-to-end terhadap worker Kaggle sungguhan dengan dua frame
@@ -144,7 +144,7 @@ Kaggle, bukan backend.
 | [CLAUDE.md](CLAUDE.md) | Kontrak kerja untuk agent + jebakan yang memakan waktu |
 | [ROADMAP.md](ROADMAP.md) | Rencana kerja berurutan, dan apa yang sengaja tidak dikerjakan |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Komponen, alur data, skema database, keputusan teknis |
-| [API.md](API.md) | Referensi 50 endpoint |
+| [API.md](API.md) | Referensi 58 endpoint |
 | [be/README.md](be/README.md) | Setup, troubleshooting, dan perintah backend |
 | [fe/README.md](fe/README.md) | Struktur, breakpoint, dan konvensi frontend |
 | [CHANGELOG.md](CHANGELOG.md) | Riwayat perubahan beserta alasannya |

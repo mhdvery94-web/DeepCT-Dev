@@ -41,10 +41,14 @@ class ApiConfig {
   // In-app IT support
   static const String supportTickets = '/support/tickets';
 
+  // Public: research news for the landing-page slideshow
+  static const String news = '/news';
+
   // Admin endpoints
   static const String adminUsers = '/admin/users';
   static const String adminAccessRequests = '/admin/access-requests';
   static const String adminSupportTickets = '/admin/support/tickets';
+  static const String adminNews = '/admin/news';
   static const String adminModels = '/admin/models';
   static const String adminActivities = '/admin/activities';
 

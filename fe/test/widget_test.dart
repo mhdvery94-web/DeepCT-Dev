@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:fe/main.dart';
 import 'package:fe/screens/landing/landing_page.dart';
+import 'package:fe/widgets/news_carousel.dart';
 
 /// Renders the whole app at [size] and returns once it has settled.
 ///
@@ -33,7 +34,14 @@ void main() {
     // Tests have no network; fall back to bundled font metrics instead of
     // trying to fetch Lora / IBM Plex Sans at runtime.
     GoogleFonts.config.allowRuntimeFetching = false;
+
+    // For the same reason: the research-news carousel on the landing page
+    // loads itself, and a real request leaves a pending timeout timer that
+    // fails the test regardless of what it was asserting.
+    NewsCarousel.debugLoader = () async => const [];
   });
+
+  tearDownAll(() => NewsCarousel.debugLoader = null);
 
   setUp(() {
     // No stored credentials, so AuthProvider.checkAuthStatus() finds no token.

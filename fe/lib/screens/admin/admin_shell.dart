@@ -9,6 +9,7 @@ import 'access_requests_screen.dart';
 import 'activity_logs_screen.dart';
 import 'dashboard_home_screen.dart';
 import 'model_management_screen.dart';
+import 'news_management_screen.dart';
 import 'user_management_screen.dart';
 
 /// Navigation destinations available to an administrator.
@@ -17,6 +18,7 @@ enum AdminSection {
   users('User Management', Icons.people_outline),
   accessRequests('Access Requests', Icons.how_to_reg_outlined),
   support('Support Tickets', Icons.support_agent_outlined),
+  news('Research News', Icons.article_outlined),
   models('Model Management', Icons.memory_outlined),
   activities('Activity Logs', Icons.history);
 
@@ -85,6 +87,8 @@ class _AdminShellState extends State<AdminShell> {
         return const AccessRequestsScreen();
       case AdminSection.support:
         return const TicketListScreen(asAdmin: true);
+      case AdminSection.news:
+        return const NewsManagementScreen();
       case AdminSection.models:
         return const ModelManagementScreen();
       case AdminSection.activities:

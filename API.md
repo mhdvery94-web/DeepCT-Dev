@@ -1,6 +1,6 @@
 # Referensi API
 
-50 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
+58 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
 `php artisan route:list --path=api` per 15 Agustus 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 
@@ -33,6 +33,8 @@ login · 403 bukan haknya · 404 tidak ada · 409 konflik · 410 sudah kedaluwar
 | `POST` | `/login` | Dibatasi 5 percobaan/menit/IP. |
 | `POST` | `/access-requests` | Formulir Join di landing page. 5/menit/IP. |
 | `POST` | `/support/tickets/public` | Tiket dari halaman login. 5/jam/IP. |
+| `GET` | `/news` | Berita riset yang sudah terbit, urut slide. |
+| `GET` | `/news/{id}/image` | Fotonya. **404 untuk draf**, kecuali pemanggilnya admin. |
 
 **`POST /login`** — body `{ "email", "password" }`.
 
@@ -64,6 +66,25 @@ tidak ada akun untuk menampilkannya.
 Tiket tamu **tidak** ditempelkan ke akun yang emailnya kebetulan cocok — email
 itu belum terverifikasi, jadi menempelkannya berarti siapa pun bisa menaruh
 pesan di daftar tiket peneliti lain.
+
+**`GET /news`** — parameter opsional `limit` (1–50, default 20). Tidak
+berpaginasi: landing page menampilkan semuanya dalam satu carousel.
+
+```json
+{ "id": 1, "title": "…", "summary": "…", "body": "…",
+  "has_image": true, "image_url": "/news/1/image",
+  "published_at": "2026-08-15T12:32:34+00:00", "sort_order": 1 }
+```
+
+`image_url` **relatif** terhadap root API; klien menambahkan base URL-nya
+sendiri. API ini dijangkau lewat ngrok, localhost, dan alamat LAN — URL absolut
+dari server akan salah di dua di antaranya.
+
+Urutan slide: `sort_order` menaik, lalu `published_at` menurun.
+
+**`GET /news/{id}/image`** — foto apa adanya beserta mime type aslinya.
+Draf **404** kecuali request-nya membawa token admin, jadi hasil riset yang
+belum diumumkan tidak bisa ditemukan dengan menebak id.
 
 ---
 
@@ -280,6 +301,32 @@ bila gagal atau tunnel mati (`ERR_NGROK_3200`).
 `approve` **langsung membuat akun user-nya** dan mengembalikan `username` +
 `default_password` sekali. Kalau tidak, admin tetap harus membuat user manual
 dan permintaan itu jadi catatan mati.
+
+### Berita riset (6)
+
+| Method | Path |
+|---|---|
+| `GET` | `/admin/news` — filter `status` (`published`/`draft`), `search` |
+| `POST` | `/admin/news` — **multipart**, boleh membawa `image` |
+| `GET` | `/admin/news/{id}` |
+| `POST` | `/admin/news/{id}` — ubah; kirim `remove_image=1` untuk menghapus foto |
+| `PATCH` | `/admin/news/{id}/toggle` — sakelar terbit |
+| `DELETE` | `/admin/news/{id}` — beserta fotonya |
+
+Field: `title` (≤200), `summary` (≤500), `body` (opsional, ≤20000),
+`sort_order`, `is_published`, `image`.
+
+**Ubah memakai POST, bukan PUT.** Foto datang sebagai multipart dan PHP tidak
+mengisi `$_FILES` untuk body PUT, jadi route PUT tidak akan pernah menerimanya.
+
+**Gambar disimpan apa adanya** — mesin ini tidak punya GD maupun Imagick, jadi
+tidak ada yang bisa memperkecil atau menyandikan ulang unggahan. Pertahanannya
+cuma batas 4 MB dan aturan `mimetypes:` (JPEG/PNG/WebP), yang membaca isi
+berkas, bukan ekstensinya.
+
+**Menyimpan bukan menerbitkan.** `published_at` hanya diisi saat pertama kali
+terbit, jadi menyembunyikan lalu menampilkan lagi post lama tidak melemparkannya
+ke depan slideshow yang diurut tanggal.
 
 ### Tiket dukungan (3)
 
