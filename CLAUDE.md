@@ -109,6 +109,10 @@ first, then use it as a boundary for 1-4 and 4-7. There is no manual
 - **Never import `dart:html`.** It breaks the Android build at kernel
   compilation even if the code path never runs. Use the conditional export in
   `lib/utils/file_download.dart`.
+- **`DropdownButtonFormField` needs `isExpanded: true`** inside any constrained
+  row or column. Without it the dropdown sizes to its longest *option* rather
+  than the space it was given, and overflows on a phone — this cost 54px in
+  `PublicTicketSheet` before a layout test caught it.
 - Square corners everywhere (`BorderRadius.zero`), and `withValues(alpha:)`
   rather than the deprecated `withOpacity`.
 
@@ -122,9 +126,9 @@ nginx + PHP-FPM.
 ## Verify your work
 
 ```bash
-cd be && php artisan test          # 67 tests, needs the db_aict_test database
+cd be && php artisan test          # 124 tests, needs the db_aict_test database
 cd fe && flutter analyze           # must be clean
-cd fe && flutter test              # 21 tests
+cd fe && flutter test              # 28 tests
 cd fe && flutter build apk --release
 ```
 

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
+import '../../services/support_service.dart';
 import '../../theme/app_theme.dart';
 import '../landing/landing_page.dart';
+import '../support/ticket_list_screen.dart';
 import 'access_requests_screen.dart';
 import 'activity_logs_screen.dart';
 import 'dashboard_home_screen.dart';
@@ -14,6 +16,7 @@ enum AdminSection {
   dashboard('Dashboard', Icons.dashboard_outlined),
   users('User Management', Icons.people_outline),
   accessRequests('Access Requests', Icons.how_to_reg_outlined),
+  support('Support Tickets', Icons.support_agent_outlined),
   models('Model Management', Icons.memory_outlined),
   activities('Activity Logs', Icons.history);
 
@@ -40,6 +43,35 @@ class _AdminShellState extends State<AdminShell> {
   /// Below this width the sidebar collapses into a drawer.
   static const double _mobileBreakpoint = 1000;
 
+  /// Tickets waiting on an administrator, shown beside the sidebar entry.
+  ///
+  /// Refreshed on every navigation rather than polled: a ticket answered in
+  /// the support screen should stop shouting as soon as you leave it, and an
+  /// admin console does not need second-by-second accuracy.
+  int _awaitingTickets = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTicketBadge();
+  }
+
+  Future<void> _refreshTicketBadge() async {
+    try {
+      final result = await SupportService().adminTickets(awaitingOnly: true);
+      if (!mounted) return;
+      setState(() => _awaitingTickets = result.awaitingCount);
+    } catch (_) {
+      // A badge is not worth an error banner; the screen itself will report
+      // the failure if the admin opens it.
+    }
+  }
+
+  void _goTo(AdminSection section) {
+    setState(() => _section = section);
+    _refreshTicketBadge();
+  }
+
   Widget _buildBody() {
     switch (_section) {
       case AdminSection.dashboard:
@@ -51,6 +83,8 @@ class _AdminShellState extends State<AdminShell> {
         return const UserManagementScreen();
       case AdminSection.accessRequests:
         return const AccessRequestsScreen();
+      case AdminSection.support:
+        return const TicketListScreen(asAdmin: true);
       case AdminSection.models:
         return const ModelManagementScreen();
       case AdminSection.activities:
@@ -160,8 +194,9 @@ class _AdminShellState extends State<AdminShell> {
             _NavItem(
               section: section,
               selected: _section == section,
+              badge: section == AdminSection.support ? _awaitingTickets : 0,
               onTap: () {
-                setState(() => _section = section);
+                _goTo(section);
                 if (isDrawer) Navigator.pop(context);
               },
             ),
@@ -298,10 +333,14 @@ class _NavItem extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// Shown as a count when above zero; hidden otherwise.
+  final int badge;
+
   const _NavItem({
     required this.section,
     required this.selected,
     required this.onTap,
+    this.badge = 0,
   });
 
   @override
@@ -335,8 +374,22 @@ class _NavItem extends StatelessWidget {
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                   color: selected ? AppTheme.primary : AppTheme.textPrimary,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (badge > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                color: AppTheme.primary,
+                child: Text(
+                  badge > 99 ? '99+' : '$badge',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
           ],
         ),
       ),

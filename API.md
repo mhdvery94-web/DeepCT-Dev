@@ -1,6 +1,6 @@
 # Referensi API
 
-35 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
+50 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
 `php artisan route:list --path=api` per 15 Agustus 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 
@@ -31,6 +31,8 @@ login · 403 bukan haknya · 404 tidak ada · 409 konflik · 410 sudah kedaluwar
 |---|---|---|
 | `GET` | `/health` | Liveness probe. Didefinisikan di `routes/web.php`, bukan `api.php`. |
 | `POST` | `/login` | Dibatasi 5 percobaan/menit/IP. |
+| `POST` | `/access-requests` | Formulir Join di landing page. 5/menit/IP. |
+| `POST` | `/support/tickets/public` | Tiket dari halaman login. 5/jam/IP. |
 
 **`POST /login`** — body `{ "email", "password" }`.
 
@@ -47,6 +49,21 @@ membersihkan baris yang kedaluwarsa setiap hari.
 
 Akun nonaktif ditolak dengan pesan tersendiri, bukan "kredensial salah", supaya
 peneliti tahu harus menghubungi admin.
+
+**`POST /access-requests`** — body `first_name`, `last_name`, `email`,
+`institution`, `reason` (opsional). **409** kalau emailnya sudah punya akun atau
+sudah ada permintaan yang menunggu; pesannya ditulis untuk pemohon, jadi
+tampilkan apa adanya.
+
+**`POST /support/tickets/public`** — body `name`, `email`, `subject`,
+`message`, `category` (opsional). Untuk orang yang **tidak bisa login**, yaitu
+alasan paling umum menekan tombol IT Support di halaman itu. Tiketnya masuk
+antrean admin yang sama dengan `user_id` null; balasannya lewat email karena
+tidak ada akun untuk menampilkannya.
+
+Tiket tamu **tidak** ditempelkan ke akun yang emailnya kebetulan cocok — email
+itu belum terverifikasi, jadi menempelkannya berarti siapa pun bisa menaruh
+pesan di daftar tiket peneliti lain.
 
 ---
 
@@ -75,6 +92,36 @@ tidak ada jalan membaca data akun lain.
 **`GET /me/models`** mengembalikan `id`, `name`, `version`, `status`,
 `description`, `accuracy`, `is_available`. **Tidak pernah `endpoint_url`** —
 lihat ARCHITECTURE.md §3.
+
+---
+
+## Tiket dukungan — semua peran
+
+| Method | Path | Keterangan |
+|---|---|---|
+| `GET` | `/support/tickets` | Tiket milik pemanggil. Filter opsional `status`. |
+| `POST` | `/support/tickets` | Buat tiket |
+| `GET` | `/support/tickets/{id}` | Detail berikut percakapannya |
+| `POST` | `/support/tickets/{id}/reply` | Balas — dipakai kedua pihak |
+
+Dibuat sebagai **percakapan**, bukan satu pesan: masalah teknis hampir selalu
+butuh pertanyaan balik.
+
+**`POST /support/tickets`** — body `subject`, `message`, `category`
+(`upload`/`prediction`/`download`/`account`/`other`), `priority`
+(`low`/`normal`/`high`), dan `analysis_record_id` opsional. Job yang bukan milik
+pemanggil **diabaikan diam-diam**, bukan ditolak — kalau ditolak, tiket bisa
+dipakai menebak id job mana yang ada.
+
+**`awaiting_admin`** mencatat giliran siapa sekarang, dan itulah yang menyalakan
+penanda di sidebar admin. Pesan peneliti menyalakannya; balasan admin
+memadamkannya sekaligus memindahkan tiket `open` → `in_progress`.
+
+| Kondisi | Hasil |
+|---|---|
+| Balas tiket `resolved` | Terbuka lagi (`in_progress`) |
+| Balas tiket `closed` | **409** — buat tiket baru |
+| Tiket milik akun lain | **404**, bukan 403 (403 membocorkan bahwa id-nya ada) |
 
 ---
 
@@ -220,6 +267,35 @@ sendiri. Nyata memakan waktu ~18–21 detik dan memakai kuota GPU.
 
 Health check: `online` bila terjangkau, `trouble` bila > 5 detik, `offline`
 bila gagal atau tunnel mati (`ERR_NGROK_3200`).
+
+### Permintaan akses (4)
+
+| Method | Path |
+|---|---|
+| `GET` | `/admin/access-requests` — filter `status` |
+| `POST` | `/admin/access-requests/{id}/approve` |
+| `POST` | `/admin/access-requests/{id}/reject` — body `note` opsional |
+| `DELETE` | `/admin/access-requests/{id}` |
+
+`approve` **langsung membuat akun user-nya** dan mengembalikan `username` +
+`default_password` sekali. Kalau tidak, admin tetap harus membuat user manual
+dan permintaan itu jadi catatan mati.
+
+### Tiket dukungan (3)
+
+| Method | Path |
+|---|---|
+| `GET` | `/admin/support/tickets` — filter `status`, `awaiting`, `search` |
+| `PATCH` | `/admin/support/tickets/{id}` — `status` dan/atau `priority` |
+| `DELETE` | `/admin/support/tickets/{id}` |
+
+Daftar admin menyertakan `meta.open_count` dan `meta.awaiting_admin_count` untuk
+penanda di sidebar. Tiket tamu ditandai `is_guest: true` dengan blok `guest`
+berisi nama dan email pelapor, dan `user: null`.
+
+Menandai `resolved`/`closed` mengisi `resolved_at` + `resolved_by` dan mematikan
+`awaiting_admin`. Balasan admin dipakai `POST /support/tickets/{id}/reply` yang
+sama — controller-nya yang menentukan sisi mana yang menulis.
 
 ### Activity log (3)
 

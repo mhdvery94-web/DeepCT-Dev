@@ -45,15 +45,29 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
   - Export the filtered page to CSV (browser download on web; saved to
     `Android/data/<package>/files/Download` on Android)
 
+- ✅ **Access Requests**
+  - Landing-page Join submissions, filtered by status
+  - Approving **creates the account** and shows the credentials once
+  - Reject with a reviewer note, or delete
+
+- ✅ **Support Tickets**
+  - Every ticket, filterable by status or "needs reply"
+  - Reply in the conversation, change status and priority, delete
+  - Sidebar shows a **count of tickets waiting on an administrator**, refreshed
+    on each navigation rather than polled
+  - A guest ticket (raised from the sign-in page) is flagged, and the screen
+    says to answer by email — there is no account to show a reply in
+
 ### Researcher Console (`UserShell`)
 - ✅ **Dashboard** — model availability, own analysis counters, activity today,
   and the 5 most recent actions
 - ✅ **New Analysis** — pick a model, pick a ZIP, upload with live progress
 - ✅ **Results & History** — job status with polling, dual download, delete
 - ✅ **My Activity** — full paginated audit trail of the signed-in account
+- ✅ **IT Support** — raise a ticket and talk to an administrator in the app
 
-Backed by `/api/me/*` and `/api/predictions/*`; everything under `/api/admin`
-requires the admin role and is unreachable from this console.
+Backed by `/api/me/*`, `/api/predictions/*` and `/api/support/*`; everything
+under `/api/admin` requires the admin role and is unreachable from this console.
 
 **Upload transport is automatic.** `PredictionService.upload()` sends archives
 under 1 MB in a single request and switches to the resumable chunked flow above
@@ -163,6 +177,7 @@ lib/
 │   ├── activity_log.dart        # ActivityLog
 │   ├── me_stats.dart            # MeStats (researcher dashboard counters)
 │   ├── prediction.dart          # Prediction (one interpolation job)
+│   ├── support_ticket.dart      # SupportTicket + SupportMessage
 │   └── pagination.dart          # Pagination + PaginatedResult<T>
 │
 ├── services/
@@ -173,6 +188,8 @@ lib/
 │   ├── admin_model_service.dart # AdminModelService — model management API
 │   ├── activity_service.dart    # ActivityService   — activity logs API
 │   ├── me_service.dart          # MeService — /api/me, the only non-admin data
+│   ├── access_request_service.dart # Join form + admin review
+│   ├── support_service.dart     # SupportService — tickets, both sides
 │   └── prediction_service.dart  # PredictionService — upload, list, download
 │
 ├── screens/
@@ -185,12 +202,18 @@ lib/
 │   │   ├── dashboard_home_screen.dart   # Stats + recent activities
 │   │   ├── user_management_screen.dart
 │   │   ├── model_management_screen.dart
+│   │   ├── access_requests_screen.dart
 │   │   └── activity_logs_screen.dart
+│   ├── support/                             # Shared by both roles
+│   │   ├── ticket_list_screen.dart          # asAdmin: true → the queue
+│   │   ├── ticket_conversation_screen.dart  # The back-and-forth
+│   │   └── public_ticket_sheet.dart         # From the sign-in page, no token
 │   └── user/
 │       ├── user_shell.dart                  # Researcher layout with sidebar
 │       ├── user_home_screen.dart            # Stats + recent activity
 │       ├── upload_screen.dart               # Start a new analysis
 │       ├── prediction_history_screen.dart   # Job status, polling, download
+│       ├── frame_gallery_screen.dart        # Frame previews for one job
 │       ├── user_activity_screen.dart        # Full paginated activity log
 │       └── user_activity_tile.dart          # Shared row widget
 │
@@ -442,28 +465,38 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 21 tests, passing
+- ✅ `flutter test` — 28 tests, passing
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
-### Not Started (FASE 3)
-- ⏳ User dashboard (`screens/user/user_dashboard.dart` is a placeholder)
-- ⏳ Upload screen
-- ⏳ Prediction results
-- ⏳ History screen
+### Completed (FASE 3)
+- ✅ Researcher console shell with sidebar/drawer
+- ✅ Dashboard, upload (direct + chunked), results & history with polling
+- ✅ Frame gallery with server-rendered PNG previews
+- ✅ Checksum-verified downloads on web and Android
 
-Blocked on the FASE 3 backend: the `predictions` routes are still commented out
-in `be/routes/api.php`.
+### Completed since
+- ✅ Join form wired to `POST /api/access-requests` + admin review screen
+- ✅ IT support tickets, in-app for signed-in users and public from the
+  sign-in page
 
 ### Testing
-The suite is **21** tests across two files.
+The suite is **28** tests across three files.
 `widget_test.dart` covers the landing page: a boot smoke test, a layout check at
 seven viewports (fails if any section overflows), a status-bar clearance check,
 and three header-navigation checks. `user_console_test.dart` covers the
 researcher console: `MeStats` payload parsing and `UserActivityTile` rendering.
-That is the entire automated suite — the file was Flutter's counter-app scaffold until
-15 Aug 2026, and it *failed*. The "23/23 contract tests" quoted in older notes
-were a manual `curl` checklist, not a runnable suite.
+`support_test.dart` covers ticket parsing (including the guest fallback) and the
+public ticket sheet's validation and phone layout.
+
+That is the entire automated suite — the file was Flutter's counter-app scaffold
+until 15 Aug 2026, and it *failed*. The "23/23 contract tests" quoted in older
+notes were a manual `curl` checklist, not a runnable suite.
+
+**A layout test earns its place.** The phone-width check on `PublicTicketSheet`
+caught a real 54px overflow: `DropdownButtonFormField` sizes itself to its
+longest option rather than the space it is given, so "prediction" pushed the row
+off the edge. Pass `isExpanded: true` on every dropdown in a constrained row.
 
 ```bash
 flutter test

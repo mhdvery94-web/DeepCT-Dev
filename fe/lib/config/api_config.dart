@@ -38,9 +38,13 @@ class ApiConfig {
   // Public: request an account from the landing page
   static const String accessRequests = '/access-requests';
 
+  // In-app IT support
+  static const String supportTickets = '/support/tickets';
+
   // Admin endpoints
   static const String adminUsers = '/admin/users';
   static const String adminAccessRequests = '/admin/access-requests';
+  static const String adminSupportTickets = '/admin/support/tickets';
   static const String adminModels = '/admin/models';
   static const String adminActivities = '/admin/activities';
 

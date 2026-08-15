@@ -33,6 +33,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.12.0] - 2026-08-15
+
+### 🎫 IT support that reaches an administrator inside the app
+
+The "IT Support" button on the sign-in page had `// TODO: Navigate to IT
+support` behind it, and there was nowhere for a researcher to report a problem
+at all. Tickets now exist on both sides.
+
+Built as a **conversation**, not a single message. Technical problems almost
+always need a question back — *which frames? what did the error say?* — and with
+one field the administrator would have to leave the app to ask.
+
+#### The awkward part: the button is on the sign-in page
+
+The most common reason to press "IT Support" there is **not being able to sign
+in**, which is exactly when an authenticated endpoint is useless. So there are
+two ways in:
+
+| Route | Who | Reply arrives |
+|---|---|---|
+| `POST /api/support/tickets` | Signed-in researcher | In the app |
+| `POST /api/support/tickets/public` | Anyone, throttled 5/hour | By email |
+
+A guest ticket has `user_id = NULL` and carries the reporter's name and address
+instead. It lands in the same admin queue flagged `is_guest`, and the
+conversation screen tells the administrator to answer by email rather than
+letting them type into a thread nobody can read.
+
+It is deliberately **not** attached to an account whose email happens to match.
+The address is unverified, so attaching it would let anyone plant messages in
+another researcher's ticket list — there is a test asserting exactly that.
+
+#### Added — Backend
+
+- `support_tickets` and `support_ticket_messages`. `from_admin` is stamped when
+  the message is written, not derived from the author's current role: promoting
+  someone later must not turn their old messages into staff replies.
+- `awaiting_admin` records whose turn it is, and drives the sidebar badge. A
+  researcher's message sets it; an administrator's reply clears it and moves an
+  `open` ticket to `in_progress`.
+- Replying to a `resolved` ticket reopens it. A `closed` one refuses with 409.
+- Ownership is scoped **in the query**, so another account's ticket 404s rather
+  than 403s — a 403 would confirm the id exists.
+- 23 tests (131 assertions), including the guest paths.
+
+#### Added — Frontend
+
+- `TicketListScreen`, one screen for both sides: `asAdmin: true` switches it to
+  the full queue with a "needs reply" filter and status controls.
+- `TicketConversationScreen` — staff replies left, your own right.
+- `PublicTicketSheet`, opened from the sign-in page and the landing footer.
+- The admin sidebar shows a count of tickets waiting on a reply, refreshed on
+  navigation rather than polled; a failed refresh is swallowed, since a badge is
+  not worth an error banner.
+- 7 Flutter tests.
+
+#### Fixed
+
+- **A 54px overflow on a phone**, caught by the new layout test.
+  `DropdownButtonFormField` sizes itself to its longest option instead of the
+  space it is given, so the category dropdown ("prediction") pushed its row off
+  the edge. Fixed with `isExpanded: true` on every dropdown in a constrained
+  row, plus stacking below 420px.
+
+#### Documentation
+
+- `be/README.md`: the endpoint list said **35 total** and documented neither the
+  access-request nor the support routes. It is now 50, verified against
+  `route:list`, with both families written up. Table count corrected 13 → 16,
+  and `Predictions (6)` → `(8)`, which had always listed eight.
+- `fe/README.md`: the "Not Started (FASE 3)" section still claimed the upload
+  and results screens did not exist and that the backend routes were commented
+  out. Both have been true-since-v1.8 for some time; replaced with what is
+  actually there.
+
+---
+
 ## [1.11.0] - 2026-08-15
 
 ### 🔓 Concurrent sessions restored, on request

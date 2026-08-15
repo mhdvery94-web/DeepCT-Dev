@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
 import '../../theme/app_theme.dart';
 import '../landing/landing_page.dart';
+import '../support/ticket_list_screen.dart';
 import 'prediction_history_screen.dart';
 import 'upload_screen.dart';
 import 'user_activity_screen.dart';
@@ -11,22 +12,19 @@ import 'user_home_screen.dart';
 
 /// Navigation destinations available to a researcher.
 ///
-/// [analysis] and [history] are placeholders: the prediction pipeline and its
-/// endpoints arrive in FASE 3. They are listed rather than hidden so the shape
-/// of the product is visible, and each explains what it will do.
+/// Every entry is backed by real endpoints. The `available` flag that used to
+/// grey out unfinished sections is gone with the last of them.
 enum UserSection {
-  dashboard('Dashboard', Icons.dashboard_outlined, available: true),
-  analysis('New Analysis', Icons.auto_awesome_outlined, available: true),
-  history('Results & History', Icons.folder_outlined, available: true),
-  activity('My Activity', Icons.history, available: true);
+  dashboard('Dashboard', Icons.dashboard_outlined),
+  analysis('New Analysis', Icons.auto_awesome_outlined),
+  history('Results & History', Icons.folder_outlined),
+  activity('My Activity', Icons.history),
+  support('IT Support', Icons.support_agent_outlined);
 
-  const UserSection(this.label, this.icon, {required this.available});
+  const UserSection(this.label, this.icon);
 
   final String label;
   final IconData icon;
-
-  /// False while the backing endpoints do not exist yet.
-  final bool available;
 }
 
 /// Researcher console shell: persistent sidebar on desktop, drawer on mobile.
@@ -64,6 +62,8 @@ class _UserShellState extends State<UserShell> {
         // The key forces a fresh State when arriving from a new upload, so the
         // list reloads instead of showing the previous page's cached items.
         return PredictionHistoryScreen(key: UniqueKey());
+      case UserSection.support:
+        return const TicketListScreen();
     }
   }
 
@@ -308,8 +308,6 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted = !section.available;
-
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -328,9 +326,7 @@ class _NavItem extends StatelessWidget {
             Icon(
               section.icon,
               size: 18,
-              color: selected
-                  ? AppTheme.primary
-                  : (muted ? AppTheme.borderDark : AppTheme.textMuted),
+              color: selected ? AppTheme.primary : AppTheme.textMuted,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -339,26 +335,11 @@ class _NavItem extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  color: selected
-                      ? AppTheme.primary
-                      : (muted ? AppTheme.borderDark : AppTheme.textPrimary),
+                  color: selected ? AppTheme.primary : AppTheme.textPrimary,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (muted)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                color: AppTheme.background,
-                child: Text(
-                  'SOON',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textMuted,
-                  ),
-                ),
-              ),
           ],
         ),
       ),

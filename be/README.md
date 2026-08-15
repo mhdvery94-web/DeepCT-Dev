@@ -18,7 +18,7 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (35 Total)
+### API Endpoints (50 Total)
 
 Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
@@ -28,6 +28,48 @@ Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 - `POST /api/login` - Login with email & password
 - `POST /api/logout` - Logout (revoke token)
 - `GET /api/user` - Get authenticated user info
+
+#### Access Requests (5)
+- `POST /api/access-requests` - **Public.** The landing-page Join form. Rate
+  limited 5/minute, the same as login
+- `GET /api/admin/access-requests` - List with status filter
+- `POST /api/admin/access-requests/{id}/approve` - **Creates the user account**
+  and returns the credentials once
+- `POST /api/admin/access-requests/{id}/reject` - Reject with a reviewer note
+- `DELETE /api/admin/access-requests/{id}` - Delete the request
+
+Approving creates the account rather than just marking a row "approved" —
+otherwise the admin still has to add the user by hand and the request becomes a
+dead record. New accounts get the default password below.
+
+#### IT Support (8)
+
+In-app tickets, modelled as a **conversation** rather than a single message:
+technical problems almost always need a question back, and with one field the
+admin would have to leave the app to ask it.
+
+- `POST /api/support/tickets/public` - **Public.** From the sign-in page, for
+  people who cannot get in. Throttled 5/hour
+- `GET /api/support/tickets` - The caller's own tickets
+- `POST /api/support/tickets` - Raise one
+- `GET /api/support/tickets/{id}` - With the full conversation
+- `POST /api/support/tickets/{id}/reply` - Either side replies here
+- `GET /api/admin/support/tickets` - Every ticket, plus `open_count` and
+  `awaiting_admin_count` in `meta` for the sidebar badge
+- `PATCH /api/admin/support/tickets/{id}` - Status and priority
+- `DELETE /api/admin/support/tickets/{id}` - Delete
+
+`awaiting_admin` records whose turn it is and drives the badge: a researcher's
+message sets it, an admin's reply clears it. Replying to a `resolved` ticket
+reopens it; a `closed` one refuses replies with **409**.
+
+**Guest tickets.** A ticket from `/public` has `user_id = NULL` and carries
+`guest_name` + `guest_email` instead. It lands in the same admin queue, flagged
+`is_guest`, and the admin answers by email — there is no account session to show
+a reply in, and the conversation screen says so rather than letting them type
+into the void. Such a ticket is deliberately **not** attached to an account
+whose email happens to match: the address is unverified, so attaching it would
+let anyone plant messages in another researcher's ticket list.
 
 #### User Management (7) - Admin Only
 - `GET /api/admin/users` - List users with pagination & filters
@@ -61,7 +103,7 @@ worker directly.
 Without these an ordinary researcher could reach nothing but `GET /user`,
 since everything under `/admin` requires the admin role.
 
-#### Predictions (6) - Any authenticated user (FASE 3)
+#### Predictions (8) - Any authenticated user (FASE 3)
 - `POST /api/predictions` - Upload a ZIP of numbered `.tif` frames, queue a job
 - `GET /api/predictions` - List the caller's own jobs, paginated
 - `GET /api/predictions/{id}` - Job detail, including queue position while pending
@@ -261,6 +303,10 @@ Requires a running `php artisan schedule:work` — see *Scheduled Commands* abov
 - `models` - AI model registry
 - `analysis_records` - Prediction jobs
 - `user_activities` - Audit logs
+- `access_requests` - Landing-page Join submissions awaiting review
+- `support_tickets` - IT support tickets (`user_id` is null for guest tickets)
+- `support_ticket_messages` - One conversation turn; `from_admin` is stamped at
+  write time so promoting someone later does not rewrite history
 
 ### Queue Tables
 - `jobs` - Pending queue jobs
@@ -277,8 +323,8 @@ Requires a running `php artisan schedule:work` — see *Scheduled Commands* abov
   Not used for API auth. Safe to ignore; do **not** drop it without first
   switching `SESSION_DRIVER` to `array`.
 
-13 tables total. The schema and the reasoning behind it are documented in
-[../ARCHITECTURE.md](../ARCHITECTURE.md) §3.
+16 tables total, counting `migrations`. The schema and the reasoning behind it
+are documented in [../ARCHITECTURE.md](../ARCHITECTURE.md) §3.
 
 ---
 
@@ -321,7 +367,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**89 tests, 295 assertions, ~20s.** They run against MySQL, not sqlite: two
+**124 tests, 489 assertions, ~90s.** They run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:
@@ -332,8 +378,10 @@ CREATE DATABASE db_aict_test;
 
 | Suite | Covers |
 |---|---|
-| `AuthTest` | login, logout, token revocation, single-session, audit trail |
+| `AuthTest` | login, logout, token revocation, concurrent sessions on several devices, audit trail |
 | `AuthorizationTest` | every admin route refuses a researcher; `/me/*` is owner-scoped; `endpoint_url` never leaks |
+| `AccessRequestTest` | public submission, duplicates, existing account, the approve/reject flow |
+| `SupportTicketTest` | ownership scoping, status flow, who-replied stamping, guest tickets |
 | `PredictionPipelineTest` | recursive interpolation, worker contract, failure paths, counter release |
 | `ChunkedUploadTest` | ordering, idempotency, ownership, session cleanup |
 | `PredictionCleanupTest` | 24-hour retention and the temp sweeps |

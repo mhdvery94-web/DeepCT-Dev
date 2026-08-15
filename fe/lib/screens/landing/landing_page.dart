@@ -3,6 +3,7 @@ import '../../theme/app_theme.dart';
 import '../../services/access_request_service.dart';
 import '../../services/api_client.dart';
 import '../auth/login_page.dart';
+import '../support/public_ticket_sheet.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -941,7 +942,10 @@ class _LandingPageState extends State<LandingPage> {
       children: [
         TextButton(onPressed: () {}, child: const Text('Privacy Policy')),
         TextButton(onPressed: () {}, child: const Text('Terms of Service')),
-        TextButton(onPressed: () {}, child: const Text('Support')),
+        TextButton(
+          onPressed: () => showPublicTicketSheet(context),
+          child: const Text('Support'),
+        ),
       ],
     );
 

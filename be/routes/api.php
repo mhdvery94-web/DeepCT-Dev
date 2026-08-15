@@ -7,6 +7,7 @@ use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\MeController;
 use App\Http\Controllers\API\PredictionUploadController;
+use App\Http\Controllers\API\SupportTicketController;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\ModelController;
 use App\Http\Controllers\API\UserActivityController;
@@ -29,6 +30,13 @@ Route::post('/login', [AuthController::class, 'login'])
 Route::post('/access-requests', [AccessRequestController::class, 'store'])
     ->middleware('throttle:5,1')
     ->name('api.access-requests.store');
+
+// Support from the sign-in page, for people who cannot get in — the third and
+// last unauthenticated write path. Throttled per hour rather than per minute:
+// a genuine reporter files one ticket, not five a minute.
+Route::post('/support/tickets/public', [SupportTicketController::class, 'storePublic'])
+    ->middleware('throttle:5,60')
+    ->name('api.support.tickets.public');
 
 // Protected routes (authentication required)
 Route::middleware('auth:sanctum')->group(function () {
@@ -73,12 +81,26 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/access-requests/{id}/reject', [AccessRequestController::class, 'reject'])->name('api.admin.access-requests.reject');
         Route::delete('/access-requests/{id}', [AccessRequestController::class, 'destroy'])->name('api.admin.access-requests.destroy');
 
+        // Support tickets
+        Route::get('/support/tickets', [SupportTicketController::class, 'adminIndex'])->name('api.admin.support.index');
+        Route::patch('/support/tickets/{id}', [SupportTicketController::class, 'updateStatus'])->name('api.admin.support.update');
+        Route::delete('/support/tickets/{id}', [SupportTicketController::class, 'destroy'])->name('api.admin.support.destroy');
+
         // Activity logs
         Route::get('/activities', [UserActivityController::class, 'index'])->name('api.admin.activities.index');
         Route::get('/activities/types', [UserActivityController::class, 'getTypes'])->name('api.admin.activities.types');
         Route::get('/users/{id}/activities', [UserActivityController::class, 'userActivities'])->name('api.admin.activities.user');
     });
     
+    // In-app IT support. Scoped to the caller inside the controller; an
+    // administrator sees every ticket through the /admin routes instead.
+    Route::prefix('support')->group(function () {
+        Route::get('/tickets', [SupportTicketController::class, 'index'])->name('api.support.tickets.index');
+        Route::post('/tickets', [SupportTicketController::class, 'store'])->name('api.support.tickets.store');
+        Route::get('/tickets/{id}', [SupportTicketController::class, 'show'])->name('api.support.tickets.show');
+        Route::post('/tickets/{id}/reply', [SupportTicketController::class, 'reply'])->name('api.support.tickets.reply');
+    });
+
     // Prediction pipeline (FASE 3). Every action is scoped to the caller in
     // AnalysisController, so these are open to any authenticated role.
     Route::prefix('predictions')->group(function () {
