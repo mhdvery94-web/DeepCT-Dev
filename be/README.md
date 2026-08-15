@@ -430,23 +430,38 @@ CREATE DATABASE db_aict_test;
 | `AuthorizationTest` | every admin route refuses a researcher; `/me/*` is owner-scoped; `endpoint_url` never leaks |
 | `AccessRequestTest` | public submission, duplicates, existing account, the approve/reject flow |
 | `SupportTicketTest` | ownership scoping, status flow, who-replied stamping, guest tickets |
+| `NewsPostTest` | the publish switch, slide order, the upload guard, a draft's photo staying private |
+| `AvatarTest` | own vs anyone else's, the upload guard, `avatar_url` in every payload, the 404 for no photo |
 | `PredictionPipelineTest` | recursive interpolation, worker contract, failure paths, counter release |
 | `ChunkedUploadTest` | ordering, idempotency, ownership, session cleanup |
 | `PredictionCleanupTest` | 24-hour retention and the temp sweeps |
 | `TiffPreviewTest` (unit) | TIFF decoding, windowing, downscaling, PNG output, and the formats it must refuse |
 
-Two things to know before adding tests:
+Five things to know before adding tests. Each one produced a test that passed
+while proving nothing, or failed for a reason that had nothing to do with the
+application:
 
 - **Use `$this->apiAs($token)`**, never `withHeader('Authorization', ...)`.
   Laravel caches the resolved guard for the lifetime of a test method, so a
   second request skips token verification entirely -- a revoked token would keep
   answering 200 and the assertion would pass while proving nothing.
+- **Use `$this->apiAs(null)` for an anonymous request**, not a bare `get()`.
+  `withHeader` writes to `$defaultHeaders`, which persists for the rest of the
+  method, so a "logged out" call after a logged-in one still carries the token.
+  This is why `apiAs(null)` also *removes* the header.
 - **Call `Storage::fake('local')` in `setUp()`** if the test touches files.
   `RefreshDatabase` rolls back the database but leaves the filesystem alone.
 - **Never hard-code a row id in a URL.** MySQL does not reset AUTO_INCREMENT
   when a transaction rolls back, so ids keep climbing across tests and
   `/access-requests/1/approve` starts 404ing part-way through a suite. Read the
   id back from the model.
+- **Uploading a file? `post()` with an explicit `Accept: application/json`.**
+  `postJson` cannot carry a file, and a plain `post` makes Laravel answer a
+  failed validation with a 302 redirect, so the failure reads as "expected 422,
+  got 302". Related: `UploadedFile::fake()` reports its mime type from the
+  *extension*, so it sails straight through a `mimetypes:` rule — build a real
+  temp file when that rule is what you are testing. And
+  `UploadedFile::fake()->image()` needs GD, which this machine does not have.
 
 The GPU worker is always faked. A real call costs ~20s and Kaggle quota, and
 what is worth testing is our orchestration, not the model.

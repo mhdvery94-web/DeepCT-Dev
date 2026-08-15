@@ -137,7 +137,7 @@ Kosong. Tujuh item terakhir sudah selesai; lihat "Sudah selesai" di bawah.
 - [x] Konsol peneliti (dashboard, unggah, hasil, riwayat, aktivitas)
 - [x] Pratinjau frame — TIFF 16-bit dirender jadi PNG di server
 - [x] Sesi paralel — satu akun bisa aktif di beberapa perangkat
-- [x] Suite test backend (156 test) dan Flutter (54 test)
+- [x] Suite test backend (156 test) dan Flutter (65 test)
 - [x] Konsolidasi dokumentasi, 28 berkas jadi 10
 - [x] Git remote + cadangan lokal
 - [x] **5.** `applicationId` diganti dari `com.example.fe` jadi
@@ -153,21 +153,26 @@ Kosong. Tujuh item terakhir sudah selesai; lihat "Sudah selesai" di bawah.
 
 ---
 
-## Tidak dikerjakan, dan alasannya
+## Belum dibangun, dan alasannya
 
-**Melatih model dari dalam aplikasi.** Bisa secara teknis, tapi itu sistem lain:
-notebook di repo ini nol kode training, modelnya generator GAN 25,6 juta
-parameter yang discriminator-nya tidak ada di sini, dan sesi Kaggle putus tiap
-~9–12 jam sementara training butuh berhari-hari.
+**Melatih model dari dalam aplikasi.** Rancangannya **sudah ada** —
+[ARCHITECTURE.md](ARCHITECTURE.md) §7 — tapi belum ada satu baris kode pun, dan
+itu disengaja.
 
-Yang realistis adalah platform **mengelola** training, bukan menjalankannya —
-mengunggah dataset, mencatat job, menerima bobot + metrik, mendaftarkannya
-sebagai versi model baru. Tabel `models` sudah punya `version`, `accuracy`,
-`deployed_at`, jadi separuh jalan sudah ada.
+Tiga kenyataan yang menentukan: notebook di repo ini nol kode training (modelnya
+generator GAN 25,6 juta parameter yang discriminator-nya tidak ada di sini),
+sesi Kaggle putus tiap ~9–12 jam sementara training butuh berhari-hari, dan
+mesin ini tidak punya GPU. Jadi platform **mengelola** training, tidak pernah
+menjalankannya.
 
 Nilainya besar: kalau model dilatih ulang dengan dataset t seimbang,
 **metode rekursif tidak lagi diperlukan** — ia ada justru untuk menyiasati bias
 yang hanya bisa dihilangkan lewat retrain. Lihat
 [AI_EXPERIMENTS.md](AI_EXPERIMENTS.md).
 
-Skalanya setara seluruh FASE 3. Ditunda sampai hal-hal di atas selesai.
+Skalanya setara seluruh FASE 3, ditambah notebook training yang harus ditulis
+lebih dulu sebagai pekerjaan riset. Karena itu ia berhenti di rancangan.
+
+**Notifikasi email.** Balasan tiket tamu sekarang dikirim admin dari email-nya
+sendiri; aplikasi belum mengirim apa pun. Ini yang paling masuk akal
+dikerjakan berikutnya, dan paling murah.
