@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../../services/access_request_service.dart';
+import '../../services/api_client.dart';
 import '../auth/login_page.dart';
 
 class LandingPage extends StatefulWidget {
@@ -24,6 +26,19 @@ class _LandingPageState extends State<LandingPage> {
   String _activeSection = 'home';
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // --------------------------------------------------- "Join Research" form
+  final AccessRequestService _accessRequests = AccessRequestService();
+  final GlobalKey<FormState> _joinFormKey = GlobalKey<FormState>();
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _institutionController = TextEditingController();
+  final TextEditingController _reasonController = TextEditingController();
+
+  bool _submitting = false;
+  bool _submitted = false;
+  String? _joinError;
 
   /// Breakpoints, matching the ones documented in fe/README.md.
   ///
@@ -65,6 +80,11 @@ class _LandingPageState extends State<LandingPage> {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _emailController.dispose();
+    _institutionController.dispose();
+    _reasonController.dispose();
     super.dispose();
   }
 
@@ -701,38 +721,193 @@ class _LandingPageState extends State<LandingPage> {
         color: AppTheme.surface,
         border: Border.all(color: AppTheme.border),
       ),
+      child: _submitted ? _buildSubmitted(context) : _buildFormFields(context),
+    );
+  }
+
+  /// Replaces the form once a request goes through, so the applicant is not
+  /// left wondering whether it worked and sending it again.
+  Widget _buildSubmitted(BuildContext context) {
+    return Column(
+      children: [
+        const Icon(
+          Icons.check_circle_outline,
+          size: 44,
+          color: AppTheme.success,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Request received',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'An administrator will review it and send your account details to '
+          '${_emailController.text.trim()}.',
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted),
+        ),
+        const SizedBox(height: 20),
+        TextButton(
+          onPressed: () => setState(() {
+            _submitted = false;
+            _joinError = null;
+          }),
+          child: const Text('SUBMIT ANOTHER'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFormFields(BuildContext context) {
+    return Form(
+      key: _joinFormKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Form fields (placeholder)
-          _buildFormField(context, 'First Name'),
+          _buildFormField(
+            context,
+            'First Name',
+            controller: _firstNameController,
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? 'First name is required'
+                : null,
+          ),
           const SizedBox(height: 24),
-          _buildFormField(context, 'Last Name'),
+          _buildFormField(
+            context,
+            'Last Name',
+            controller: _lastNameController,
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? 'Last name is required'
+                : null,
+          ),
           const SizedBox(height: 24),
-          _buildFormField(context, 'Institutional Email'),
+          _buildFormField(
+            context,
+            'Institutional Email',
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Email is required';
+              if (!v.contains('@') || !v.contains('.')) {
+                return 'Enter a valid email address';
+              }
+              return null;
+            },
+          ),
           const SizedBox(height: 24),
-          _buildFormField(context, 'Department / Institution'),
+          _buildFormField(
+            context,
+            'Department / Institution',
+            controller: _institutionController,
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? 'Institution is required'
+                : null,
+          ),
+          const SizedBox(height: 24),
+          _buildFormField(
+            context,
+            'What do you plan to use it for?',
+            controller: _reasonController,
+            hint: 'Optional, but it speeds up review',
+            maxLines: 3,
+          ),
+
+          if (_joinError != null) ...[
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.errorLight,
+                border: Border.all(color: AppTheme.error),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 18,
+                    color: AppTheme.error,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _joinError!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           const SizedBox(height: 32),
           ElevatedButton(
-            onPressed: () {
-              // Submit form
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Access request submitted (placeholder)'),
-                ),
-              );
-            },
+            onPressed: _submitting ? null : _submitJoinRequest,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 20),
             ),
-            child: const Text('SUBMIT REQUEST'),
+            child: _submitting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('SUBMIT REQUEST'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFormField(BuildContext context, String label) {
+  Future<void> _submitJoinRequest() async {
+    if (!(_joinFormKey.currentState?.validate() ?? false)) return;
+
+    setState(() {
+      _submitting = true;
+      _joinError = null;
+    });
+
+    try {
+      await _accessRequests.submit(
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        email: _emailController.text.trim(),
+        institution: _institutionController.text.trim(),
+        reason: _reasonController.text,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _submitted = true;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        // The server writes these for the applicant -- an account that already
+        // exists, or a request already queued -- so show them unchanged.
+        _joinError = e.message;
+      });
+    }
+  }
+
+  Widget _buildFormField(
+    BuildContext context,
+    String label, {
+    TextEditingController? controller,
+    String? Function(String?)? validator,
+    TextInputType? keyboardType,
+    String? hint,
+    int maxLines = 1,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -741,7 +916,13 @@ class _LandingPageState extends State<LandingPage> {
           style: Theme.of(context).textTheme.labelMedium,
         ),
         const SizedBox(height: 8),
-        TextFormField(decoration: InputDecoration(hintText: label)),
+        TextFormField(
+          controller: controller,
+          validator: validator,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          decoration: InputDecoration(hintText: hint ?? label),
+        ),
       ],
     );
   }

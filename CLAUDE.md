@@ -19,11 +19,12 @@ Three moving parts, and they are genuinely separate machines:
 The model worker is not ours and is not always up. Its Kaggle session expires on
 its own.
 
-## The four documents
+## The documents
 
 | File | Read it when |
 |------|--------------|
-| [README.md](README.md) | Always. What works today, how to run it, what is next. |
+| [README.md](README.md) | Always. What works today and how to run it. |
+| [ROADMAP.md](ROADMAP.md) | Before starting anything. What is planned, in order, and what was deliberately not done. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Changing how components talk, or the schema. |
 | [API.md](API.md) | Touching any endpoint. |
 | [be/README.md](be/README.md) / [fe/README.md](fe/README.md) | Working inside that half. |
@@ -47,7 +48,11 @@ below. Neither is "I added the file".
 
 **3. Do not add a status document.** No `*_COMPLETION_SUMMARY.md`,
 no `*_PLAN.md`, no `TASK_*.md`. Twenty of those accumulated here and contradicted
-each other. Update the four documents above and add a `CHANGELOG.md` entry.
+each other.
+
+Planned work goes in [ROADMAP.md](ROADMAP.md) — one living list, ticked only
+after verification. Finished work goes in `CHANGELOG.md`. Current state goes in
+`README.md`. Those three cover every case; a new file does not.
 
 **4. Say what you did not do.** A half-finished thing that is labelled
 half-finished is fine. A half-finished thing labelled done costs someone a day.

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
 import '../../theme/app_theme.dart';
 import '../landing/landing_page.dart';
+import 'access_requests_screen.dart';
 import 'activity_logs_screen.dart';
 import 'dashboard_home_screen.dart';
 import 'model_management_screen.dart';
@@ -12,6 +13,7 @@ import 'user_management_screen.dart';
 enum AdminSection {
   dashboard('Dashboard', Icons.dashboard_outlined),
   users('User Management', Icons.people_outline),
+  accessRequests('Access Requests', Icons.how_to_reg_outlined),
   models('Model Management', Icons.memory_outlined),
   activities('Activity Logs', Icons.history);
 
@@ -47,6 +49,8 @@ class _AdminShellState extends State<AdminShell> {
         );
       case AdminSection.users:
         return const UserManagementScreen();
+      case AdminSection.accessRequests:
+        return const AccessRequestsScreen();
       case AdminSection.models:
         return const ModelManagementScreen();
       case AdminSection.activities:

@@ -347,6 +347,10 @@ Two things to know before adding tests:
   answering 200 and the assertion would pass while proving nothing.
 - **Call `Storage::fake('local')` in `setUp()`** if the test touches files.
   `RefreshDatabase` rolls back the database but leaves the filesystem alone.
+- **Never hard-code a row id in a URL.** MySQL does not reset AUTO_INCREMENT
+  when a transaction rolls back, so ids keep climbing across tests and
+  `/access-requests/1/approve` starts 404ing part-way through a suite. Read the
+  id back from the model.
 
 The GPU worker is always faked. A real call costs ~20s and Kaggle quota, and
 what is worth testing is our orchestration, not the model.

@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\API\AccessRequestController;
 use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\MeController;
@@ -22,6 +23,12 @@ use App\Http\Controllers\API\UserActivityController;
 Route::post('/login', [AuthController::class, 'login'])
     ->middleware('throttle:5,1')
     ->name('api.login');
+
+// Requests for an account, from the public landing page. Rate limited the
+// same way login is: it is the other unauthenticated write path.
+Route::post('/access-requests', [AccessRequestController::class, 'store'])
+    ->middleware('throttle:5,1')
+    ->name('api.access-requests.store');
 
 // Protected routes (authentication required)
 Route::middleware('auth:sanctum')->group(function () {
@@ -60,6 +67,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/models/{id}/health-check', [ModelController::class, 'healthCheck'])->name('api.admin.models.health');
         Route::post('/models/{id}/test', [ModelController::class, 'testPrediction'])->name('api.admin.models.test');
         
+        // Access requests
+        Route::get('/access-requests', [AccessRequestController::class, 'index'])->name('api.admin.access-requests.index');
+        Route::post('/access-requests/{id}/approve', [AccessRequestController::class, 'approve'])->name('api.admin.access-requests.approve');
+        Route::post('/access-requests/{id}/reject', [AccessRequestController::class, 'reject'])->name('api.admin.access-requests.reject');
+        Route::delete('/access-requests/{id}', [AccessRequestController::class, 'destroy'])->name('api.admin.access-requests.destroy');
+
         // Activity logs
         Route::get('/activities', [UserActivityController::class, 'index'])->name('api.admin.activities.index');
         Route::get('/activities/types', [UserActivityController::class, 'getTypes'])->name('api.admin.activities.types');
