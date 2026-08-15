@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\MeController;
 use App\Http\Controllers\API\UserController;
@@ -63,10 +64,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users/{id}/activities', [UserActivityController::class, 'userActivities'])->name('api.admin.activities.user');
     });
     
-    // User routes (coming soon)
-    // Route::prefix('predictions')->group(function () {
-    //     // Upload & predict
-    //     // View results
-    //     // History
-    // });
+    // Prediction pipeline (FASE 3). Every action is scoped to the caller in
+    // AnalysisController, so these are open to any authenticated role.
+    Route::prefix('predictions')->group(function () {
+        Route::get('/', [AnalysisController::class, 'index'])->name('api.predictions.index');
+        Route::post('/', [AnalysisController::class, 'store'])->name('api.predictions.store');
+        Route::get('/{id}', [AnalysisController::class, 'show'])->name('api.predictions.show');
+        Route::delete('/{id}', [AnalysisController::class, 'destroy'])->name('api.predictions.destroy');
+        Route::get('/{id}/download/results', [AnalysisController::class, 'downloadResults'])->name('api.predictions.download.results');
+        Route::get('/{id}/download/complete', [AnalysisController::class, 'downloadComplete'])->name('api.predictions.download.complete');
+    });
 });

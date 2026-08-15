@@ -59,6 +59,23 @@ availability as a **count only** — endpoint URLs stay admin-only.
 Without these an ordinary researcher could reach nothing but `GET /user`,
 since everything under `/admin` requires the admin role.
 
+#### Predictions (6) - Any authenticated user (FASE 3)
+- `POST /api/predictions` - Upload a ZIP of numbered `.tif` frames, queue a job
+- `GET /api/predictions` - List the caller's own jobs, paginated
+- `GET /api/predictions/{id}` - Job detail, including queue position while pending
+- `DELETE /api/predictions/{id}` - Delete a job and its files
+- `GET /api/predictions/{id}/download/results` - ZIP of generated frames only
+- `GET /api/predictions/{id}/download/complete` - ZIP of input + output + `metadata.json`
+
+Every action is scoped to `auth()->user()` inside `AnalysisController`, so
+these need no admin role. Downloads stream and carry `X-Checksum-MD5`.
+
+**Upload contract.** The ZIP must hold at least two `.tif`/`.tiff` files whose
+names contain frame numbers, and those numbers must leave a **gap** — the job
+interpolates what is missing between them. `frame_001.tif` + `frame_005.tif`
+generates 002, 003 and 004. Consecutive frames are rejected with a clear
+message, as is any job that would generate more than 200 frames.
+
 #### Activity Logs (3) - Admin Only
 - `GET /api/admin/activities` - List all activities with filters
 - `GET /api/admin/activities/types` - Get activity types
@@ -357,27 +374,55 @@ php artisan octane:stop
 ### SIGINT Error on Windows
 Already patched in `vendor/laravel/octane/src/Commands/Concerns/InteractsWithServers.php`
 
-### New route returns 404 after you added it
+### ⚠️ Octane cannot restart itself on Windows — read this before debugging a 404
 
-Octane holds the booted application in memory, and **`php artisan octane:reload`
-does not work on Windows** (it relies on PCNTL signals). A new route stays
-invisible until the RoadRunner process itself is replaced:
+**Symptom:** you add a route, `php artisan route:list` shows it, but the server
+keeps returning 404. You run `npm run octane` again and nothing changes.
+
+**Cause:** two Windows limitations stacking up.
+
+1. Octane holds the booted application in memory, so a new route is invisible
+   until the RoadRunner process is genuinely replaced. `octane:reload` cannot
+   do it — it needs PCNTL signals.
+2. `octane:start` and `octane:stop` both begin by asking
+   `ServerProcessInspector::serverIsRunning()`, which reads
+   `storage/logs/octane-server-state.json` and calls **`posix_kill()`** on the
+   recorded PID. That function does not exist on Windows, so both commands die
+   with:
+
+   ```
+   Call to undefined function Laravel\Octane\posix_kill()
+     at vendor\laravel\octane\src\PosixExtension.php:14
+   ```
+
+   They crash *before* doing anything, leaving the old process running. This is
+   why a restart appears to succeed but changes nothing.
+
+**Fix — delete the state file, then start:**
 
 ```bash
-php artisan octane:stop     # or close the terminal running it
+# 1. Kill the running server by PID (octane:stop will not work)
+netstat -ano | findstr :8000
+taskkill /PID <PID> /F
+
+# 2. Remove the stale state file, or the next start crashes on posix_kill
+rm storage/logs/octane-server-state.json
+
+# 3. Start fresh
 npm run octane
 ```
 
-Confirm you are actually looking at a fresh process — compare its start time
-against the file you edited:
+**Verify you are on a new process** rather than trusting the restart — compare
+its start time against the file you edited:
 
 ```bash
 netstat -ano | findstr :8000
-php artisan route:list --path=api/me     # proves the route is registered on disk
+powershell "Get-Process -Id <PID> | Select-Object Id,StartTime"
 ```
 
-`route:list` runs in its own process, so it can happily show a route that the
-running server has never loaded.
+Note that `php artisan route:list` runs in its own short-lived process, so it
+will happily show a route the running server has never loaded. It proves the
+route exists on disk, nothing more.
 
 ### Slow Response Times
 - Use Octane instead of `php artisan serve`

@@ -25,6 +25,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.0] - 2026-08-15
+
+### 🔬 FASE 3 backend: the prediction pipeline actually runs
+
+`AnalysisController` was already ~530 lines of upload, extraction, validation,
+queue-position, dual download and delete logic — but it had never been wired up
+or run once. Five separate defects each made it fail outright.
+
+#### Fixed
+
+**1. `AnalysisRecord` was an empty model**
+- It carried nothing but `protected $guarded = []`: no relations and no casts.
+- Every `->with('model:id,name,version')` in the controller threw
+  `Call to undefined relationship [model]`, so `index()` and `show()` could
+  never return.
+- `expires_at` came back from the database as a plain string, so
+  `$prediction->expires_at->toIso8601String()` failed on any record read back
+  from the database (it only appeared to work right after `create()`, while the
+  Carbon instance was still in memory).
+- Added `user()` / `model()` relations, casts, `$fillable`, and small
+  lifecycle helpers.
+
+**2. `ProcessDeepLearningImage` targeted an API that does not exist**
+- It POSTed **JSON** containing `t0_image_url` / `t2_image_url` to a
+  **hard-coded** ngrok URL, and wrote to `t0_image_path` / `t2_image_path` —
+  columns the folder-based upload flow never populates.
+- The real worker takes **multipart** `file_t0`, `file_t2` and `time_scalar`,
+  streams a TIFF back, and reports handled failures as JSON with HTTP 200.
+- Rewritten: reads the endpoint from the model record, sorts input frames by
+  their trailing frame number, and fills each gap by **recursive**
+  interpolation at t=0.5 — the generated midpoint becomes a boundary for the
+  two halves around it. Output frames inherit the neighbour's prefix and zero
+  padding (`frame_001.tif` + `frame_005.tif` → `frame_002/003/004.tif`).
+- Guards: consecutive frames are rejected with an actionable message before any
+  GPU time is spent, and jobs that would generate more than 200 frames are
+  refused up front. `tries = 1`, since a retry would redo completed frames.
+- `failed()` handler added — without it a crashed job sat on `processing`
+  forever.
+- Model concurrency counters are now incremented and, in a `finally` block,
+  always decremented; previously `current_jobs_count` would have drifted upward
+  and never recovered.
+
+**3. `t0_image_path` / `t2_image_path` were `NOT NULL` with no default**
+- Legacy columns from the superseded single-pair design. Every insert from the
+  new upload endpoint died with
+  `SQLSTATE[HY000]: General error: 1364 Field 't0_image_path' doesn't have a default value`.
+- New migration makes them nullable rather than dropping them.
+
+**4. Downloads crashed on `deleteFileAfterSend()`**
+- `response()->streamDownload(...)->deleteFileAfterSend(true)` — that method
+  exists on `BinaryFileResponse`, not `StreamedResponse`, so both download
+  routes returned HTTP 500.
+- Switched to `response()->download()`, which also honours HTTP **Range**
+  requests, giving the resumable downloads the design called for.
+
+**5. Every download leaked a full-size ZIP (Octane-specific)**
+- Symfony performs the `deleteFileAfterSend` unlink inside
+  `BinaryFileResponse::sendContent()`, which **Octane never calls** — it
+  converts the response to PSR-7 for RoadRunner instead. Each download left a
+  complete copy of the results in `temp/downloads` forever; at the documented
+  ~1.5 GB per job that is a fast route to a full disk.
+- The temp ZIP is now removed in an `app()->terminating()` callback, which does
+  run under Octane, and `predictions:cleanup` sweeps anything older than an
+  hour as a safety net for requests that die mid-flight.
+
+#### Added
+
+- **6 routes registered** under `/api/predictions` (they had been commented out
+  in `routes/api.php`): list, upload, show, delete, and the two download
+  variants.
+- **`predictions:cleanup`** command enforcing the 24-hour retention window:
+  deletes files, keeps the record, stamps `files_deleted_at`. Supports
+  `--dry-run` and reports bytes freed. Scheduled **hourly** rather than daily so
+  files expire close to their stated deadline.
+
+#### Verified end to end against the live Kaggle worker
+
+- Upload of a ZIP holding `frame_001.tif` + `frame_005.tif` → HTTP 201, queued
+- Job ran and produced exactly **3 frames** — `frame_002/003/004.tif`, 2 MB each
+- File timestamps confirm the recursion order: **003 first, then 002 and 004**
+- `download/results` → 200, ZIP holds the 3 generated frames, and the
+  `X-Checksum-MD5` header matches the file's actual MD5 exactly
+- `download/complete` → 200, `input/` + `output/` + correct `metadata.json`
+- `Accept-Ranges: bytes` present, so downloads resume
+- Consecutive frames → job fails fast with a clear message, no GPU time spent
+- Expired record → files deleted, record kept, download returns **410**,
+  `show()` reports `files_available: false`
+- Three consecutive downloads → **zero** temp files left behind
+- `DELETE` removes both record and files
+
+#### Still to do in FASE 3
+
+Chunked/resumable **upload** (>50 MB), the Flutter upload and results screens,
+and in-app progress polling. The backend contract they need is now stable.
+
+---
+
 ## [1.4.0] - 2026-08-15
 
 ### 👤 Researcher console (web + mobile)
