@@ -34,7 +34,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
     final success = await authProvider.login(
       _emailController.text.trim(),
       _passwordController.text,
@@ -65,16 +65,21 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isMobile = constraints.maxWidth < 768;
-          
-          if (isMobile) {
-            return _buildMobileLayout();
-          } else {
-            return _buildDesktopLayout();
-          }
-        },
+      backgroundColor: AppTheme.surface,
+      // No AppBar on this screen, so nothing reserves room for the system
+      // status bar and the form would render under the clock and battery.
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 768;
+
+            if (isMobile) {
+              return _buildMobileLayout();
+            } else {
+              return _buildDesktopLayout();
+            }
+          },
+        ),
       ),
     );
   }
@@ -85,10 +90,7 @@ class _LoginPageState extends State<LoginPage> {
         color: AppTheme.surface,
         padding: const EdgeInsets.all(24),
         child: Column(
-          children: [
-            const SizedBox(height: 40),
-            _buildFormContent(),
-          ],
+          children: [const SizedBox(height: 40), _buildFormContent()],
         ),
       ),
     );
@@ -113,12 +115,9 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         ),
-        
+
         // Right Panel: Hero Image (60%)
-        Expanded(
-          flex: 6,
-          child: _buildHeroPanel(),
-        ),
+        Expanded(flex: 6, child: _buildHeroPanel()),
       ],
     );
   }
@@ -135,20 +134,13 @@ class _LoginPageState extends State<LoginPage> {
           // Branding / Header
           Row(
             children: [
-              const Icon(
-                Icons.science,
-                size: 40,
-                color: AppTheme.primary,
-              ),
+              const Icon(Icons.science, size: 40, color: AppTheme.primary),
               const SizedBox(width: 12),
-              Text(
-                'BRIN',
-                style: Theme.of(context).textTheme.headlineLarge,
-              ),
+              Text('BRIN', style: Theme.of(context).textTheme.headlineLarge),
             ],
           ),
           const SizedBox(height: 32),
-          
+
           Text(
             'Institutional Access',
             style: Theme.of(context).textTheme.displaySmall,
@@ -156,23 +148,16 @@ class _LoginPageState extends State<LoginPage> {
           const SizedBox(height: 8),
           Text(
             'Secure authentication gateway for authorized researchers.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppTheme.textMuted,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted),
           ),
           const SizedBox(height: 4),
-          Container(
-            width: 40,
-            height: 4,
-            color: AppTheme.primary,
-          ),
+          Container(width: 40, height: 4, color: AppTheme.primary),
           const SizedBox(height: 32),
 
           // Email Field
-          Text(
-            'EMAIL ADDRESS',
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
+          Text('EMAIL ADDRESS', style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 8),
           TextFormField(
             controller: _emailController,
@@ -209,10 +194,7 @@ class _LoginPageState extends State<LoginPage> {
           const SizedBox(height: 24),
 
           // Password Field
-          Text(
-            'PASSWORD',
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
+          Text('PASSWORD', style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 8),
           TextFormField(
             controller: _passwordController,
@@ -261,9 +243,9 @@ class _LoginPageState extends State<LoginPage> {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 authProvider.errorMessage!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppTheme.error,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppTheme.error),
               ),
             ),
 
@@ -332,10 +314,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
               ),
-              Text(
-                ' | ',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              Text(' | ', style: Theme.of(context).textTheme.bodySmall),
               TextButton(
                 onPressed: () {
                   // TODO: Navigate to IT support
@@ -373,7 +352,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
-          
+
           // Pattern overlay
           Positioned.fill(
             child: Opacity(
@@ -387,7 +366,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
-          
+
           // Content
           Positioned(
             bottom: 48,
@@ -416,7 +395,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
-          
+
           // BRIN Icon watermark
           Positioned(
             top: 48,

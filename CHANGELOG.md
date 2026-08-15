@@ -25,6 +25,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.1] - 2026-08-15
+
+### 📱 UI/UX pass on the public shell
+
+#### Fixed
+
+**The app drew underneath the system status bar (Android)**
+- `SafeArea` was used **nowhere in the app**. `LandingPage` draws its own fixed
+  header inside a `Stack` instead of using an `AppBar`, `LoginPage` has no
+  `AppBar` at all, and the wide `AdminShell` layout drops its `AppBar` — so in
+  all three the content started at y=0 and ran under the clock, signal and
+  battery icons. Scaffold only applies that inset automatically when an
+  `AppBar` is present.
+- All three now wrap their body in `SafeArea`, and their Scaffold background is
+  painted so the reserved strip reads as part of the header rather than a stray
+  white band.
+- `main()` now sets a transparent status bar with dark icons
+  (`SystemUiOverlayStyle`), which suits the light theme.
+- A test asserts the landing header starts below a simulated 44px inset.
+
+**Header navigation disappeared on laptop-width windows**
+- The tabs collapsed into a menu below 1000px, which is wider than many laptop
+  browser windows. Added a separate `_navBreakpoint` of **760px** so the tabs
+  stay inline much further down; the section-stacking breakpoint stays at
+  1000px. Layout tests cover 760px and 759px, the two sides of the boundary.
+
+#### Changed
+
+- The narrow-screen navigation is now a proper slide-in **`Drawer`** rather
+  than a `PopupMenuButton`, matching what `AdminShell` already does. It carries
+  the brand block, the four sections with the active one highlighted, and the
+  login button.
+
+#### Verified
+
+- `flutter analyze` → **No issues found!**
+- `flutter test` → **All tests passed!** (12 tests)
+- `flutter build web --release` and `flutter build apk --release` → success
+
+---
+
 ## [1.3.0] - 2026-08-15
 
 ### 📱 Landing page made responsive + project put under version control

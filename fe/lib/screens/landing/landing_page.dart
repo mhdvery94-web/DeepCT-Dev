@@ -5,6 +5,9 @@ import '../auth/login_page.dart';
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
 
+  /// Identifies the fixed header so tests can assert it clears the status bar.
+  static const Key headerKey = Key('landing-header');
+
   @override
   State<LandingPage> createState() => _LandingPageState();
 }
@@ -20,19 +23,31 @@ class _LandingPageState extends State<LandingPage> {
 
   String _activeSection = 'home';
 
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   /// Breakpoints, matching the ones documented in fe/README.md.
   ///
-  /// Below [_desktopBreakpoint] the two-column sections stack vertically and
-  /// the header collapses its inline navigation into a menu. Without this the
-  /// page is a fixed desktop layout and overflows on anything narrower.
+  /// Below [_desktopBreakpoint] the two-column sections stack vertically.
+  /// Without this the page is a fixed desktop layout and overflows on
+  /// anything narrower.
   static const double _desktopBreakpoint = 1000;
   static const double _mobileBreakpoint = 600;
+
+  /// The header keeps its inline tabs further down than the section layout
+  /// does. The four tabs plus the login button still fit comfortably at this
+  /// width, and collapsing them at 1000px hid the navigation on ordinary
+  /// laptop windows.
+  static const double _navBreakpoint = 760;
 
   bool _isDesktop(BuildContext context) =>
       MediaQuery.of(context).size.width >= _desktopBreakpoint;
 
   bool _isMobile(BuildContext context) =>
       MediaQuery.of(context).size.width < _mobileBreakpoint;
+
+  /// True while the header shows tabs rather than a hamburger.
+  bool _isNavInline(BuildContext context) =>
+      MediaQuery.of(context).size.width >= _navBreakpoint;
 
   /// Section gutter: generous on desktop, tight enough to be usable on a phone.
   EdgeInsets _sectionPadding(BuildContext context) => EdgeInsets.symmetric(
@@ -128,55 +143,67 @@ class _LandingPageState extends State<LandingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          // Scrollable content
-          SingleChildScrollView(
-            controller: _scrollController,
-            child: Column(
-              children: [
-                // Spacer untuk header (agar content tidak tertutup header)
-                const SizedBox(height: 64),
+      key: _scaffoldKey,
+      // Painted behind the status bar strip that SafeArea reserves, so the
+      // gap reads as part of the header rather than a stray white band.
+      backgroundColor: AppTheme.surface,
+      drawer: _isNavInline(context) ? null : _buildNavDrawer(context),
+      // This page draws its own fixed header inside a Stack instead of using
+      // an AppBar, so nothing was reserving room for the system status bar and
+      // the header rendered underneath the clock and battery icons.
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
+          children: [
+            // Scrollable content
+            SingleChildScrollView(
+              controller: _scrollController,
+              child: Column(
+                children: [
+                  // Spacer untuk header (agar content tidak tertutup header)
+                  const SizedBox(height: 64),
 
-                // Hero Section (Home)
-                Container(
-                  key: _sectionKeys['home'],
-                  child: _buildHeroSection(context),
-                ),
+                  // Hero Section (Home)
+                  Container(
+                    key: _sectionKeys['home'],
+                    child: _buildHeroSection(context),
+                  ),
 
-                // About Section
-                Container(
-                  key: _sectionKeys['about'],
-                  child: _buildAboutSection(context),
-                ),
+                  // About Section
+                  Container(
+                    key: _sectionKeys['about'],
+                    child: _buildAboutSection(context),
+                  ),
 
-                // Research Section
-                Container(
-                  key: _sectionKeys['research'],
-                  child: _buildResearchSection(context),
-                ),
+                  // Research Section
+                  Container(
+                    key: _sectionKeys['research'],
+                    child: _buildResearchSection(context),
+                  ),
 
-                // Join Section
-                Container(
-                  key: _sectionKeys['join'],
-                  child: _buildJoinSection(context),
-                ),
+                  // Join Section
+                  Container(
+                    key: _sectionKeys['join'],
+                    child: _buildJoinSection(context),
+                  ),
 
-                // Footer
-                _buildFooter(context),
-              ],
+                  // Footer
+                  _buildFooter(context),
+                ],
+              ),
             ),
-          ),
 
-          // Fixed Header di atas
-          Positioned(top: 0, left: 0, right: 0, child: _buildHeader(context)),
-        ],
+            // Fixed Header di atas
+            Positioned(top: 0, left: 0, right: 0, child: _buildHeader(context)),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
     return Container(
+      key: LandingPage.headerKey,
       height: 64,
       decoration: BoxDecoration(
         color: AppTheme.surface,
@@ -191,7 +218,9 @@ class _LandingPageState extends State<LandingPage> {
           ),
         ],
       ),
-      padding: EdgeInsets.symmetric(horizontal: _isDesktop(context) ? 40 : 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: _isNavInline(context) ? 40 : 16,
+      ),
       child: Row(
         children: [
           // Logo
@@ -208,17 +237,22 @@ class _LandingPageState extends State<LandingPage> {
 
           const Spacer(),
 
-          // Navigation: inline on desktop, collapsed into a menu below that.
-          // Four buttons plus the login button do not fit on a phone.
-          if (_isDesktop(context)) ...[
+          // Navigation: inline tabs down to _navBreakpoint, a hamburger that
+          // opens the drawer below that. Four tabs plus the login button do
+          // not fit on a phone.
+          if (_isNavInline(context)) ...[
             _buildNavButton(context, 'home', 'HOME'),
             _buildNavButton(context, 'about', 'ABOUT'),
             _buildNavButton(context, 'research', 'RESEARCH'),
             _buildNavButton(context, 'join', 'JOIN'),
             const SizedBox(width: 24),
           ] else ...[
-            _buildNavMenu(context),
-            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Menu',
+              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              icon: const Icon(Icons.menu, size: 22),
+            ),
+            const SizedBox(width: 4),
           ],
 
           // Login Button
@@ -236,8 +270,9 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
-  /// Compact replacement for the inline nav buttons on narrow screens.
-  Widget _buildNavMenu(BuildContext context) {
+  /// Slide-in navigation for narrow screens, matching the drawer the admin
+  /// console uses so both halves of the app behave the same way.
+  Widget _buildNavDrawer(BuildContext context) {
     const labels = {
       'home': 'HOME',
       'about': 'ABOUT',
@@ -245,28 +280,102 @@ class _LandingPageState extends State<LandingPage> {
       'join': 'JOIN',
     };
 
-    return PopupMenuButton<String>(
-      tooltip: 'Sections',
-      icon: const Icon(Icons.menu, size: 22),
+    return Drawer(
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      onSelected: _scrollToSection,
-      itemBuilder: (context) => [
-        for (final entry in labels.entries)
-          PopupMenuItem<String>(
-            value: entry.key,
-            child: Text(
-              entry.value,
-              style: TextStyle(
-                fontWeight: _activeSection == entry.key
-                    ? FontWeight.w600
-                    : FontWeight.normal,
-                color: _activeSection == entry.key
-                    ? AppTheme.primary
-                    : AppTheme.textPrimary,
+      backgroundColor: AppTheme.surface,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Brand block, mirroring the sidebar header in AdminShell.
+            Container(
+              height: 88,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppTheme.border)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.science, color: AppTheme.primary, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'BRIN',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        Text(
+                          'Neutron CT Platform',
+                          style: Theme.of(context).textTheme.labelSmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 8),
+
+            for (final entry in labels.entries)
+              _buildDrawerItem(context, entry.key, entry.value),
+
+            const Spacer(),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context); // close the drawer first
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginPage()),
+                    );
+                  },
+                  child: const Text('LOGIN'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawerItem(BuildContext context, String section, String label) {
+    final isActive = _activeSection == section;
+
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context);
+        _scrollToSection(section);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: isActive ? AppTheme.primaryLight : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: isActive ? AppTheme.primary : Colors.transparent,
+              width: 3,
+            ),
           ),
-      ],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+            color: isActive ? AppTheme.primary : AppTheme.textPrimary,
+          ),
+        ),
+      ),
     );
   }
 

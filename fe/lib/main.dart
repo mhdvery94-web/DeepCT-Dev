@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'services/auth_provider.dart';
@@ -7,6 +8,19 @@ import 'screens/admin/admin_shell.dart';
 import 'screens/user/user_dashboard.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // The whole app is light-themed, so the status bar needs dark icons to stay
+  // readable. Screens without an AppBar must also leave the status bar strip
+  // free -- see the SafeArea in LandingPage and LoginPage.
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark, // Android
+      statusBarBrightness: Brightness.light, // iOS
+    ),
+  );
+
   runApp(const MyApp());
 }
 
@@ -54,9 +68,7 @@ class _AppInitializerState extends State<AppInitializer> {
         if (authProvider.isLoading) {
           return const Scaffold(
             body: Center(
-              child: CircularProgressIndicator(
-                color: AppTheme.primary,
-              ),
+              child: CircularProgressIndicator(color: AppTheme.primary),
             ),
           );
         }
