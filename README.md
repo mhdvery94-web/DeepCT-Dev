@@ -140,6 +140,7 @@ Kaggle, bukan backend.
 | File | Isi |
 |---|---|
 | [CLAUDE.md](CLAUDE.md) | Kontrak kerja untuk agent + jebakan yang memakan waktu |
+| [ROADMAP.md](ROADMAP.md) | Rencana kerja berurutan, dan apa yang sengaja tidak dikerjakan |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Komponen, alur data, skema database, keputusan teknis |
 | [API.md](API.md) | Referensi 35 endpoint |
 | [be/README.md](be/README.md) | Setup, troubleshooting, dan perintah backend |

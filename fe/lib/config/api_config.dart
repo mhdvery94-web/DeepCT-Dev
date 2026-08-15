@@ -35,8 +35,12 @@ class ApiConfig {
   static const String logout = '/logout';
   static const String user = '/user';
 
+  // Public: request an account from the landing page
+  static const String accessRequests = '/access-requests';
+
   // Admin endpoints
   static const String adminUsers = '/admin/users';
+  static const String adminAccessRequests = '/admin/access-requests';
   static const String adminModels = '/admin/models';
   static const String adminActivities = '/admin/activities';
 
