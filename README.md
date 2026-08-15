@@ -89,9 +89,10 @@ bukan disalin dari catatan lama.
 | Pipeline prediksi — upload → interpolasi rekursif → download | ✅ |
 | Chunked upload resumable | ✅ |
 | Retensi 24 jam (`predictions:cleanup`) | ✅ |
+| Pratinjau frame hasil di aplikasi (TIFF 16-bit → PNG) | ✅ |
 | 35 endpoint API + `/api/health` | ✅ |
 | `flutter analyze` 0 issue, 21 test Flutter lulus | ✅ |
-| **71 test backend lulus** (238 assertion, ~22 detik) | ✅ |
+| **89 test backend lulus** (295 assertion, ~20 detik) | ✅ |
 | Build web & APK release | ✅ (APK ~52 MB) |
 
 Terverifikasi end-to-end terhadap worker Kaggle sungguhan dengan dua frame
@@ -104,7 +105,6 @@ unduhan cocok dengan header.
 |---|---|
 | **Test untuk layar Flutter yang mengambil data** | Butuh mocking API; yang ada baru layout, parsing, dan navigasi |
 | **Git remote** | Repo ini lokal saja — tidak ada cadangan di luar mesin ini |
-| **Pratinjau frame hasil** | Hasil hanya bisa diunduh, belum bisa dilihat di aplikasi |
 | **Resume upload dari sisi klien** | Server sudah mendukung; klien belum menyimpan sesi yang terputus |
 | **`applicationId`** | Masih `com.example.fe`, harus diganti sebelum distribusi |
 | **Deployment** | Belum ada; masih development di Laragon + ngrok |

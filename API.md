@@ -93,6 +93,8 @@ Tiap aksi di-scope ke pemanggil di dalam `AnalysisController`.
 | `POST` | `/predictions` | Unggah arsip dalam satu request |
 | `GET` | `/predictions/{id}` | Detail; memuat posisi antrean saat masih pending |
 | `DELETE` | `/predictions/{id}` | Hapus job beserta berkasnya |
+| `GET` | `/predictions/{id}/frames` | Daftar frame di disk (input + output) |
+| `GET` | `/predictions/{id}/frames/{name}/preview` | Frame itu sebagai PNG |
 | `GET` | `/predictions/{id}/download/results` | ZIP berisi frame hasil saja |
 | `GET` | `/predictions/{id}/download/complete` | ZIP berisi `input/`, `output/`, `metadata.json` |
 
@@ -116,6 +118,27 @@ Entri di dalam subfolder tetap terbaca — ekstraksi meratakannya.
   "input_files_count": 2, "queue_position": 1,
   "estimated_wait_minutes": 5, "expires_at": "2026-08-16T04:41:29+00:00" }
 ```
+
+### Pratinjau frame
+
+Frame di disk berupa **TIFF 16-bit**, yang tidak bisa dirender browser maupun
+Flutter. `preview` mengubahnya jadi PNG grayscale 8-bit di server.
+
+`GET /predictions/{id}/frames` mengembalikan `name`, `kind` (`input`/`output`),
+dan `size`.
+
+`GET /predictions/{id}/frames/{name}/preview?size=512` mengembalikan PNG.
+`size` adalah sisi terpanjang (64–2048, default 512); aspek rasio dipertahankan
+dan frame kecil tidak diperbesar.
+
+- Hasil di-cache di samping job, jadi ikut terhapus oleh `predictions:cleanup`.
+  Render pertama ~0,5 detik untuk frame 1024×1024; berikutnya ~0,07 detik.
+- Konversi 16→8 bit **di-window ke min/max frame itu sendiri**, bukan sekadar
+  membuang byte bawah — frame CT jarang memakai seluruh rentang 16-bit, dan
+  pergeseran naif membuatnya tampak hitam pekat.
+- Hanya menerima TIFF **tanpa kompresi, satu kanal**. Selain itu ditolak
+  **422** dengan alasannya, bukan gambar rusak.
+- Frame tidak ditemukan → **404**; berkas sudah kedaluwarsa → **410**.
 
 ### Unduhan
 

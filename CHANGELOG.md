@@ -33,6 +33,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.10.0] - 2026-08-15
+
+### 🖼️ Frame preview — results can finally be looked at
+
+Until now a completed job could only be downloaded blind: the researcher had no
+way to see whether the interpolation was any good without pulling a
+multi-megabyte archive and opening it in other software.
+
+#### The obstacle
+
+Frames are **16-bit grayscale TIFF**, which neither a browser nor Flutter can
+decode. And this machine has **neither the GD nor the Imagick extension**, so
+there was no library to convert with either.
+
+`TiffPreview` therefore decodes the TIFF and encodes the PNG in plain PHP. That
+is only reasonable because the input is narrow and predictable — the worker
+returns uncompressed single-channel frames — and anything outside that shape is
+**refused with a reason** rather than guessed at.
+
+Two details that matter more than they look:
+
+- **The 16→8 bit conversion windows to each frame's own min/max**, rather than
+  dropping the low byte. CT frames rarely span the full 16-bit range, and a
+  naive shift renders most of them as an almost-black square. There is a test
+  asserting a frame whose values sit between 1000 and 1007 still comes out with
+  full contrast.
+- **Downscaling box-averages** instead of dropping pixels, because
+  nearest-neighbour makes CT noise look like structure.
+
+#### Added — Backend
+
+- `GET /api/predictions/{id}/frames` — what is on disk, inputs and outputs.
+- `GET /api/predictions/{id}/frames/{name}/preview?size=N` — that frame as a
+  PNG, longest edge `N` (64–2048). Cached beside the job, so
+  `predictions:cleanup` disposes of the renders too.
+- 18 new tests: 12 unit tests over the decoder/encoder (including big-endian
+  input, WhiteIsZero inversion, flat frames, truncated data, and the formats it
+  must refuse) and 6 feature tests over the endpoints.
+
+#### Added — Frontend
+
+- `FrameGalleryScreen` — responsive grid (2–5 columns), generated frames
+  outlined and badged `AI`, a "generated only" filter, and a full-screen viewer
+  with pan/zoom that pages between frames.
+- Frames are ordered by **frame number**, so uploaded and generated frames
+  interleave in sequence order rather than grouping by kind — which is the
+  whole point of looking at them.
+- Thumbnails are fetched at 256px and the viewer at 1024px, so a gallery of
+  forty frames does not pull forty full-resolution images. Bytes go through the
+  authenticated client rather than `Image.network`, which cannot carry a bearer
+  token.
+- The viewer uses a black ground: greyscale CT detail is far easier to read
+  against black, and it is the one screen where the app's light surface fights
+  the content.
+
+#### Verified against real frames, not only fixtures
+
+A 1024×1024 16-bit frame (2,097,262 bytes):
+
+| | |
+|---|---|
+| First render at 256px | 510 ms, **2,495-byte PNG** |
+| Same request again | **71 ms** (cached) |
+| Output validated | 256×256, 8-bit, colour type 0 (greyscale) |
+| Path traversal attempt | **403**, blocked before reaching the app |
+| Expired job | **410** |
+
+The rendered PNG was opened and visually confirmed to match the source frame.
+
+89 backend tests / 295 assertions; `flutter analyze` clean; 21 Flutter tests.
+
+---
+
 ## [1.9.0] - 2026-08-15
 
 ### 🔐 A second login is now refused, not silently granted

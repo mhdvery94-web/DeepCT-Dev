@@ -66,6 +66,8 @@ since everything under `/admin` requires the admin role.
 - `GET /api/predictions` - List the caller's own jobs, paginated
 - `GET /api/predictions/{id}` - Job detail, including queue position while pending
 - `DELETE /api/predictions/{id}` - Delete a job and its files
+- `GET /api/predictions/{id}/frames` - What is on disk, inputs and outputs
+- `GET /api/predictions/{id}/frames/{name}/preview` - That frame as a PNG
 - `GET /api/predictions/{id}/download/results` - ZIP of generated frames only
 - `GET /api/predictions/{id}/download/complete` - ZIP of input + output + `metadata.json`
 
@@ -77,6 +79,18 @@ names contain frame numbers, and those numbers must leave a **gap** — the job
 interpolates what is missing between them. `frame_001.tif` + `frame_005.tif`
 generates 002, 003 and 004. Consecutive frames are rejected with a clear
 message, as is any job that would generate more than 200 frames.
+
+**Frame preview.** Frames on disk are 16-bit TIFFs, which no browser or Flutter
+build can decode. `TiffPreview` renders them to 8-bit greyscale PNG in plain
+PHP — this machine has neither GD nor Imagick, and the input is narrow enough
+(uncompressed, single channel) that hand-decoding is reasonable. Anything
+outside that shape is refused with 422 rather than guessed at.
+
+The 16→8 bit conversion windows to each frame's own min/max instead of dropping
+the low byte; CT frames rarely span the full range and a naive shift renders
+most of them nearly black. Renders are cached beside the job, so
+`predictions:cleanup` disposes of them too. A 1024×1024 frame takes ~0.5s to
+render and ~0.07s thereafter.
 
 #### Chunked upload (5) - Any authenticated user
 
@@ -307,7 +321,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**67 tests, 223 assertions, ~20s.** They run against MySQL, not sqlite: two
+**89 tests, 295 assertions, ~20s.** They run against MySQL, not sqlite: two
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:
@@ -323,6 +337,7 @@ CREATE DATABASE db_aict_test;
 | `PredictionPipelineTest` | recursive interpolation, worker contract, failure paths, counter release |
 | `ChunkedUploadTest` | ordering, idempotency, ownership, session cleanup |
 | `PredictionCleanupTest` | 24-hour retention and the temp sweeps |
+| `TiffPreviewTest` (unit) | TIFF decoding, windowing, downscaling, PNG output, and the formats it must refuse |
 
 Two things to know before adding tests:
 

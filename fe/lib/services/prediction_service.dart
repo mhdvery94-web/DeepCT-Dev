@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import '../config/api_config.dart';
 import '../models/pagination.dart';
 import '../models/prediction.dart';
+import '../models/prediction_frame.dart';
 import 'api_client.dart';
 
 /// Result of a completed download, already verified against the checksum the
@@ -72,6 +73,36 @@ class PredictionService {
   /// DELETE /predictions/{id}
   Future<void> delete(int id) async {
     await _api.delete('${ApiConfig.predictions}/$id');
+  }
+
+  /// GET /predictions/{id}/frames — what is on disk, inputs and outputs.
+  Future<List<PredictionFrame>> frames(int id) async {
+    final body = await _api.get('${ApiConfig.predictions}/$id/frames');
+
+    return (body['data'] as List? ?? [])
+        .map(
+          (e) => PredictionFrame.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
+        .toList();
+  }
+
+  /// GET /predictions/{id}/frames/{name}/preview — the frame as a PNG.
+  ///
+  /// The frames themselves are 16-bit TIFFs, which neither a browser nor
+  /// Flutter can decode, so the server renders them. Bytes are fetched through
+  /// the authenticated client rather than handed to `Image.network`, which has
+  /// no way to carry the bearer token.
+  Future<Uint8List> framePreview({
+    required int id,
+    required String name,
+    int size = 512,
+  }) async {
+    final result = await _api.getBytes(
+      '${ApiConfig.predictions}/$id/frames/${Uri.encodeComponent(name)}/preview'
+      '?size=$size',
+    );
+
+    return result.bytes;
   }
 
   /// Uploads [bytes] and queues a prediction, picking the transport that fits.
