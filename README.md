@@ -394,11 +394,11 @@ Diverifikasi langsung terhadap aplikasi yang berjalan, bukan dari catatan lama:
 | Tunnel ngrok backend | ✅ hidup (domain reserved, tetap sama antar restart) |
 | Endpoint model AI (Kaggle) | ✅ `online` — **mati saat sesi Kaggle putus**, cek ulang dengan `php artisan models:health-check` |
 | `flutter analyze` | ✅ 0 issues |
-| `flutter test` | ✅ 1 smoke test lulus (sebelumnya stub counter yang gagal) |
+| `flutter test` | ✅ 6 test lulus (boot + layout di 5 viewport) |
 | `flutter build apk --release` | ✅ `app-release.apk` 51 MB |
 | `flutter build web --release` | ✅ `build/web` (`--wasm` belum bisa, lihat fe/README) |
 | Test otomatis backend | ❌ belum ada — `be/tests/` cuma stub bawaan Laravel |
 | Angka "30/30" & "23/23" di dokumen lama | ⚠️ itu checklist `curl` manual, bukan suite |
 | Scheduler (`schedule:work`) | ❌ tidak jalan by default — status model jadi basi kalau tidak dijalankan |
-| Version control | ❌ folder ini belum berupa git repository |
+| Version control | ✅ git repository aktif di root (branch `main`) |
 | FASE 3 (upload/prediksi) | ⏳ belum mulai — route `predictions` masih dikomentari di `be/routes/api.php` |
