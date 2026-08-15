@@ -1,5 +1,14 @@
 # 🧪 Jurnal Eksperimen AI & Deep Learning
 
+> **Status: jurnal riset model — dokumen paling awet di repo ini.**
+> Berisi alasan di balik keputusan yang tidak terbaca dari kode, terutama
+> **mengapa interpolasi selalu t=0.5**: model mengabaikan nilai `time_scalar`
+> lain, sehingga celah besar diisi secara rekursif dari titik tengah.
+> Implementasinya ada di `be/app/Jobs/ProcessDeepLearningImage.php`.
+
+---
+
+
 Dokumen ini berisi catatan masalah, uji coba, dan solusi yang diterapkan pada model kecerdasan buatan selama pengembangan platform.
 
 ---

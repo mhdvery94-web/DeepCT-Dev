@@ -5,6 +5,14 @@ All notable changes to Platform Analisis Citra Neutron CT will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> Entries before v1.7.0 mention documents that no longer exist — `TODO.md`,
+> `PROJECT_STATUS.md`, the `*_SUMMARY.md` family and others were folded into
+> four documents in v1.7.0. Those references are left as written: a changelog
+> records what happened, and rewriting it would be a worse lie than a dead link.
+> Anything still needed lives in [README.md](README.md),
+> [ARCHITECTURE.md](ARCHITECTURE.md), [API.md](API.md) or
+> [CLAUDE.md](CLAUDE.md); the originals remain in git history.
+
 ---
 
 ## [Unreleased]
@@ -22,6 +30,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - iOS mobile app
 - Dark mode
 - Multi-language support
+
+---
+
+## [1.7.0] - 2026-08-15
+
+### 📚 Documentation consolidated: 28 files → 10
+
+The docs had grown to **28 markdown files and 14,182 lines**, most of them
+one-off session summaries that contradicted each other and the code. Three
+separate documents claimed the project was production-ready; one described code
+that did not compile. Finding the current truth meant reading all of them and
+guessing which was newest.
+
+#### Added
+
+- **`CLAUDE.md`** — the working agreement for anyone (human or agent) touching
+  this repo: which four documents to read, four rules, and the traps that
+  actually cost time here (Octane's `posix_kill` restart failure, the missing
+  queue worker, the `file_picker` version corridor, `SafeArea`, the model's
+  multipart contract, and why `route:list` proves nothing). Claude Code loads
+  this automatically.
+- **`API.md`** — endpoint reference regenerated from `route:list`, covering all
+  35 routes including the prediction and chunked-upload families that
+  `API_DOCS.md` never documented.
+
+#### Changed
+
+- **`README.md`** is now the entry point: what runs today, how to start it, and
+  an explicit **"Belum ada"** table. Absorbs `PROJECT_STATUS.md`, `SETUP.md`,
+  `TODO.md` and the headline figures from `TESTING_RESULTS.md`.
+- **`ARCHITECTURE.md`** rewritten to match the running system, absorbing
+  `ARCHITECTURE_FLOW.md`, the schema truth from `DATABASE_STATUS.md` and
+  `be/DATABASE_CLEANUP.md`, and the rationale from `FASE3_DECISIONS.md`. Adds a
+  "why" for each significant decision, including the ones discovered the hard
+  way.
+- `PRD.md`, `DESIGN.md` and `AI_EXPERIMENTS.md` kept, each with a header saying
+  what it is and what supersedes it. `AI_EXPERIMENTS.md` is the most durable
+  document here — it records *why* interpolation is always t=0.5, which is not
+  recoverable from the code.
+
+#### Removed
+
+20 files: `ARCHITECTURE_FLOW`, `API_DOCS`, `DATABASE_STATUS`,
+`FASE2_COMPLETION_SUMMARY`, `FASE3_DECISIONS`, `FASE3_ROADMAP`,
+`PENDING_TASKS_ANALYSIS`, `POLISH_COMPLETION_SUMMARY`, `POLISH_FINAL_SUMMARY`,
+`POLISH_PLAN`, `PROJECT_STATUS`, `QUICK_REFERENCE_SECURITY`, `SECURITY_UPDATE`,
+`SETUP`, `TASK_COMPLETION_SUMMARY`, `TESTING_RESULTS`, `TODO`,
+`be/DATABASE_CLEANUP`, `fe/test_auth`, and `be/CHANGELOG` — that last one was
+**Laravel's own release notes**, left over from `composer create-project` and
+describing the framework rather than this project.
+
+All recoverable from git history.
 
 ---
 

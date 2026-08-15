@@ -1,5 +1,18 @@
 # 📋 Product Requirements Document (PRD)
 
+> **Status: dokumen niat produk, bukan status implementasi.**
+> Ditulis di awal proyek dan sengaja tidak diperbarui mengikuti kode — nilainya
+> justru sebagai catatan apa yang ingin dicapai. Untuk apa yang *sudah* berjalan
+> hari ini, lihat [README.md](README.md); untuk bentuk sistemnya, lihat
+> [ARCHITECTURE.md](ARCHITECTURE.md).
+>
+> Perbedaan yang diketahui: worker model kini berjalan di Kaggle (dokumen ini
+> menyebut Google Colab), dan tidak ada input `time_scalar` manual di produk —
+> selalu 0.5, alasannya di [AI_EXPERIMENTS.md](AI_EXPERIMENTS.md).
+
+---
+
+
 **Platform Analisis Citra Neutron CT - BRIN**
 
 ---

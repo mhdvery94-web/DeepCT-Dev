@@ -1,5 +1,14 @@
 # 🎨 Design System & UI/UX Guidelines
 
+> **Status: panduan design system.** Token warna, tipografi dan komponen di
+> sini adalah acuan. Nilai yang benar-benar dipakai ada di
+> `fe/lib/theme/app_theme.dart`; kalau keduanya berbeda, kode yang menang.
+> Breakpoint responsif yang aktual didokumentasikan di
+> [fe/README.md](fe/README.md).
+
+---
+
+
 Dokumentasi lengkap design system untuk Platform Analisis Citra Neutron CT BRIN.
 
 ---

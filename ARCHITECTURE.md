@@ -1,694 +1,227 @@
-# 🏗️ Arsitektur Sistem - Platform Analisis Citra Neutron CT
+# Arsitektur Sistem
 
-Dokumen ini menjelaskan arsitektur sistem secara detail, termasuk komponen, interaksi, dan alur data dalam platform.
-
----
-
-## 📐 Arsitektur High-Level
-
-Platform ini menggunakan arsitektur **Hybrid Cloud-NAS** yang membagi beban kerja ke dalam tiga lapisan (tier) utama:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         CLIENT TIER                              │
-│                                                                   │
-│  ┌──────────────────┐              ┌──────────────────┐         │
-│  │  Flutter Web     │              │  Flutter Mobile  │         │
-│  │  Application     │              │  (Android)       │         │
-│  └────────┬─────────┘              └────────┬─────────┘         │
-│           │                                 │                    │
-│           └────────────────┬────────────────┘                    │
-│                            │                                     │
-└────────────────────────────┼─────────────────────────────────────┘
-                             │ HTTPS/REST API
-                             │
-┌────────────────────────────┼─────────────────────────────────────┐
-│                            │  GATEWAY & STORAGE TIER             │
-│                            ▼                                      │
-│  ┌──────────────────────────────────────────────────┐           │
-│  │         Laravel 12 API Gateway                    │           │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌──────────┐ │           │
-│  │  │ Auth        │  │ File Upload │  │ Queue    │ │           │
-│  │  │ Controller  │  │ Handler     │  │ Jobs     │ │           │
-│  │  └─────────────┘  └─────────────┘  └──────────┘ │           │
-│  └────────┬──────────────────┬──────────────────────┘           │
-│           │                  │                                   │
-│  ┌────────▼────────┐  ┌──────▼──────────────────────┐          │
-│  │  MySQL Database │  │  Local Storage (NAS Sim)    │          │
-│  │  - Users        │  │  - Input Images (.tif)      │          │
-│  │  - Records      │  │  - Result Images (.tif)     │          │
-│  │  - Models       │  │  - Temp Files               │          │
-│  └─────────────────┘  └─────────────────────────────┘          │
-│                                                                   │
-└────────────────────────────┬─────────────────────────────────────┘
-                             │ HTTP POST (Ngrok Tunnel)
-                             │
-┌────────────────────────────┼─────────────────────────────────────┐
-│                            │  COMPUTE TIER (Cloud GPU)           │
-│                            ▼                                      │
-│  ┌──────────────────────────────────────────────────┐           │
-│  │         Google Colab + FastAPI Server            │           │
-│  │  ┌─────────────────────────────────────────┐    │           │
-│  │  │  Model: GiNet TC-D v3.0                 │    │           │
-│  │  │  - Load .h5 model                       │    │           │
-│  │  │  - Recursive Interpolation Engine       │    │           │
-│  │  │  - GPU-accelerated inference            │    │           │
-│  │  └─────────────────────────────────────────┘    │           │
-│  └──────────────────────────────────────────────────┘           │
-│                                                                   │
-│  Ngrok Tunnel: https://xxx.ngrok-free.dev/predict               │
-└───────────────────────────────────────────────────────────────────┘
-```
+Menggabungkan apa yang dulu tersebar di `ARCHITECTURE_FLOW.md`,
+`FASE3_DECISIONS.md`, `DATABASE_STATUS.md` dan `be/DATABASE_CLEANUP.md`.
+Semua yang tertulis di sini mencerminkan kode yang berjalan per 15 Agustus 2026.
 
 ---
 
-## 🔧 Komponen Sistem
+## 1. Pembagian tanggung jawab
 
-### 1. **Client Tier (Flutter)**
-
-#### **Responsibility**
-- User interface dan user experience
-- Input validation
-- File selection dan preview
-- Display hasil prediksi
-- Session management
-
-#### **Teknologi**
-- Flutter SDK (Dart)
-- Material Design 3
-- Dio (HTTP client)
-- Provider/Riverpod (State management)
-
-#### **Screens**
 ```
-Landing Page (Public)
-├── Hero Section (dengan animasi BRIN)
-├── About Section
-├── Research Section
-└── Join Section
+┌──────────────────────────┐
+│  Flutter                 │  web (JS) + Android
+│  admin & researcher      │
+└────────────┬─────────────┘
+             │ HTTPS, Bearer token (Sanctum)
+             │ lewat tunnel ngrok berdomain tetap
+┌────────────▼─────────────┐
+│  Laravel 12 + Octane     │  RoadRunner, 4 worker, max 250 req/worker
+│  ┌────────────────────┐  │
+│  │ AnalysisController │  │  upload, daftar, unduh
+│  │ PredictionUpload…  │  │  chunked upload
+│  │ MeController       │  │  data milik sendiri
+│  │ Admin controllers  │  │  user, model, activity
+│  └────────────────────┘  │
+│  queue: database         │──► ProcessDeepLearningImage (worker terpisah)
+└──────┬──────────────┬────┘
+       │              │ multipart POST
+┌──────▼──────┐  ┌────▼──────────────────┐
+│  MySQL 8    │  │  FastAPI @ Kaggle     │  bobot .h5, GPU
+│  13 tabel   │  │  di balik ngrok       │  ~18–21 s / frame
+└─────────────┘  └───────────────────────┘
 
-Login Portal
-├── Email/Password Form
-└── Role-based redirect
-
-Dashboard Admin
-├── User Management
-│   ├── List Users
-│   ├── Create User
-│   ├── Edit User
-│   └── View Activity History
-├── Model Management
-│   ├── Model Info
-│   ├── Deployment History
-│   └── Status Monitoring
-└── Settings
-
-Dashboard User
-├── Upload Interface
-│   ├── Drag & Drop Zone
-│   ├── File Preview
-│   └── Validation Feedback
-├── Prediction Results
-│   ├── Image Viewer (T0, T1, T2)
-│   ├── Metrics Display
-│   └── Download/Delete Actions
-├── History
-└── Settings
+storage/app/private/predictions/{user_id}/{job_id}/{input,output}/
 ```
+
+**Mengapa dipisah begini.** Inferensi butuh GPU yang tidak dimiliki mesin
+lokal, sementara data hasil penelitian tidak boleh menetap di layanan pihak
+ketiga. Jadi orkestrasi dan penyimpanan tetap lokal, sementara satu-satunya
+yang menyeberang adalah dua frame per panggilan — dan hasilnya langsung ditarik
+kembali.
+
+**Konsekuensinya yang harus diingat:** worker model bukan milik kita dan sesi
+Kaggle berakhir sendiri. Sistem harus selalu memperlakukan model sebagai
+sesuatu yang bisa hilang kapan saja, bukan dependensi yang pasti ada.
 
 ---
 
-### 2. **Gateway & Storage Tier (Laravel)**
+## 2. Alur prediksi
 
-#### **Responsibility**
-- API Gateway untuk semua requests
-- Authentication & Authorization
-- File management (upload, storage, retrieval)
-- Database operations
-- Queue job processing
-- Business logic layer
-
-#### **Core Modules**
-
-##### **A. Authentication System**
-```php
-Middleware:
-- Sanctum Authentication
-- Role-based Authorization (admin/user)
-- Rate Limiting
-
-Controllers:
-- AuthController
-  - login()
-  - logout()
-  - me()
+```
+1. Peneliti memilih model + arsip .zip
+       │
+2. Upload ─── < 1 MB ──► POST /api/predictions              (satu request)
+       └──── ≥ 1 MB ──► POST   /api/predictions/uploads     (buka sesi)
+                        PATCH  …/{id}   × n                 (per potongan)
+                        POST   …/{id}/finalize
+       │
+3. PredictionIntake: ekstrak .tif (diratakan), validasi, buat AnalysisRecord,
+   dispatch job                                            status: pending
+       │
+4. queue:work mengambil job                                status: processing
+       │
+5. ProcessDeepLearningImage:
+      urutkan frame berdasarkan angka di nama berkas
+      untuk tiap celah → interpolasi rekursif t=0.5
+      simpan tiap hasil ke output/
+       │
+6. Selesai                        status: completed, expires_at = now + 24 jam
+       │
+7. Klien polling GET /api/predictions tiap 10 detik selama ada yang berjalan
+       │
+8. Unduh: results (hasil saja) atau complete (input + output + metadata.json)
+   disertai header X-Checksum-MD5, diverifikasi ulang di klien
+       │
+9. predictions:cleanup (tiap jam) menghapus berkas lewat 24 jam,
+   record tetap disimpan dan ditandai files_deleted_at
 ```
 
-##### **B. User Management (Admin Only)**
-```php
-UserController:
-- index()       // List all users
-- store()       // Create new user
-- show($id)     // Get user detail
-- update($id)   // Update user
-- destroy($id)  // Delete user
-- toggleStatus($id) // Activate/Deactivate
+### Interpolasi rekursif
+
+Diberikan frame 1 dan 7, sistem **tidak** menghasilkan 2–6 secara berurutan.
+Ia menghasilkan titik tengahnya lebih dulu, lalu memakai hasil itu sebagai
+batas baru:
+
+```
+1 ────────────────── 7        hasilkan 4
+1 ──── 4             7        hasilkan 2  (dari 1 dan 4)
+1   2  4 ──── 7               hasilkan 5  (dari 4 dan 7)
+1   2  4   5  7               …dan seterusnya
 ```
 
-##### **C. Analysis/Prediction System**
-```php
-AnalysisController:
-- store()       // Upload T0, T2 → Trigger prediction
-- show($id)     // Get prediction result
-- index()       // List user predictions
-- destroy($id)  // Delete prediction
-- download($id) // Download result file
+Selalu t=0.5, tidak pernah ada input `time_scalar` manual di produk. Setiap
+langkah adalah satu panggilan GPU, jadi celah sebesar n memakan n−1 panggilan —
+karena itu ada batas 200 frame per job.
 
-Jobs:
-- ProcessDeepLearningImage
-  - Send files to Colab API
-  - Recursive interpolation logic
-  - Store results
-  - Update database status
-```
+### Kontrak worker model
 
-##### **D. Model Management (Admin Only)**
-```php
-ModelController:
-- index()       // List all models
-- show($id)     // Model details
-- store()       // Deploy new model
-- updateStatus($id) // Online/Offline
-```
+`POST {endpoint_url}` **multipart**: `file_t0`, `file_t2`, `time_scalar`.
 
-##### **E. Activity Logging**
-```php
-UserActivityController:
-- index()       // List activities
-- userActivities($userId) // User-specific logs
+Balasan sukses adalah stream TIFF. **Kegagalan yang tertangani dibalas JSON
+`{"error": ...}` dengan HTTP 200** — jadi status code saja tidak cukup untuk
+menyimpulkan berhasil. Kode harus memeriksa `Content-Type`.
 
-Logged Events:
-- User login/logout
-- File upload
-- Prediction started/completed
-- File download
-- User created/edited
-```
-
-#### **Database Schema**
-
-```sql
--- Users Table
-users
-├── id (PK)
-├── username (unique)
-├── name
-├── email (unique)
-├── password (hashed)
-├── role (enum: admin, user)
-├── is_active (boolean)
-├── last_login_at
-├── email_verified_at
-└── timestamps
-
--- Analysis Records
-analysis_records
-├── id (PK)
-├── user_id (FK → users)
-├── t0_image_path
-├── t2_image_path
-├── t1_result_path
-├── file_name (original naming)
-├── status (enum: pending, processing, completed, failed)
-├── processing_time
-├── time_scalar (float)
-├── expires_at (timestamp + 24 hours)
-└── timestamps
-
--- Models
-models
-├── id (PK)
-├── name
-├── version
-├── file_path
-├── status (enum: online, offline)
-├── accuracy (decimal)
-├── description
-├── total_predictions (counter)
-├── deployed_at
-└── timestamps
-
--- User Activities
-user_activities
-├── id (PK)
-├── user_id (FK → users)
-├── activity_type (login, upload, predict, download, etc)
-├── description
-├── ip_address
-├── user_agent
-└── timestamps
-```
-
-#### **Storage Structure**
-```
-storage/app/public/
-├── neutron_images/
-│   ├── inputs/
-│   │   ├── user_{id}/
-│   │   │   ├── {timestamp}_t0.tif
-│   │   │   └── {timestamp}_t2.tif
-│   └── results/
-│       ├── user_{id}/
-│       │   ├── {timestamp}_t1.tif
-│       │   ├── {timestamp}_t2.tif (recursive results)
-│       │   └── ...
-└── models/
-    └── generator(Salinan 3 Ginet TC-D_Revisi).h5
-```
+Health check sengaja memakai GET ke akar tunnel, bukan POST ke `/predict`:
+pernah ada bug di mana probe POST tanpa berkas dibalas 422 dan model yang sehat
+dilaporkan offline selamanya. GET juga menghindari memicu inferensi GPU
+sungguhan hanya untuk mengecek denyut.
 
 ---
 
-### 3. **Compute Tier (Google Colab)**
+## 3. Skema database
 
-#### **Responsibility**
-- Load dan serve ML model
-- Receive prediction requests via API
-- Execute recursive interpolation
-- Return hasil ke Laravel
+13 tabel di `db_aict`. Yang relevan:
 
-#### **FastAPI Server**
-```python
-Endpoints:
-POST /predict
-- Input: file_t0, file_t2, time_scalar
-- Process: Recursive interpolation
-- Output: Binary .tif file
-```
+### `users`
+`username`, `name`, `email`, `password`, `role` (enum admin/user), `is_active`,
+`last_login_at`. Tidak ada registrasi mandiri — admin yang membuat akun.
 
-#### **Recursive Interpolation Logic**
-```python
-def recursive_interpolate(t0_path, t2_path):
-    """
-    Interpolasi rekursif untuk mengisi gap frame
-    """
-    results = []
-    
-    # Tahap 1: Prediksi frame tengah (T1)
-    t1 = model.predict([t0, t2], time_scalar=0.5)
-    results.append(t1)
-    
-    # Tahap 2: Prediksi frame kiri (antara T0 dan T1)
-    if gap > 2:
-        t_left = model.predict([t0, t1], time_scalar=0.5)
-        results.insert(0, t_left)
-    
-    # Tahap 3: Prediksi frame kanan (antara T1 dan T2)
-    if gap > 2:
-        t_right = model.predict([t1, t2], time_scalar=0.5)
-        results.append(t_right)
-    
-    return results
-```
+### `models` — registry model AI
+`name`, `version`, `endpoint_url`, `status` (enum online/offline/trouble),
+`is_active`, `last_health_check`, `health_check_error`, `max_concurrent_jobs`,
+`current_jobs_count`, `total_predictions`, `accuracy`, `deployed_at`.
 
-#### **Model Details**
-- **Name**: GiNet TC-D (Generative Interpolation Network)
-- **Architecture**: Modified U-Net with Temporal Conditioning
-- **Input**: 2 grayscale images (.tif, 16-bit)
-- **Output**: 1 interpolated frame (.tif, 16-bit)
-- **Time Scalar**: 0.5 (optimal training point)
-- **Accuracy**: 94.2% (validation)
+`endpoint_url` **hanya boleh terlihat admin**. Mengetahuinya berarti bisa
+melewati platform dan menembak worker GPU langsung, jadi `/api/me/models`
+sengaja mengembalikan bentuk yang lebih sempit.
 
-#### **Model Deployment Evolution**
+### `analysis_records` — satu job interpolasi
+`job_id` (uuid), `user_id`, `model_id`, `file_name`, `input_folder`,
+`output_folder`, `interpolated_frames` (json), `input_files_count`,
+`output_files_count`, `processing_time_seconds`, `status`
+(pending/processing/completed/failed), `error_message`, `expires_at`,
+`files_deleted_at`.
 
-**Phase 1-2 (Deprecated):**
-- Model `.h5` file stored locally at `storage/app/models/`
-- Direct model loading in backend
-- Limited to server CPU/GPU resources
+> `t0_image_path`, `t2_image_path`, `t1_result_path` dan `time_scalar` adalah
+> peninggalan desain lama yang berbasis sepasang gambar. Alur sekarang berbasis
+> folder dan tidak mengisinya. Kolomnya dibiarkan nullable, bukan dihapus.
 
-**Phase 3+ (Current - Recommended):**
-- Model deployed on Google Colab with dedicated GPU (T4/V100)
-- Accessible via Ngrok tunnel (HTTPS endpoint)
-- Backend stores only `endpoint_url` in database
-- Enables horizontal scaling and better GPU utilization
-- Health check system monitors model availability
-- Supports multiple model versions simultaneously
+### `user_activities` — jejak audit
+`user_id`, `model_id`, `activity_type` (varchar bebas), `description`,
+`ip_address`, `user_agent`, `metadata` (json).
+
+### Tabel lain
+`personal_access_tokens` (Sanctum), `cache`, `cache_locks`, `jobs`,
+`job_batches`, `failed_jobs`, `migrations`, `sessions`,
+`password_reset_tokens`.
+
+Dua yang terakhir tidak dipakai untuk autentikasi API. `sessions` tetap terisi
+karena route `/` memakai session (`SESSION_DRIVER=database`); jangan
+menghapusnya tanpa mengubah driver dulu.
 
 ---
 
-## 🔄 Data Flow Diagrams
+## 4. Keputusan teknis dan alasannya
 
-### Flow 1: User Prediction Request
+### Kenapa ZIP, bukan unggah banyak berkas
+Satu sekuens bisa berisi ribuan frame. Satu request untuk seluruh arsip jauh
+lebih murah daripada ribuan request, memberi operasi yang atomik, dan membuat
+validasi terjadi di satu tempat.
 
-```
-┌──────────┐                                              
-│  User    │                                              
-│ (Flutter)│                                              
-└────┬─────┘                                              
-     │                                                     
-     │ 1. POST /api/predict                               
-     │    - file_t0.tif                                   
-     │    - file_t2.tif                                   
-     ▼                                                     
-┌─────────────────┐                                       
-│ Laravel API     │                                       
-│ ┌─────────────┐ │                                       
-│ │ Validate    │ │ 2. Validate files                    
-│ │ files       │ │    - Check format (.tif)             
-│ └──────┬──────┘ │    - Check size                      
-│        │        │                                       
-│ ┌──────▼──────┐ │                                       
-│ │ Save to     │ │ 3. Save files to storage             
-│ │ storage     │ │    /storage/neutron_images/inputs/   
-│ └──────┬──────┘ │                                       
-│        │        │                                       
-│ ┌──────▼──────┐ │                                       
-│ │ Create DB   │ │ 4. Insert analysis_record            
-│ │ record      │ │    status = 'pending'                
-│ └──────┬──────┘ │                                       
-│        │        │                                       
-│ ┌──────▼──────┐ │                                       
-│ │ Dispatch    │ │ 5. Queue job                         
-│ │ Job         │ │    ProcessDeepLearningImage          
-│ └──────┬──────┘ │                                       
-└────────┼────────┘                                       
-         │                                                
-         │ 6. Return response                             
-         │    { id, status: 'pending' }                   
-         ▼                                                
-┌──────────────┐                                          
-│ User gets    │                                          
-│ job ID       │                                          
-└──────────────┘                                          
+### Kenapa ada chunked upload padahal upload langsung berhasil
+Terukur: upload langsung 4 MB **berhasil** meski `upload_max_filesize` 2 MB,
+karena di bawah Octane **RoadRunner mem-parsing multipart sendiri** dan batas
+PHP SAPI tidak berlaku. Jadi chunked bukan untuk menembus batas PHP.
 
-     [Background Job Processing]                          
+Ia tetap dipertahankan karena tiga alasan lain: sambungan yang putus bisa
+dilanjutkan, progres bisa dilaporkan jujur, dan aplikasi tetap bekerja bila
+suatu saat dideploy di belakang nginx + PHP-FPM yang batasnya memang berlaku.
 
-┌─────────────────┐                                       
-│ Queue Worker    │                                       
-│ ┌─────────────┐ │                                       
-│ │ Update      │ │ 7. status = 'processing'             
-│ │ status      │ │                                       
-│ └──────┬──────┘ │                                       
-│        │        │                                       
-│ ┌──────▼──────┐ │                                       
-│ │ POST to     │ │ 8. Send to Colab                     
-│ │ Ngrok API   │ │    multipart/form-data               
-│ └──────┬──────┘ │    - file_t0                         
-│        │        │    - file_t2                          
-└────────┼────────┘    - time_scalar=0.5                  
-         │                                                
-         ▼                                                
-┌─────────────────┐                                       
-│ Google Colab    │                                       
-│ FastAPI Server  │                                       
-│ ┌─────────────┐ │                                       
-│ │ Load model  │ │ 9. Load .h5 model                    
-│ └──────┬──────┘ │                                       
-│        │        │                                       
-│ ┌──────▼──────┐ │                                       
-│ │ Recursive   │ │ 10. Execute interpolation            
-│ │ Interpolate │ │     - Tahap 1: T0+T2 → T1           
-│ │             │ │     - Tahap 2: T0+T1 → T_left       
-│ └──────┬──────┘ │     - Tahap 3: T1+T2 → T_right      
-│        │        │                                       
-│ ┌──────▼──────┐ │                                       
-│ │ Return      │ │ 11. Binary .tif file(s)              
-│ │ result      │ │                                       
-│ └──────┬──────┘ │                                       
-└────────┼────────┘                                       
-         │                                                
-         ▼                                                
-┌─────────────────┐                                       
-│ Laravel Job     │                                       
-│ ┌─────────────┐ │                                       
-│ │ Save result │ │ 12. Save to storage                  
-│ │ to storage  │ │     /storage/neutron_images/results/ 
-│ └──────┬──────┘ │                                       
-│        │        │                                       
-│ ┌──────▼──────┐ │                                       
-│ │ Update DB   │ │ 13. Update analysis_record           
-│ │             │ │     status = 'completed'             
-│ │             │ │     t1_result_path = path            
-│ │             │ │     processing_time = duration       
-│ │             │ │     expires_at = now + 24h           
-│ └──────┬──────┘ │                                       
-│        │        │                                       
-│ ┌──────▼──────┐ │                                       
-│ │ Log         │ │ 14. Create user_activity             
-│ │ activity    │ │     type = 'prediction_completed'    
-│ └─────────────┘ │                                       
-└─────────────────┘                                       
+Ukuran potongan dihitung server dari batasnya sendiri (80% dari yang terkecil
+antara `upload_max_filesize` dan `post_max_size`), lalu diumumkan ke klien.
+Klien tidak pernah menebak.
 
-┌──────────────┐                                          
-│ User polls   │ 15. GET /api/predictions/{id}           
-│ for result   │     Returns completed status + file URL 
-└──────────────┘                                          
-```
+### Kenapa polling, bukan WebSocket
+Job berjalan puluhan detik sampai menit, dan hanya ada satu klien yang peduli.
+Polling 10 detik yang berhenti sendiri saat semua job selesai jauh lebih murah
+daripada memelihara infrastruktur realtime.
+
+### Kenapa retensi 24 jam
+Satu job bisa menghasilkan ~1,5 GB. Berkas dihapus, **record tetap disimpan**
+dan ditandai `files_deleted_at`, sehingga peneliti tetap melihat riwayatnya dan
+mendapat pesan "kedaluwarsa" yang jelas, bukan unduhan yang rusak.
+
+### Kenapa satu sesi per akun
+Login mencabut seluruh token lama. Akun dibuat admin dan dibagikan dengan
+password default, jadi membatasi ke satu sesi membuat penyalahgunaan kredensial
+langsung terlihat oleh pemilik sah akun.
+
+### Kenapa `deleteFileAfterSend()` tidak dipakai
+Symfony melakukan unlink-nya di dalam `BinaryFileResponse::sendContent()`, dan
+**Octane tidak pernah memanggil method itu** — ia mengubah response jadi PSR-7
+untuk RoadRunner. Mengandalkannya membocorkan satu ZIP berukuran penuh setiap
+kali unduh. Sekarang dibersihkan lewat `app()->terminating()`, dengan sapuan
+per jam sebagai jaring pengaman.
 
 ---
 
-### Flow 2: Admin Creates User
+## 5. Keamanan
 
-```
-┌──────────┐                                    
-│  Admin   │                                    
-│ (Flutter)│                                    
-└────┬─────┘                                    
-     │                                           
-     │ 1. POST /api/admin/users                 
-     │    - username                             
-     │    - name                                 
-     │    - email                                
-     │    - password                             
-     │    - role                                 
-     ▼                                           
-┌─────────────────┐                             
-│ Laravel API     │                             
-│ ┌─────────────┐ │                             
-│ │ Middleware  │ │ 2. Check authentication     
-│ │ - Auth      │ │    Check admin role         
-│ │ - IsAdmin   │ │                             
-│ └──────┬──────┘ │                             
-│        │        │                             
-│ ┌──────▼──────┐ │                             
-│ │ Validate    │ │ 3. Validate input           
-│ │ Request     │ │    - Email unique           
-│ │             │ │    - Username unique        
-│ └──────┬──────┘ │    - Password rules         
-│        │        │                             
-│ ┌──────▼──────┐ │                             
-│ │ Hash        │ │ 4. bcrypt password          
-│ │ Password    │ │                             
-│ └──────┬──────┘ │                             
-│        │        │                             
-│ ┌──────▼──────┐ │                             
-│ │ Create User │ │ 5. Insert to DB             
-│ │             │ │    is_active = true         
-│ └──────┬──────┘ │                             
-│        │        │                             
-│ ┌──────▼──────┐ │                             
-│ │ Log         │ │ 6. Create activity log      
-│ │ Activity    │ │    'user_created'           
-│ └──────┬──────┘ │                             
-└────────┼────────┘                             
-         │                                       
-         │ 7. Return new user                    
-         ▼                                       
-┌──────────────┐                                
-│ Admin sees   │                                
-│ success msg  │                                
-└──────────────┘                                
-```
+| Lapis | Penerapan |
+|---|---|
+| Autentikasi | Sanctum bearer token, kedaluwarsa 7 hari (`config/sanctum.php`) |
+| Sesi | Satu per akun; login mencabut token lain |
+| Otorisasi | Middleware `role:admin`; selain itu tiap query di-scope ke `$request->user()` |
+| Rate limit | Login 5 percobaan/menit/IP |
+| Password | bcrypt, 12 rounds |
+| Kepemilikan upload | Dipaksa lewat path storage — `upload_id` akun lain menghasilkan 404 |
+| Integritas unduhan | `X-Checksum-MD5`, diverifikasi ulang di klien |
+| Rahasia | `endpoint_url` model tidak pernah keluar ke non-admin |
+
+Yang **belum** ada: HTTPS milik sendiri (masih menumpang ngrok), audit
+dependensi, dan pembatasan ukuran storage per user.
 
 ---
 
-## 🔐 Security Architecture
+## 6. Proses yang harus berjalan
 
-### Authentication Flow
-```
-1. User → Login Request (email + password)
-2. Laravel → Validate credentials
-3. Laravel → Generate Sanctum token
-4. User → Store token in secure storage
-5. All subsequent requests → Include Bearer token
-6. Laravel Middleware → Verify token validity
-7. Laravel Middleware → Check user role
-8. Proceed to Controller or Return 401/403
-```
+Backend saja tidak cukup. Tiga proses terpisah:
 
-### Authorization Matrix
+| Proses | Tanpa itu |
+|---|---|
+| `npm run octane` | Tidak ada API sama sekali |
+| `php artisan queue:work` | Upload berhasil tapi job selamanya `pending` |
+| `php artisan schedule:work` | Berkas kedaluwarsa tidak pernah dihapus; status model jadi basi |
 
-| Endpoint | Admin | User | Public |
-|----------|-------|------|--------|
-| `/api/login` | ✅ | ✅ | ✅ |
-| `/api/logout` | ✅ | ✅ | ❌ |
-| `/api/admin/users/**` | ✅ | ❌ | ❌ |
-| `/api/admin/models/**` | ✅ | ❌ | ❌ |
-| `/api/predict` | ✅ | ✅ | ❌ |
-| `/api/predictions/**` | ✅ | ✅ (own) | ❌ |
-| `/api/user/profile` | ✅ | ✅ | ❌ |
-
-### Data Security
-- Password hashing: bcrypt (rounds: 12)
-- Token expiration: 24 hours
-- File validation: MIME type + extension check
-- SQL Injection: Laravel Query Builder (prepared statements)
-- XSS Protection: Laravel escape output
-- CORS: Configured untuk Flutter domains
-
----
-
-## 📊 Performance Considerations
-
-### Backend Optimization
-- **Queue System**: Heavy tasks (AI prediction) menggunakan queue
-- **Database Indexing**: Index pada user_id, status, created_at
-- **File Streaming**: Large files menggunakan streaming response
-- **Cache**: Model info dan user sessions di-cache
-
-### Frontend Optimization
-- **Lazy Loading**: Images loaded on demand
-- **Progressive Web App**: Service worker untuk offline capability
-- **Asset Optimization**: Image compression dan lazy loading
-
-### AI Worker Optimization
-- **Model Loading**: Model di-load once pada startup
-- **GPU Utilization**: Batch processing jika multiple requests
-- **Result Caching**: Identical inputs menggunakan cached results (optional)
-
----
-
-## 🔄 Scalability Strategy
-
-### Horizontal Scaling
-- **Laravel**: Multiple instances behind load balancer
-- **Database**: MySQL replication (master-slave)
-- **Storage**: Distributed file system (MinIO, S3)
-- **Colab**: Multiple Colab instances dengan load balancing
-
-### Vertical Scaling
-- **Database**: Increase RAM untuk query performance
-- **Storage**: Faster SSD untuk file I/O
-- **Colab**: Upgrade ke Colab Pro untuk more GPU
-
----
-
-## 🔍 Monitoring & Logging
-
-### Application Logs
-```php
-// Laravel Log Channels
-- daily: Application logs
-- stack: Error logs
-- queue: Job execution logs
-```
-
-### User Activity Tracking
-- Login/logout events
-- File upload events
-- Prediction requests
-- Download events
-- Admin actions
-
-### System Metrics
-- API response time
-- Queue job processing time
-- Model inference time
-- Storage usage
-- Active users count
-
----
-
-## 🚨 Error Handling
-
-### Client-Side Errors (Flutter)
-```dart
-try {
-  final response = await api.predict(t0, t2);
-  // Handle success
-} on NetworkException {
-  // Show network error
-} on ValidationException {
-  // Show validation errors
-} on UnauthorizedException {
-  // Redirect to login
-} catch (e) {
-  // Show generic error
-}
-```
-
-### Server-Side Errors (Laravel)
-```php
-try {
-    // Business logic
-} catch (ValidationException $e) {
-    return response()->json(['error' => $e->errors()], 422);
-} catch (ModelNotFoundException $e) {
-    return response()->json(['error' => 'Not found'], 404);
-} catch (\Exception $e) {
-    Log::error($e);
-    return response()->json(['error' => 'Server error'], 500);
-}
-```
-
-### AI Worker Errors (Colab)
-```python
-try:
-    result = model.predict(...)
-except MemoryError:
-    return JSONResponse({"error": "OOM"}, status_code=507)
-except Exception as e:
-    return JSONResponse({"error": str(e)}, status_code=500)
-```
-
----
-
-## 📝 API Communication Protocol
-
-### Request Format
-```http
-POST /api/predict HTTP/1.1
-Host: localhost:8000
-Authorization: Bearer {token}
-Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
-
-------WebKitFormBoundary
-Content-Disposition: form-data; name="file_t0"; filename="001.tif"
-Content-Type: image/tiff
-
-[binary data]
-------WebKitFormBoundary
-Content-Disposition: form-data; name="file_t2"; filename="003.tif"
-Content-Type: image/tiff
-
-[binary data]
-------WebKitFormBoundary--
-```
-
-### Response Format
-```json
-{
-  "success": true,
-  "message": "Prediction started",
-  "data": {
-    "id": 1,
-    "status": "pending",
-    "created_at": "2026-08-13T15:30:00Z"
-  }
-}
-```
-
----
-
-## 🎯 Design Principles
-
-1. **Separation of Concerns**: Tiap tier punya tanggung jawab spesifik
-2. **Scalability First**: Arsitektur mendukung horizontal scaling
-3. **Security by Default**: Authentication & authorization di setiap layer
-4. **Fail Gracefully**: Error handling yang comprehensive
-5. **Monitor Everything**: Logging dan metrics untuk debugging
-6. **User-Centric**: UX yang smooth dengan feedback real-time
-
----
-
-**Last Updated**: August 13, 2026  
-**Version**: 1.0.0
+Tidak satu pun berjalan otomatis di setup Laragon saat ini.

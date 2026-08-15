@@ -289,7 +289,7 @@ Google Fonts: **IBM Plex Sans** (UI) and **Lora** (display headings).
 
 ### Contract Testing
 
-See [test_auth.md](test_auth.md) for API contract tests.
+See [../API.md](../API.md) for the endpoint reference.
 
 ---
 
@@ -421,8 +421,8 @@ flutter build appbundle --release
 
 ## 📚 Additional Documentation
 
-- [test_auth.md](test_auth.md) - Authentication testing guide
-- [../API_DOCS.md](../API_DOCS.md) - Backend API documentation
+- [../CLAUDE.md](../CLAUDE.md) - Working agreement and the traps that cost time
+- [../API.md](../API.md) - Backend API reference
 - [../DESIGN.md](../DESIGN.md) - Design system & UI guidelines
 
 ---
@@ -462,9 +462,8 @@ seven viewports (fails if any section overflows), a status-bar clearance check,
 and three header-navigation checks. `user_console_test.dart` covers the
 researcher console: `MeStats` payload parsing and `UserActivityTile` rendering.
 That is the entire automated suite — the file was Flutter's counter-app scaffold until
-15 Aug 2026, and it *failed*. The "23/23 contract tests" in
-[test_auth.md](test_auth.md) are a manual `curl` checklist, not a runnable
-suite.
+15 Aug 2026, and it *failed*. The "23/23 contract tests" quoted in older notes
+were a manual `curl` checklist, not a runnable suite.
 
 ```bash
 flutter test

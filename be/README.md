@@ -261,7 +261,8 @@ Requires a running `php artisan schedule:work` — see *Scheduled Commands* abov
   Not used for API auth. Safe to ignore; do **not** drop it without first
   switching `SESSION_DRIVER` to `array`.
 
-13 tables total. See [DATABASE_CLEANUP.md](DATABASE_CLEANUP.md) for detailed analysis.
+13 tables total. The schema and the reasoning behind it are documented in
+[../ARCHITECTURE.md](../ARCHITECTURE.md) §3.
 
 ---
 
@@ -307,10 +308,10 @@ php artisan test
 ⚠️ `tests/` contains only Laravel's stock `ExampleTest` stubs — there is **no
 real test suite yet**. The "30/30 API tests PASS" figure in the root docs refers
 to the manual `curl` checklist recorded in
-[../TESTING_RESULTS.md](../TESTING_RESULTS.md), not to `php artisan test`.
+[../README.md](../README.md), not to `php artisan test`.
 
 ### Performance Testing
-See [../TESTING_RESULTS.md](../TESTING_RESULTS.md) for benchmark results.
+Benchmark figures are in [../README.md](../README.md).
 
 ---
 
@@ -386,7 +387,7 @@ php artisan queue:retry all
 
 ## 📄 API Documentation
 
-Full API documentation available at: [../API_DOCS.md](../API_DOCS.md)
+Full API documentation available at: [../API.md](../API.md)
 
 **Quick Reference:**
 - Base URL: `http://127.0.0.1:8000/api`
@@ -484,11 +485,10 @@ php artisan migrate
 
 ## 📚 Additional Documentation
 
-- [DATABASE_CLEANUP.md](DATABASE_CLEANUP.md) - Database structure analysis
-- [CHANGELOG.md](CHANGELOG.md) - Version history
-- [../TESTING_RESULTS.md](../TESTING_RESULTS.md) - Performance testing
-- [../API_DOCS.md](../API_DOCS.md) - Complete API documentation
-- [../ARCHITECTURE.md](../ARCHITECTURE.md) - System architecture
+- [../CLAUDE.md](../CLAUDE.md) - Working agreement and the traps that cost time
+- [../ARCHITECTURE.md](../ARCHITECTURE.md) - Components, data flow, schema, decisions
+- [../API.md](../API.md) - Complete API reference
+- [../CHANGELOG.md](../CHANGELOG.md) - What changed and why
 
 ---
 
