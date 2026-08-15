@@ -53,6 +53,7 @@ class ApiConfig {
   static const String adminActivities = '/admin/activities';
 
   // Self-service endpoints (any signed-in user, not admin-only)
+  static const String meAvatar = '/me/avatar';
   static const String meActivities = '/me/activities';
   static const String meStats = '/me/stats';
   static const String meModels = '/me/models';

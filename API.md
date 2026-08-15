@@ -1,6 +1,6 @@
 # Referensi API
 
-58 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
+63 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
 `php artisan route:list --path=api` per 15 Agustus 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 
@@ -97,6 +97,9 @@ belum diumumkan tidak bisa ditemukan dengan menebak id.
 | `GET` | `/me/stats` | Penghitung untuk dashboard peneliti |
 | `GET` | `/me/activities` | Jejak audit milik sendiri, berpaginasi |
 | `GET` | `/me/models` | Model yang boleh dipakai |
+| `POST` | `/me/avatar` | Pasang foto profil sendiri (multipart `avatar`) |
+| `DELETE` | `/me/avatar` | Hapus foto profil sendiri |
+| `GET` | `/users/{id}/avatar` | Foto profil siapa pun. **Butuh login.** |
 
 Ketiganya di-scope server ke `$request->user()`. Tidak ada parameter id, jadi
 tidak ada jalan membaca data akun lain.
@@ -113,6 +116,27 @@ tidak ada jalan membaca data akun lain.
 **`GET /me/models`** mengembalikan `id`, `name`, `version`, `status`,
 `description`, `accuracy`, `is_available`. **Tidak pernah `endpoint_url`** —
 lihat ARCHITECTURE.md §3.
+
+### Foto profil
+
+Setiap payload yang memuat user sekarang membawa `avatar_url` — relatif
+terhadap root API, dan **null kalau belum ada foto**. Itulah yang memberi tahu
+klien untuk menggambar bingkai inisial. `avatar_path` dan `avatar_mime`
+disembunyikan; letak berkas di disk bukan urusan klien.
+
+`POST /me/avatar` menerima JPEG/PNG/WebP maksimal **2 MB**, divalidasi dengan
+`mimetypes:` (membaca isi berkas). Unggahan baru menghapus berkas lama.
+
+`GET /users/{id}/avatar` **butuh login** (401 kalau anonim). Avatar muncul di
+sebelah log aktivitas dan daftar user, jadi tiap akun yang sudah masuk perlu
+bisa memuatnya — tapi pengunjung anonim tidak boleh memanen foto staf peneliti
+dengan menelusuri id. Akun tanpa foto menjawab **404**, bukan gambar bawaan:
+klien yang menggambar bingkainya, dan placeholder dari server cuma jadi
+pendapat kedua soal seperti apa "tidak ada foto" itu.
+
+Admin bisa mengubah/menghapus foto akun lain lewat
+`/admin/users/{id}/avatar` — harus ada yang bisa menurunkan foto yang tidak
+pantas dari akun orang lain.
 
 ---
 
@@ -269,6 +293,8 @@ Peneliti yang memanggil salah satunya mendapat **403**.
 
 Password default `BrinResearch2026` dikembalikan sebagai `default_password`.
 Admin tidak bisa menghapus atau menonaktifkan akunnya sendiri (403).
+
+Ditambah dua route foto: `POST` dan `DELETE /admin/users/{id}/avatar`.
 
 ### Model (8)
 

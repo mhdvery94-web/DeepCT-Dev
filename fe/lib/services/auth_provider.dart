@@ -68,6 +68,18 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// Record a new profile photo (or its removal) without refetching `/user`.
+  ///
+  /// The sidebar watches this provider, so the new picture appears the moment
+  /// the upload returns.
+  void setAvatarPath(String? path) {
+    final current = _user;
+    if (current == null) return;
+
+    _user = current.withAvatarPath(path);
+    notifyListeners();
+  }
+
   /// Clear error message
   void clearError() {
     _errorMessage = null;

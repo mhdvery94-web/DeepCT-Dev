@@ -58,6 +58,7 @@ class SupportTicketController extends Controller
                     'username' => $ticket->user->username,
                     'name' => $ticket->user->name,
                     'email' => $ticket->user->email,
+                    'avatar_url' => $ticket->user->avatarUrl(),
                 ]
                 : null,
             // Present only for tickets raised from the sign-in page. The
@@ -143,7 +144,7 @@ class SupportTicketController extends Controller
     {
         $perPage = max(1, min((int) $request->input('per_page', 15), 100));
 
-        $query = SupportTicket::with('user:id,username,name,email')
+        $query = SupportTicket::with('user:id,username,name,email,avatar_path')
             ->where('user_id', $request->user()->id);
 
         if ($status = $request->input('status')) {
@@ -221,7 +222,7 @@ class SupportTicketController extends Controller
     public function show(Request $request, $id)
     {
         $ticket = $this->findForUser($request, $id)
-            ->load(['user:id,username,name,email', 'messages.author:id,username,name']);
+            ->load(['user:id,username,name,email,avatar_path', 'messages.author:id,username,name,avatar_path']);
 
         return response()->json([
             'success' => true,
@@ -281,7 +282,7 @@ class SupportTicketController extends Controller
     {
         $perPage = max(1, min((int) $request->input('per_page', 15), 100));
 
-        $query = SupportTicket::with('user:id,username,name,email');
+        $query = SupportTicket::with('user:id,username,name,email,avatar_path');
 
         if ($status = $request->input('status')) {
             $query->where('status', $status);

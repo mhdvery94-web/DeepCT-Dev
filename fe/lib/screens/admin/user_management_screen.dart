@@ -11,8 +11,10 @@ import '../../services/api_client.dart';
 import '../../services/auth_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/async_state_views.dart';
+import '../../widgets/avatar_editor_sheet.dart';
 import '../../widgets/pagination_bar.dart';
 import '../../widgets/status_badge.dart';
+import '../../widgets/user_avatar.dart';
 
 /// Admin screen for listing and managing platform users.
 ///
@@ -130,6 +132,22 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     } on ApiException catch (e) {
       _showMessage(e.message, isError: true);
     }
+  }
+
+  /// Set or clear someone else's photo.
+  ///
+  /// An administrator needs this to take down an inappropriate picture from an
+  /// account that is not theirs — the researcher's own control only ever
+  /// touches their own.
+  Future<void> _changePhoto(UserModel user) async {
+    final result = await showAvatarEditor(
+      context,
+      userId: user.id,
+      name: user.name,
+      currentPath: user.avatarPath,
+    );
+
+    if (result != null && result.changed) _load();
   }
 
   Future<void> _resetPassword(UserModel user) async {
@@ -375,7 +393,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   return DataRow(
                     cells: [
                       DataCell(
-                        Column(
+                        Row(
+                          children: [
+                            UserAvatar(
+                              avatarPath: user.avatarPath,
+                              name: user.name,
+                              size: 32,
+                              bordered: false,
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -407,6 +434,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               ),
                             ),
                           ],
+                            ),
+                          ],
                         ),
                       ),
                       DataCell(Text(user.email)),
@@ -427,6 +456,14 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               tooltip: 'Edit',
                               icon: const Icon(Icons.edit_outlined, size: 18),
                               onPressed: () => _openUserDialog(existing: user),
+                            ),
+                            IconButton(
+                              tooltip: 'Change photo',
+                              icon: const Icon(
+                                Icons.photo_camera_outlined,
+                                size: 18,
+                              ),
+                              onPressed: () => _changePhoto(user),
                             ),
                             IconButton(
                               tooltip: isSelf

@@ -18,7 +18,7 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (58 Total)
+### API Endpoints (63 Total)
 
 Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
@@ -99,6 +99,25 @@ symlinked path is one more thing to get wrong.
 **Saving is not publishing.** The toggle is a separate action, and
 `published_at` is only stamped the first time — hiding and re-showing an old
 post must not throw it to the front of a date-ordered slideshow.
+
+#### Profile Photos (5)
+- `GET /api/users/{id}/avatar` - The photo. **Authenticated**, any role
+- `POST /api/me/avatar` - Set your own (multipart `avatar`)
+- `DELETE /api/me/avatar` - Remove your own
+- `POST /api/admin/users/{id}/avatar` - Set someone else's
+- `DELETE /api/admin/users/{id}/avatar` - Remove someone else's
+
+Serving is authenticated rather than public: avatars appear beside activity
+logs and in the user list, so every signed-in account needs them, but an
+anonymous visitor should not be able to harvest photos of the research staff by
+walking the ids. An admin can change anyone's because somebody has to be able
+to take down an inappropriate picture.
+
+An account with no photo returns **404**, not a stock image — the client draws
+an initials frame, and a server-side placeholder would be a second opinion
+about what "no photo" looks like. Every payload carrying a user now carries
+`avatar_url` (null when there is none); `avatar_path` and `avatar_mime` are
+hidden, since where the file sits on disk is nobody's business.
 
 #### User Management (7) - Admin Only
 - `GET /api/admin/users` - List users with pagination & filters
@@ -396,7 +415,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**141 tests, 562 assertions, ~126s.** They run against MySQL, not sqlite: three
+**156 tests, 631 assertions, ~85s.** They run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:

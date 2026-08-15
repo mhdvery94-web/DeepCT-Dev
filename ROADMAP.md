@@ -89,14 +89,34 @@ slideshow.
 request-nya gagal, widget-nya tidak merender apa pun. Pengunjung tidak boleh
 disuguhi kotak error di halaman depan gara-gara hal opsional.
 
-### 4. Foto profil pengguna
+### 4. ✅ Foto profil pengguna — SELESAI
 
-- [ ] Kolom `users.avatar_path`
-- [ ] Unggah foto sendiri; admin boleh mengubah milik siapa pun
-- [ ] Endpoint penyajian yang ter-otorisasi
-- [ ] **Bingkai kosong dengan inisial** kalau belum ada foto
-- [ ] Tampil di sidebar, manajemen user, dan log aktivitas
-- [ ] Test: kepemilikan, validasi tipe/ukuran, perilaku fallback
+- [x] Kolom `users.avatar_path` + `avatar_mime`
+- [x] Unggah foto sendiri; admin boleh mengubah milik siapa pun
+- [x] Endpoint penyajian yang ter-otorisasi
+- [x] **Bingkai inisial** kalau belum ada foto
+- [x] Tampil di sidebar (dua-duanya), manajemen user, dan log aktivitas
+- [x] Test: 15 backend + 11 Flutter
+
+**Keputusan 1 — bingkai inisial itu desain, bukan placeholder.** Sebagian besar
+akun tidak akan pernah mengunggah foto. Kotak abu-abu atau ikon gambar rusak
+terbaca sebagai error; inisial di atas warna khas akun itu terbaca sebagai
+disengaja, dan tetap jelas di ukuran 22px. Warnanya diturunkan dari nama, jadi
+wajah yang sama selalu dapat warna yang sama antar sesi.
+
+**Keputusan 2 — akun tanpa foto menjawab 404, bukan gambar bawaan.** Klien yang
+menggambar bingkainya; placeholder dari server cuma jadi pendapat kedua soal
+seperti apa "tidak ada foto" itu.
+
+**Keputusan 3 — penyajian butuh login.** Avatar muncul di daftar user dan log
+aktivitas, jadi tiap akun yang sudah masuk perlu memuatnya, tapi pengunjung
+anonim tidak boleh memanen foto staf peneliti dengan menelusuri id.
+
+**Konsekuensi teknis:** karena endpoint-nya ter-otorisasi, `Image.network`
+tidak bisa dipakai — token-nya ada di secure storage dan dibaca async oleh
+interceptor Dio. Byte-nya diambil lewat `ApiClient` dan di-cache di memori
+(`AvatarCache`), termasuk cache untuk yang *tidak ada* fotonya, supaya daftar
+20 baris tidak menembak 20 request tiap rebuild.
 
 ---
 
@@ -123,7 +143,7 @@ Belum menyentuh kode — rancangan dulu. Lihat catatan di bawah.
 - [x] Konsol peneliti (dashboard, unggah, hasil, riwayat, aktivitas)
 - [x] Pratinjau frame — TIFF 16-bit dirender jadi PNG di server
 - [x] Sesi paralel — satu akun bisa aktif di beberapa perangkat
-- [x] Suite test backend (141 test) dan Flutter (39 test)
+- [x] Suite test backend (156 test) dan Flutter (54 test)
 - [x] Konsolidasi dokumentasi, 28 berkas jadi 10
 - [x] Git remote + cadangan lokal
 

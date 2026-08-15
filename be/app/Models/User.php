@@ -25,6 +25,8 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'avatar_path',
+        'avatar_mime',
         'is_active',
         'last_login_at',
     ];
@@ -37,7 +39,17 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        // Where the photo sits on disk is nobody's business; clients get
+        // `avatar_url` instead.
+        'avatar_path',
+        'avatar_mime',
     ];
+
+    /**
+     * Appended so every endpoint that returns a user carries the photo,
+     * including the ones that just hand back `$query->paginate()->items()`.
+     */
+    protected $appends = ['avatar_url'];
 
     /**
      * Get the attributes that should be cast.
@@ -51,6 +63,53 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'last_login_at' => 'datetime',
+        ];
+    }
+
+    /** Accepted profile-photo types. Nothing here can re-encode an upload. */
+    public const AVATAR_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+
+    /** 2 MB. A 96px circle does not need more. */
+    public const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+    public function hasAvatar(): bool
+    {
+        return $this->avatar_path !== null;
+    }
+
+    /**
+     * The URL the client should load, relative to the API root.
+     *
+     * Null when there is no photo, which is what tells the client to draw the
+     * initials frame instead.
+     */
+    public function avatarUrl(): ?string
+    {
+        return $this->hasAvatar() ? "/users/{$this->id}/avatar" : null;
+    }
+
+    /** Backs the appended `avatar_url` attribute. */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        return $this->avatarUrl();
+    }
+
+    /**
+     * The fields every endpoint agrees on when it returns a user.
+     *
+     * Collected here because five controllers were each building their own
+     * array, and `avatar_url` had to appear in all of them.
+     */
+    public function toPublicArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'username' => $this->username,
+            'name' => $this->name,
+            'email' => $this->email,
+            'role' => $this->role,
+            'is_active' => $this->is_active,
+            'avatar_url' => $this->avatarUrl(),
         ];
     }
 }

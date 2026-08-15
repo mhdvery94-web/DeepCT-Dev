@@ -64,6 +64,11 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
     public site by accident
   - Filter by published/draft; drafts show their photo to an admin only
 
+- ✅ **Profile photos**
+  - Change or remove your own from the sidebar avatar
+  - An admin can set or clear anyone's from the user list
+  - Accounts with no photo show an **initials frame**, not a placeholder
+
 ### Researcher Console (`UserShell`)
 - ✅ **Dashboard** — model availability, own analysis counters, activity today,
   and the 5 most recent actions
@@ -198,6 +203,7 @@ lib/
 │
 ├── services/
 │   ├── api_client.dart          # Dio HTTP client wrapper (ApiClient.instance)
+│   ├── avatar_service.dart      # Profile photos + AvatarCache
 │   ├── auth_service.dart        # Authentication service
 │   ├── auth_provider.dart       # ChangeNotifier holding the signed-in user
 │   ├── admin_user_service.dart  # AdminUserService  — user management API
@@ -238,7 +244,9 @@ lib/
 ├── widgets/
 │   ├── status_badge.dart        # Status chip widget
 │   ├── pagination_bar.dart      # Pagination controls
-│   ├── news_carousel.dart      # Landing-page research-news slideshow
+│   ├── news_carousel.dart       # Landing-page research-news slideshow
+│   ├── user_avatar.dart         # Photo or initials frame + AvatarButton
+│   ├── avatar_editor_sheet.dart # Change/remove a photo (self or, as admin, anyone)
 │   └── async_state_views.dart   # LoadingView / ErrorView / EmptyView
 │
 ├── utils/
@@ -484,7 +492,7 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 39 tests, passing
+- ✅ `flutter test` — 54 tests, passing
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
@@ -502,13 +510,14 @@ flutter build appbundle --release
   as a slideshow in the landing page's Research section
 
 ### Testing
-The suite is **39** tests across four files.
+The suite is **54** tests across five files.
 `widget_test.dart` covers the landing page: a boot smoke test, a layout check at
 seven viewports (fails if any section overflows), a status-bar clearance check,
 and three header-navigation checks. `user_console_test.dart` covers the
 researcher console: `MeStats` payload parsing and `UserActivityTile` rendering.
 `support_test.dart` covers ticket parsing (including the guest fallback) and the
-public ticket sheet's validation and phone layout. `news_test.dart` covers the
+public ticket sheet's validation and phone layout. `avatar_test.dart` covers the initials fallback (two-part names, one-word
+names, an empty name) and `UserModel`'s photo field. `news_test.dart` covers the
 news payload and the carousel: that it collapses to nothing when the feed is
 empty *or* fails, that it advances on its own, and that a slide fits four
 viewports — the landing-page layout tests run with an empty feed, so the slide's

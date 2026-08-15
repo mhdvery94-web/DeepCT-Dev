@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
 import '../../services/support_service.dart';
+import '../../widgets/avatar_editor_sheet.dart';
+import '../../widgets/user_avatar.dart';
 import '../../theme/app_theme.dart';
 import '../landing/landing_page.dart';
 import '../support/ticket_list_screen.dart';
@@ -94,6 +96,24 @@ class _AdminShellState extends State<AdminShell> {
       case AdminSection.activities:
         return const ActivityLogsScreen();
     }
+  }
+
+  /// Change the signed-in account's own photo.
+  ///
+  /// The provider is updated straight from the response rather than refetching
+  /// `/user`, so the sidebar shows the new picture immediately.
+  Future<void> _changePhoto() async {
+    final auth = context.read<AuthProvider>();
+    final user = auth.user;
+    if (user == null) return;
+
+    final result = await showAvatarEditor(
+      context,
+      name: user.name,
+      currentPath: user.avatarPath,
+    );
+
+    if (result != null && result.changed) auth.setAvatarPath(result.path);
   }
 
   Future<void> _confirmLogout() async {
@@ -213,15 +233,7 @@ class _AdminShellState extends State<AdminShell> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const CircleAvatar(
-                  radius: 16,
-                  backgroundColor: AppTheme.primaryLight,
-                  child: Icon(
-                    Icons.admin_panel_settings,
-                    size: 18,
-                    color: AppTheme.primary,
-                  ),
-                ),
+                AvatarButton(user: user, onTap: _changePhoto),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(

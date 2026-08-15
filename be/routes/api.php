@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AccessRequestController;
 use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\AvatarController;
 use App\Http\Controllers\API\MeController;
 use App\Http\Controllers\API\NewsController;
 use App\Http\Controllers\API\PredictionUploadController;
@@ -58,7 +59,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/activities', [MeController::class, 'activities'])->name('api.me.activities');
         Route::get('/stats', [MeController::class, 'stats'])->name('api.me.stats');
         Route::get('/models', [MeController::class, 'models'])->name('api.me.models');
+
+        // Own profile photo.
+        Route::post('/avatar', [AvatarController::class, 'updateOwn'])->name('api.me.avatar.update');
+        Route::delete('/avatar', [AvatarController::class, 'destroyOwn'])->name('api.me.avatar.destroy');
     });
+
+    // Serving a photo is authenticated rather than public: avatars appear
+    // beside activity logs and in the user list, so every signed-in account
+    // needs them, but an anonymous visitor must not be able to harvest photos
+    // of the research staff by walking the ids.
+    Route::get('/users/{id}/avatar', [AvatarController::class, 'show'])->name('api.users.avatar');
 
 
     // Admin routes
@@ -71,6 +82,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('api.admin.users.destroy');
         Route::patch('/users/{id}/toggle', [UserController::class, 'toggleStatus'])->name('api.admin.users.toggle');
         Route::post('/users/{id}/reset-password', [UserController::class, 'resetPassword'])->name('api.admin.users.reset');
+
+        // Someone has to be able to remove an inappropriate photo from an
+        // account that is not theirs.
+        Route::post('/users/{id}/avatar', [AvatarController::class, 'updateFor'])->name('api.admin.users.avatar.update');
+        Route::delete('/users/{id}/avatar', [AvatarController::class, 'destroyFor'])->name('api.admin.users.avatar.destroy');
         
         // Model management
         Route::get('/models', [ModelController::class, 'index'])->name('api.admin.models.index');

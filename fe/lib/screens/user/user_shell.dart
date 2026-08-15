@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../services/auth_provider.dart';
+import '../../widgets/avatar_editor_sheet.dart';
+import '../../widgets/user_avatar.dart';
 import '../../theme/app_theme.dart';
 import '../landing/landing_page.dart';
 import '../support/ticket_list_screen.dart';
@@ -65,6 +67,24 @@ class _UserShellState extends State<UserShell> {
       case UserSection.support:
         return const TicketListScreen();
     }
+  }
+
+  /// Change the signed-in account's own photo.
+  ///
+  /// The provider is updated straight from the response rather than refetching
+  /// `/user`, so the sidebar shows the new picture immediately.
+  Future<void> _changePhoto() async {
+    final auth = context.read<AuthProvider>();
+    final user = auth.user;
+    if (user == null) return;
+
+    final result = await showAvatarEditor(
+      context,
+      name: user.name,
+      currentPath: user.avatarPath,
+    );
+
+    if (result != null && result.changed) auth.setAvatarPath(result.path);
   }
 
   Future<void> _confirmLogout() async {
@@ -183,15 +203,7 @@ class _UserShellState extends State<UserShell> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const CircleAvatar(
-                  radius: 16,
-                  backgroundColor: AppTheme.accentLight,
-                  child: Icon(
-                    Icons.person_outline,
-                    size: 18,
-                    color: AppTheme.accent,
-                  ),
-                ),
+                AvatarButton(user: user, onTap: _changePhoto),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(

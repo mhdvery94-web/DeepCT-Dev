@@ -33,6 +33,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.14.0] - 2026-08-15
+
+### 👤 Profile photos, with an initials frame when there is none
+
+Accounts were a person-shaped icon everywhere they appeared. They now carry a
+photo, and the fallback is designed rather than left over.
+
+#### The fallback is the point
+
+Most accounts will never upload anything, so the no-photo state is the one most
+people see. A grey box or a broken-image glyph reads as a fault; **initials on
+the account's own colour** reads as deliberate and stays legible at 22px. The
+colour is derived from the name, so a face keeps its tile between sessions
+instead of shuffling on every load — and it works for a support ticket raised
+by a guest, where there is no id to hash.
+
+An account with no photo returns **404**, not a stock image. The client draws
+the frame; a server-side placeholder would be a second opinion about what "no
+photo" looks like.
+
+#### Added — Backend
+
+- `users.avatar_path` + `avatar_mime`, and five routes: serve, set/remove your
+  own, set/remove anyone's as an admin. Somebody has to be able to take down an
+  inappropriate picture from an account that is not theirs.
+- **Serving is authenticated.** Avatars appear beside activity logs and in the
+  user list, so every signed-in account needs them — but an anonymous visitor
+  should not be able to harvest photos of the research staff by walking the ids.
+- `avatar_url` is appended to the User model, so it appears in every payload
+  that returns a user, including the ones that just hand back
+  `paginate()->items()`. `avatar_path` and `avatar_mime` are hidden.
+- Same upload guard as research news: 2 MB, and `mimetypes:` reading the file's
+  bytes rather than its extension.
+- 15 tests.
+
+#### Added — Frontend
+
+- `UserAvatar` (photo or initials), `AvatarButton` for the sidebar, and one
+  `AvatarEditorSheet` serving both the self case and the admin case — the
+  endpoints differ, the form does not.
+- Shown in both sidebars, the admin user table, and the admin activity log,
+  where the action icon says *what* happened and the avatar says *who*.
+- `AvatarCache` fetches bytes through `ApiClient` because the endpoint is
+  authenticated and `Image.network` cannot read a token out of secure storage.
+  Misses are cached too, or a list of twenty rows would re-request on every
+  rebuild.
+- 11 tests.
+
+Verified live: upload returned the new URL, the image served 200 to a signed-in
+caller and **401 to an anonymous one**, the admin list showed the URL without
+leaking `avatar_path`, and removal took it back to 404.
+
+---
+
 ## [1.13.0] - 2026-08-15
 
 ### 📰 Research news, published by an administrator
