@@ -111,11 +111,16 @@ sungguhan hanya untuk mengecek denyut.
 
 ## 3. Skema database
 
-13 tabel di `db_aict`. Yang relevan:
+17 tabel di `db_aict`. Yang relevan:
 
 ### `users`
 `username`, `name`, `email`, `password`, `role` (enum admin/user), `is_active`,
-`last_login_at`. Tidak ada registrasi mandiri — admin yang membuat akun.
+`last_login_at`, `avatar_path`, `avatar_mime`. Tidak ada registrasi mandiri —
+admin yang membuat akun, atau menyetujui permintaan di `access_requests`.
+
+`avatar_path` disembunyikan dari semua payload; klien hanya menerima
+`avatar_url` (null kalau belum ada foto, yang jadi sinyal untuk menggambar
+bingkai inisial).
 
 ### `models` — registry model AI
 `name`, `version`, `endpoint_url`, `status` (enum online/offline/trouble),
@@ -140,6 +145,27 @@ sengaja mengembalikan bentuk yang lebih sempit.
 ### `user_activities` — jejak audit
 `user_id`, `model_id`, `activity_type` (varchar bebas), `description`,
 `ip_address`, `user_agent`, `metadata` (json).
+
+### `access_requests` — permintaan akun dari landing page
+`first_name`, `last_name`, `email`, `institution`, `reason`, `status`
+(pending/approved/rejected), `reviewed_by`, `reviewed_at`, `review_note`.
+Menyetujui **membuat akun user-nya sekaligus**.
+
+### `support_tickets` / `support_ticket_messages` — dukungan IT
+Tiket: `user_id` (**nullable** — null untuk tiket tamu dari halaman login,
+dengan `guest_name` + `guest_email`), `subject`, `category`, `status`,
+`priority`, `analysis_record_id` (opsional), `last_reply_at`, `awaiting_admin`,
+`resolved_at`, `resolved_by`.
+
+Pesan: `support_ticket_id`, `user_id` (nullable), `body`, `from_admin`.
+`from_admin` dicap saat pesan ditulis, bukan diturunkan dari peran penulisnya
+sekarang — mempromosikan seseorang jadi admin tidak boleh mengubah pesan
+lamanya jadi balasan staf secara surut.
+
+### `news_posts` — berita riset di landing page
+`title`, `summary`, `body`, `image_path`, `image_mime`, `is_published`,
+`published_at`, `sort_order`, `created_by`. `published_at` hanya diisi saat
+pertama kali terbit.
 
 ### Tabel lain
 `personal_access_tokens` (Sanctum), `cache`, `cache_locks`, `jobs`,
@@ -171,6 +197,19 @@ suatu saat dideploy di belakang nginx + PHP-FPM yang batasnya memang berlaku.
 Ukuran potongan dihitung server dari batasnya sendiri (80% dari yang terkecil
 antara `upload_max_filesize` dan `post_max_size`), lalu diumumkan ke klien.
 Klien tidak pernah menebak.
+
+**Sisi klien menyimpan sesinya.** Yang disimpan cuma *keterangan* upload-nya —
+`upload_id`, nama berkas, ukuran, dan MD5 — bukan byte-nya: arsipnya puluhan
+megabyte, dan di web tidak ada path untuk membacanya ulang. Jadi melanjutkan
+berarti meminta berkas yang sama sekali lagi, dan MD5 itulah yang membuktikan
+memang berkas yang sama. Menyambung berkas berbeda ke sesi yang setengah jalan
+menghasilkan ZIP rusak yang baru ketahuan jauh belakangan, di dalam worker.
+
+Potongan yang gagal dicoba ulang tiga kali, dan **sebelum tiap percobaan offset
+disinkronkan ulang dari server**: request yang timeout bisa saja sebenarnya
+sampai, dan mengirim ulang dari offset basi justru dijawab 409. Sesi hanya
+dihapus kalau server menolak secara tegas (mis. 422) — kalau kegagalannya
+berbau jaringan, sesi sengaja ditinggalkan supaya masih bisa dilanjutkan.
 
 ### Kenapa polling, bukan WebSocket
 Job berjalan puluhan detik sampai menit, dan hanya ada satu klien yang peduli.
@@ -230,3 +269,117 @@ Backend saja tidak cukup. Tiga proses terpisah:
 | `php artisan schedule:work` | Berkas kedaluwarsa tidak pernah dihapus; status model jadi basi |
 
 Tidak satu pun berjalan otomatis di setup Laragon saat ini.
+
+---
+
+## 7. Sistem pelatihan model — rancangan, belum dibangun
+
+Tidak ada satu baris kode pun untuk bagian ini. Yang ada di bawah adalah
+rancangan yang sudah dipikirkan sampai bisa dieksekusi, ditulis di sini supaya
+tidak perlu dipikirkan dari nol lagi.
+
+### Kenapa ini penting
+
+Model sekarang dilatih pada dataset yang biasnya hanya bisa dihilangkan lewat
+retrain. **Metode rekursif di §2 ada justru untuk menyiasati bias itu** — kalau
+model dilatih ulang dengan dataset t yang seimbang, interpolasi bisa langsung ke
+t sembarang dan seluruh pohon rekursif tidak diperlukan lagi. Lihat
+[AI_EXPERIMENTS.md](AI_EXPERIMENTS.md).
+
+### Batas yang menentukan bentuknya
+
+Tiga kenyataan, dan semuanya tidak bisa dinegosiasikan:
+
+1. **Notebook di repo ini nol kode training.** Yang ada cuma inferensi. Generator
+   GAN 25,6 juta parameter, dan discriminator-nya tidak ada di sini.
+2. **Sesi Kaggle putus tiap ~9–12 jam.** Training butuh berhari-hari. Apa pun
+   yang dirancang harus tahan proses eksekusinya mati di tengah jalan.
+3. **Mesin ini tidak punya GPU**, dan backend-nya PHP. Training tidak akan
+   pernah berjalan di dalam Laravel.
+
+### Bentuknya: platform **mengelola** training, bukan menjalankannya
+
+Pembagian yang sama persis dengan alur prediksi — dan itu bukan kebetulan,
+melainkan alasan utama rancangan ini masuk akal: infrastrukturnya sudah ada.
+
+| Pihak | Tanggung jawab |
+|---|---|
+| Platform | Menyimpan dataset, mencatat job, menerima bobot + metrik, mendaftarkan versi model baru |
+| Worker (Kaggle/Colab) | Menarik dataset, melatih, checkpoint berkala, melapor balik |
+
+Platform tidak pernah memegang GPU dan tidak pernah menunggu. Ia mencatat.
+
+### Tabel yang dibutuhkan
+
+**`training_datasets`** — `name`, `description`, `archive_path`, `frame_count`,
+`size_bytes`, `checksum`, `uploaded_by`. Diunggah lewat chunked upload yang
+**sudah ada** (§4): dataset training justru kasus yang paling membenarkan
+keberadaan alur itu — puluhan GB, jelas butuh resume.
+
+**`training_jobs`** — `dataset_id`, `base_model_id` (nullable, untuk fine-tune),
+`hyperparameters` (json), `status`
+(queued/claimed/running/checkpointed/completed/failed/abandoned),
+`current_epoch`, `total_epochs`, `metrics` (json), `checkpoint_path`,
+`claimed_at`, `heartbeat_at`, `resulting_model_id`.
+
+Tabel `models` sudah punya `version`, `accuracy`, dan `deployed_at`, jadi hasil
+training tinggal jadi baris baru di sana — separuh jalan sudah terpasang.
+
+### Alurnya, dan bagian yang paling mudah salah
+
+```
+admin unggah dataset  →  buat training job  →  status: queued
+                                                    │
+worker Kaggle polling GET /training/next ───────────┘
+   │  klaim job (status: claimed, claimed_at diisi)
+   │  tarik dataset, latih
+   ├── tiap N epoch: POST /training/{id}/checkpoint  (bobot + metrik)
+   │                 status: checkpointed, heartbeat_at diperbarui
+   │
+   └── sesi Kaggle mati ─────────────────────────────┐
+                                                     │
+   scheduler: job dengan heartbeat_at > 30 menit ────┘
+              dikembalikan ke queued, checkpoint_path dipertahankan
+                                                     │
+   worker berikutnya klaim job itu ──────────────────┘
+              lanjut dari checkpoint, bukan dari nol
+```
+
+**Heartbeat plus checkpoint adalah inti rancangan ini, bukan hiasan.** Sesi
+Kaggle yang putus tiap ~9–12 jam bukan kasus tepi — itu kejadian normal yang
+akan terjadi berkali-kali dalam satu training. Tanpa checkpoint yang dipulihkan,
+setiap putus berarti mengulang dari awal, dan training berhari-hari tidak akan
+pernah selesai. Ini kebalikan dari alur prediksi, yang boleh gagal begitu saja
+karena satu frame cuma ~20 detik.
+
+Konsekuensinya: **job training tidak boleh `failed` hanya karena worker-nya
+diam.** Yang menandai gagal adalah worker yang melapor gagal; worker yang hilang
+menghasilkan job yang kembali `queued`.
+
+### Endpoint yang dibutuhkan
+
+Semua di bawah `/api/training`, dengan token khusus worker (bukan token user):
+
+| Method | Path | Untuk |
+|---|---|---|
+| `GET` | `/training/next` | Worker mengklaim satu job |
+| `GET` | `/training/{id}/dataset` | Unduh arsip dataset |
+| `POST` | `/training/{id}/heartbeat` | "Masih hidup", plus epoch/metrik terbaru |
+| `POST` | `/training/{id}/checkpoint` | Unggah bobot sementara |
+| `POST` | `/training/{id}/complete` | Bobot final + metrik → jadi versi model baru |
+| `POST` | `/training/{id}/fail` | Melapor gagal beserta alasannya |
+
+Token worker harus terpisah dari token user: worker itu mesin, umurnya panjang,
+dan haknya sempit — cuma boleh menyentuh job yang diklaimnya sendiri.
+
+### Yang tidak dirancang di sini
+
+Notebook training-nya sendiri. Itu pekerjaan riset (arsitektur discriminator,
+loss, augmentasi), bukan pekerjaan platform, dan menulis kontrak API tanpa tahu
+bentuk akhirnya justru menghasilkan kontrak yang salah.
+
+### Ukurannya
+
+Setara seluruh FASE 3 — tabel, endpoint, worker protocol, layar admin, dan
+notebook training yang belum ada. Karena itu ia dijadwalkan terakhir, dan
+[ROADMAP.md](ROADMAP.md) mencatatnya sebagai sistem terpisah, bukan fitur.

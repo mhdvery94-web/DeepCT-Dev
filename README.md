@@ -87,15 +87,15 @@ bukan disalin dari catatan lama.
 | Admin console — user, model, activity log, CSV export | ✅ |
 | Researcher console — dashboard, upload, hasil, riwayat | ✅ |
 | Pipeline prediksi — upload → interpolasi rekursif → download | ✅ |
-| Chunked upload resumable | ✅ |
+| Chunked upload resumable — server **dan** klien (sesi diingat, potongan gagal dicoba ulang) | ✅ |
 | Retensi 24 jam (`predictions:cleanup`) | ✅ |
 | Pratinjau frame hasil di aplikasi (TIFF 16-bit → PNG) | ✅ |
 | Formulir Join → permintaan akses → admin menyetujui & akun dibuat | ✅ |
 | Tiket dukungan IT — di aplikasi, dan dari halaman login untuk yang terkunci | ✅ |
 | 63 endpoint API + `/api/health` | ✅ |
-| `flutter analyze` 0 issue, 54 test Flutter lulus | ✅ |
+| `flutter analyze` 0 issue, 65 test Flutter lulus | ✅ |
 | **156 test backend lulus** (631 assertion, ~85 detik) | ✅ |
-| Build web & APK release | ✅ (APK ~52 MB) |
+| Build web & APK release | ✅ (APK ~53 MB, `id.go.brin.neutronct`) |
 
 Terverifikasi end-to-end terhadap worker Kaggle sungguhan dengan dua frame
 1024×1024: upload terpecah 3 potongan, menghasilkan 3 frame 2 MB, dan MD5
@@ -107,8 +107,6 @@ unduhan cocok dengan header.
 |---|---|
 | **Test untuk layar Flutter yang mengambil data** | Butuh mocking API; yang ada baru layout, parsing, dan navigasi |
 | **Notifikasi email** | Balasan tiket tamu harus dikirim admin dari email-nya sendiri; aplikasi belum mengirim apa pun |
-| **Resume upload dari sisi klien** | Server sudah mendukung; klien belum menyimpan sesi yang terputus |
-| **`applicationId`** | Masih `com.example.fe`, harus diganti sebelum distribusi |
 | **Deployment** | Belum ada; masih development di Laragon + ngrok |
 
 ### Diketahui bermasalah

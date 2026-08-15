@@ -10,7 +10,11 @@ perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-## Sedang dikerjakan
+## Sudah dikerjakan pada putaran ini
+
+Tujuh item di bawah semuanya selesai dan terverifikasi. Catatan keputusannya
+sengaja dipertahankan: alasan sebuah pilihan diambil jauh lebih mahal untuk
+ditemukan ulang daripada kodenya.
 
 ### 1. ✅ Formulir Join yang benar-benar bekerja — SELESAI
 
@@ -122,17 +126,7 @@ interceptor Dio. Byte-nya diambil lewat `ApiClient` dan di-cache di memori
 
 ## Berikutnya
 
-### 5. `applicationId` masih `com.example.fe`
-Nilai bawaan scaffold Flutter. Harus diganti sebelum APK didistribusikan —
-mengubahnya setelah rilis berarti aplikasi terpasang jadi dua.
-
-### 6. Resume upload dari sisi klien
-Server sudah mendukung penuh (`GET /predictions/uploads/{id}` melaporkan byte
-yang sudah masuk). Yang belum: klien menyimpan sesi yang terputus dan
-menawarkan melanjutkan.
-
-### 7. Rancangan sistem pelatihan model
-Belum menyentuh kode — rancangan dulu. Lihat catatan di bawah.
+Kosong. Tujuh item terakhir sudah selesai; lihat "Sudah selesai" di bawah.
 
 ---
 
@@ -146,6 +140,16 @@ Belum menyentuh kode — rancangan dulu. Lihat catatan di bawah.
 - [x] Suite test backend (156 test) dan Flutter (54 test)
 - [x] Konsolidasi dokumentasi, 28 berkas jadi 10
 - [x] Git remote + cadangan lokal
+- [x] **5.** `applicationId` diganti dari `com.example.fe` jadi
+      `id.go.brin.neutronct` — reverse-DNS institusi pemiliknya. Mengubahnya
+      setelah rilis berarti aplikasi terpasang jadi dua, jadi harus beres
+      sebelum APK dibagikan. iOS/macOS/Linux/Windows ikut diganti sekalian
+      supaya tidak jadi ranjau nanti.
+- [x] **6.** Resume upload dari sisi klien — sesi disimpan di perangkat,
+      potongan yang gagal dicoba ulang 3× setelah menyinkronkan ulang offset
+      ke server, dan upload yang terputus ditawarkan untuk dilanjutkan.
+- [x] **7.** Rancangan sistem pelatihan model — ditulis di
+      [ARCHITECTURE.md](ARCHITECTURE.md) §7, bukan sebagai berkas baru.
 
 ---
 

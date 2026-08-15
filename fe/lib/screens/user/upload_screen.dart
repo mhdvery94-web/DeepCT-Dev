@@ -7,6 +7,7 @@ import '../../models/prediction.dart';
 import '../../services/api_client.dart';
 import '../../services/me_service.dart';
 import '../../services/prediction_service.dart';
+import '../../services/upload_resume_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/async_state_views.dart';
 
@@ -41,10 +42,27 @@ class _UploadScreenState extends State<UploadScreen> {
   double _progress = 0;
   String? _uploadError;
 
+  /// An upload from an earlier run that never finished. The bytes are gone —
+  /// only the session is remembered — so resuming asks for the same file back.
+  PendingUpload? _pending;
+
   @override
   void initState() {
     super.initState();
     _loadModels();
+    _loadPending();
+  }
+
+  Future<void> _loadPending() async {
+    final pending = await _service.pendingUpload();
+    if (!mounted) return;
+    setState(() => _pending = pending);
+  }
+
+  Future<void> _discardPending() async {
+    await _service.discardPending();
+    if (!mounted) return;
+    setState(() => _pending = null);
   }
 
   Future<void> _loadModels() async {
@@ -96,10 +114,13 @@ class _UploadScreenState extends State<UploadScreen> {
     });
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit({bool resuming = false}) async {
     final bytes = _fileBytes;
     final model = _selectedModel;
-    if (bytes == null || model == null) return;
+    final pending = _pending;
+
+    if (bytes == null) return;
+    if (!resuming && model == null) return;
 
     setState(() {
       _uploading = true;
@@ -108,14 +129,22 @@ class _UploadScreenState extends State<UploadScreen> {
     });
 
     try {
-      final queued = await _service.upload(
-        bytes: bytes,
-        filename: _fileName ?? 'frames.zip',
-        modelId: model.id,
-        onProgress: (p) {
-          if (mounted) setState(() => _progress = p);
-        },
-      );
+      final queued = resuming && pending != null
+          ? await _service.resume(
+              pending: pending,
+              bytes: bytes,
+              onProgress: (p) {
+                if (mounted) setState(() => _progress = p);
+              },
+            )
+          : await _service.upload(
+              bytes: bytes,
+              filename: _fileName ?? 'frames.zip',
+              modelId: model!.id,
+              onProgress: (p) {
+                if (mounted) setState(() => _progress = p);
+              },
+            );
 
       if (!mounted) return;
       setState(() {
@@ -123,6 +152,7 @@ class _UploadScreenState extends State<UploadScreen> {
         _fileBytes = null;
         _fileName = null;
         _progress = 0;
+        _pending = null;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -143,14 +173,82 @@ class _UploadScreenState extends State<UploadScreen> {
         _uploading = false;
         _uploadError = e.message;
       });
+
+      // The service keeps the session when the failure looked like network
+      // trouble, so re-reading it tells the user whether resuming is on offer.
+      await _loadPending();
     }
   }
 
-  bool get _canSubmit =>
-      !_uploading &&
-      _fileBytes != null &&
-      _selectedModel != null &&
-      _selectedModel!.isAvailable;
+  /// True when the chosen file is the one the unfinished upload was carrying.
+  ///
+  /// Compared by size here and by MD5 inside the service — this only decides
+  /// what the button says; the service refuses a mismatch outright.
+  bool get _isResume =>
+      _pending != null && _fileBytes?.length == _pending!.totalSize;
+
+  bool get _canSubmit {
+    if (_uploading || _fileBytes == null) return false;
+
+    // Resuming needs no model: the session already carries the one chosen when
+    // the upload was started.
+    if (_isResume) return true;
+
+    return _selectedModel != null && _selectedModel!.isAvailable;
+  }
+
+  static String _mb(int bytes) => '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+
+  Widget _buildResumeBanner(BuildContext context, PendingUpload pending) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.warningLight,
+        border: Border.all(color: AppTheme.warning),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.restore, size: 20, color: AppTheme.warning),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Unfinished upload',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${pending.filename} (${_mb(pending.totalSize)}) was '
+                      'interrupted. Choose the same file below to continue '
+                      'from where it stopped — the part already sent is still '
+                      'on the server.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _discardPending,
+              style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+              child: const Text('DISCARD IT'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -183,6 +281,11 @@ class _UploadScreenState extends State<UploadScreen> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 24),
+
+              if (_pending != null && !_uploading) ...[
+                _buildResumeBanner(context, _pending!),
+                const SizedBox(height: 20),
+              ],
 
               const _RequirementsCard(),
               const SizedBox(height: 20),
@@ -229,9 +332,16 @@ class _UploadScreenState extends State<UploadScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _canSubmit ? _submit : null,
-                  icon: const Icon(Icons.play_arrow, size: 18),
-                  label: Text(_uploading ? 'UPLOADING...' : 'START ANALYSIS'),
+                  onPressed: _canSubmit ? () => _submit(resuming: _isResume) : null,
+                  icon: Icon(
+                    _isResume ? Icons.play_circle_outline : Icons.play_arrow,
+                    size: 18,
+                  ),
+                  label: Text(
+                    _uploading
+                        ? 'UPLOADING...'
+                        : (_isResume ? 'CONTINUE UPLOAD' : 'START ANALYSIS'),
+                  ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),

@@ -33,6 +33,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.15.0] - 2026-08-15
+
+### 🔁 Interrupted uploads can be continued, and the app has a real identity
+
+The last three items on the roadmap, which had been carried for a while.
+
+#### Client-side upload resume
+
+The server had supported resuming since the chunked flow was built —
+`GET /predictions/uploads/{id}` reports how many bytes landed — but the client
+threw the session away on the first error and started from zero.
+
+Now:
+
+- A failing chunk is **retried three times**, and the offset is re-read from
+  the server before each attempt. A request that timed out may well have landed;
+  re-sending from a stale offset earns a 409, which is exactly the failure this
+  avoids.
+- The session is **remembered on the device**, so an upload killed by a dropped
+  connection or a closed app is offered back on the upload screen.
+- Only the *description* is stored — `upload_id`, filename, size, MD5 — never
+  the bytes. An archive runs to tens of megabytes and on web there is no path to
+  re-read it from, so resuming asks for the same file again and the MD5 proves
+  it is the same one. Splicing a different file into a half-written session
+  produces a corrupt ZIP that only fails much later, inside the worker.
+- A session is discarded only when the server **refuses outright** (422 and
+  friends). A failure that smells like network trouble leaves it intact, since
+  that is precisely the case worth resuming.
+- 11 tests.
+
+#### `applicationId` is no longer `com.example.fe`
+
+It is now `id.go.brin.neutronct` — reverse-DNS of the institution that owns the
+app. This had to be settled before any APK went out: changing it after a release
+installs a second copy alongside the first rather than updating it. The
+iOS/macOS/Linux/Windows scaffolds were renamed at the same time so the same trap
+is not left waiting there.
+
+#### Model training system — designed, not built
+
+Written into [ARCHITECTURE.md](ARCHITECTURE.md) §7 rather than as a new file.
+The short version: the platform would **manage** training, never run it. Three
+constraints force that shape — the notebook in this repo has no training code,
+Kaggle sessions die every 9–12 hours while training takes days, and this machine
+has no GPU and a PHP backend.
+
+The design's centre is the pair **heartbeat + checkpoint**: a job whose worker
+goes quiet returns to `queued` with its checkpoint intact, rather than failing.
+A session dying is not an edge case there, it is the normal course of events,
+and without recovery a multi-day training would never finish. That is the
+opposite of the prediction flow, which may fail freely because a frame costs
+~20 seconds.
+
+Worth recording because it is the reason the recursive method exists: a model
+retrained on a balanced-t dataset could interpolate at arbitrary t, and the
+whole recursion tree in §2 would become unnecessary.
+
+---
+
 ## [1.14.0] - 2026-08-15
 
 ### 👤 Profile photos, with an initials frame when there is none

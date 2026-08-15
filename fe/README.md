@@ -103,6 +103,14 @@ than blanking it.
 `X-Checksum-MD5` header, which the client recomputes locally; a mismatch is
 surfaced to the user rather than silently saving a corrupt ZIP.
 
+**Interrupted uploads can be continued.** A failing chunk is retried three
+times, re-reading the server's `received` first — a request that timed out may
+well have landed, and re-sending from a stale offset earns a 409. If the upload
+dies anyway, the session is remembered on the device and the screen offers to
+continue it: the bytes are gone (an archive is tens of megabytes, and on web
+there is no path to re-read), so the user picks the same file again and an MD5
+check proves it is the same one.
+
 ### Shared Features
 - ✅ Responsive design (mobile, tablet, desktop) — covered by layout tests at
   360x640, 390x844, 759x900, 760x900, 768x1024, 1280x720 and 1440x1024
@@ -428,10 +436,13 @@ flutter run
   (`android/app/build.gradle.kts` uses `flutter.minSdkVersion` etc.)
 - Uses Material Design 3
 - `android:usesCleartextTraffic="true"` is set, so plain-HTTP backends work
-- ⚠️ `applicationId` is still the scaffold default **`com.example.fe`** —
-  must be changed before any real distribution
+- `applicationId` is **`id.go.brin.neutronct`** — reverse-DNS of the institution
+  that owns the app. Changing it after a release installs a second copy
+  alongside the first rather than updating it, which is why it was settled
+  before distribution. The iOS/macOS/Linux/Windows scaffolds were renamed at the
+  same time so the same trap is not waiting there.
 - CSV exports land in `Android/data/<applicationId>/files/Download`
-- APK size: **~51 MB** for the universal release APK. Use
+- APK size: **~53 MB** for the universal release APK. Use
   `flutter build apk --split-per-abi` to cut this to roughly a third per
   device architecture.
 
@@ -492,7 +503,7 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 54 tests, passing
+- ✅ `flutter test` — 65 tests, passing
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
@@ -510,13 +521,14 @@ flutter build appbundle --release
   as a slideshow in the landing page's Research section
 
 ### Testing
-The suite is **54** tests across five files.
+The suite is **65** tests across six files.
 `widget_test.dart` covers the landing page: a boot smoke test, a layout check at
 seven viewports (fails if any section overflows), a status-bar clearance check,
 and three header-navigation checks. `user_console_test.dart` covers the
 researcher console: `MeStats` payload parsing and `UserActivityTile` rendering.
 `support_test.dart` covers ticket parsing (including the guest fallback) and the
-public ticket sheet's validation and phone layout. `avatar_test.dart` covers the initials fallback (two-part names, one-word
+public ticket sheet's validation and phone layout. `upload_resume_test.dart` covers the interrupted-upload record and its store.
+`avatar_test.dart` covers the initials fallback (two-part names, one-word
 names, an empty name) and `UserModel`'s photo field. `news_test.dart` covers the
 news payload and the carousel: that it collapses to nothing when the feed is
 empty *or* fails, that it advances on its own, and that a slide fits four
@@ -562,11 +574,12 @@ simulated 44px inset.
 Scaffold only applies the inset automatically when an `AppBar` is present.
 
 ### Planned
-- ⏳ Image viewer/gallery
-- ⏳ Download progress
-- ⏳ Real-time status updates
+- ⏳ Real-time status updates (polling today — see ARCHITECTURE.md §4)
 - ⏳ Push notifications
 - ⏳ Dark mode
+
+Image viewing and download progress are done: `FrameGalleryScreen` renders
+server-side previews, and both upload and download report progress.
 
 ---
 

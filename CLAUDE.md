@@ -128,7 +128,7 @@ nginx + PHP-FPM.
 ```bash
 cd be && php artisan test          # 156 tests, needs the db_aict_test database
 cd fe && flutter analyze           # must be clean
-cd fe && flutter test              # 54 tests
+cd fe && flutter test              # 65 tests
 cd fe && flutter build apk --release
 ```
 

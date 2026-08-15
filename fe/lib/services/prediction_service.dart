@@ -8,6 +8,7 @@ import '../models/pagination.dart';
 import '../models/prediction.dart';
 import '../models/prediction_frame.dart';
 import 'api_client.dart';
+import 'upload_resume_store.dart';
 
 /// Result of a completed download, already verified against the checksum the
 /// server sent.
@@ -34,10 +35,16 @@ class DownloadedArchive {
 /// chunked path is the normal one.
 class PredictionService {
   final ApiClient _api = ApiClient.instance;
+  final UploadResumeStore _store = UploadResumeStore();
 
   /// Anything at or above this goes through the chunked flow. Deliberately
   /// small: it must stay under the server's `upload_max_filesize`.
   static const int directUploadLimit = 1024 * 1024; // 1 MB
+
+  /// How many times one chunk is retried before the upload gives up. Three is
+  /// enough to ride out a lift or a Wi-Fi handover without hammering a server
+  /// that is genuinely down.
+  static const int _chunkAttempts = 3;
 
   /// GET /predictions
   Future<PaginatedResult<Prediction>> list({
@@ -177,29 +184,127 @@ class PredictionService {
     final uploadId = session['upload_id'].toString();
     final chunkSize = (session['chunk_size'] as num).toInt();
 
-    try {
-      var offset = 0;
+    // Remembered before the first chunk goes out, so an upload interrupted
+    // ten seconds in is still resumable.
+    await _store.save(
+      PendingUpload(
+        uploadId: uploadId,
+        filename: filename,
+        totalSize: bytes.length,
+        digest: md5.convert(bytes).toString(),
+        modelId: modelId,
+        savedAt: DateTime.now(),
+      ),
+    );
 
+    return _pushChunks(
+      uploadId: uploadId,
+      chunkSize: chunkSize,
+      bytes: bytes,
+      from: 0,
+      onProgress: onProgress,
+    );
+  }
+
+  /// Continues an upload that was interrupted, from wherever the server got to.
+  ///
+  /// [bytes] must be the same archive: [PendingUpload.matches] is checked
+  /// first, because splicing a different file into a half-written session
+  /// produces a corrupt ZIP that only fails much later, inside the worker.
+  Future<Prediction> resume({
+    required PendingUpload pending,
+    required Uint8List bytes,
+    void Function(double progress)? onProgress,
+  }) async {
+    if (!pending.matches(
+      size: bytes.length,
+      digest: md5.convert(bytes).toString(),
+    )) {
+      throw const ApiException(
+        'That is a different archive. Choose the same file, or discard the '
+        'unfinished upload and start again.',
+      );
+    }
+
+    final status = await _api.get(
+      '${ApiConfig.predictionUploads}/${pending.uploadId}',
+    );
+    final data = Map<String, dynamic>.from(status['data'] as Map);
+
+    final received = (data['received'] as num?)?.toInt() ?? 0;
+    final chunkSize = (data['chunk_size'] as num?)?.toInt() ?? 1 << 20;
+
+    onProgress?.call((received / bytes.length).clamp(0.0, 1.0));
+
+    return _pushChunks(
+      uploadId: pending.uploadId,
+      chunkSize: chunkSize,
+      bytes: bytes,
+      from: received,
+      onProgress: onProgress,
+    );
+  }
+
+  /// The chunk loop, shared by a fresh upload and a resumed one.
+  ///
+  /// A failed chunk is retried [_chunkAttempts] times, re-reading the server's
+  /// `received` first: a request that timed out may well have landed, and
+  /// re-sending from a stale offset would earn a 409.
+  Future<Prediction> _pushChunks({
+    required String uploadId,
+    required int chunkSize,
+    required Uint8List bytes,
+    required int from,
+    void Function(double progress)? onProgress,
+  }) async {
+    var offset = from;
+
+    try {
       while (offset < bytes.length) {
         final end = (offset + chunkSize).clamp(0, bytes.length);
         final slice = Uint8List.sublistView(bytes, offset, end);
 
-        await _api.sendMultipart(
-          '${ApiConfig.predictionUploads}/$uploadId',
-          method: 'PATCH',
-          data: FormData.fromMap({
-            'offset': offset,
-            'chunk': MultipartFile.fromBytes(slice, filename: 'chunk'),
-          }),
-          onSendProgress: (sent, total) {
-            if (total <= 0) return;
-            // Blend this chunk's progress into the overall figure.
-            final done = offset + (sent / total) * slice.length;
-            onProgress?.call((done / bytes.length).clamp(0.0, 1.0));
-          },
-        );
+        // Whether the server took this chunk. On the other path — a retry that
+        // discovered the server is further along than we thought — `offset`
+        // has already been moved to wherever that is, and assuming `end` here
+        // would skip whatever sits in between.
+        var accepted = false;
 
-        offset = end;
+        for (var attempt = 1; ; attempt++) {
+          try {
+            await _api.sendMultipart(
+              '${ApiConfig.predictionUploads}/$uploadId',
+              method: 'PATCH',
+              data: FormData.fromMap({
+                'offset': offset,
+                'chunk': MultipartFile.fromBytes(slice, filename: 'chunk'),
+              }),
+              onSendProgress: (sent, total) {
+                if (total <= 0) return;
+                // Blend this chunk's progress into the overall figure.
+                final done = offset + (sent / total) * slice.length;
+                onProgress?.call((done / bytes.length).clamp(0.0, 1.0));
+              },
+            );
+            accepted = true;
+            break;
+          } on ApiException catch (e) {
+            if (attempt >= _chunkAttempts || !_isRetryable(e)) rethrow;
+
+            await Future<void>.delayed(Duration(seconds: attempt));
+
+            // The failed request may have been received anyway, and a 409 says
+            // outright that our offset is wrong. Either way the server is the
+            // authority on how much it holds.
+            final synced = await _receivedSoFar(uploadId);
+            if (synced != null && synced != offset) {
+              offset = synced;
+              break;
+            }
+          }
+        }
+
+        if (accepted) offset = end;
         onProgress?.call(offset / bytes.length);
       }
 
@@ -207,17 +312,62 @@ class PredictionService {
         '${ApiConfig.predictionUploads}/$uploadId/finalize',
       );
 
+      await _store.clear();
+
       return Prediction.fromJson(
         Map<String, dynamic>.from(body['data'] as Map),
       );
-    } on ApiException {
-      // Do not leave a half-written archive on the server.
-      try {
-        await _api.delete('${ApiConfig.predictionUploads}/$uploadId');
-      } on ApiException {
-        // Best effort; the hourly cleanup sweeps abandoned sessions anyway.
-      }
+    } on ApiException catch (e) {
+      // A dropped connection is worth resuming, so the session is left alone
+      // and the record kept. Anything the server refused outright will refuse
+      // again, so that session is thrown away rather than left to rot until
+      // the hourly sweep.
+      if (!_isTransient(e)) await discardPending();
       rethrow;
+    }
+  }
+
+  /// How many bytes the server has, or null if even that call failed.
+  Future<int?> _receivedSoFar(String uploadId) async {
+    try {
+      final status = await _api.get(
+        '${ApiConfig.predictionUploads}/$uploadId',
+      );
+      final data = Map<String, dynamic>.from(status['data'] as Map);
+      return (data['received'] as num?)?.toInt();
+    } on ApiException {
+      return null;
+    }
+  }
+
+  /// Network trouble rather than a refusal.
+  ///
+  /// Decides whether the *session* survives a failure: a dropped connection is
+  /// worth resuming, a rejection is not.
+  bool _isTransient(ApiException e) =>
+      e.statusCode == null || e.statusCode! >= 500;
+
+  /// Worth sending again after re-syncing the offset.
+  ///
+  /// Transient failures, plus **409** — which is the server saying our offset
+  /// is wrong, and re-reading `received` is exactly the cure. A 422 will be a
+  /// 422 however many times it is sent.
+  bool _isRetryable(ApiException e) => _isTransient(e) || e.statusCode == 409;
+
+  /// The unfinished upload from a previous run, if there is one.
+  Future<PendingUpload?> pendingUpload() => _store.read();
+
+  /// Abandon it, on the server and locally.
+  Future<void> discardPending() async {
+    final pending = await _store.read();
+    await _store.clear();
+
+    if (pending == null) return;
+
+    try {
+      await _api.delete('${ApiConfig.predictionUploads}/${pending.uploadId}');
+    } on ApiException {
+      // Best effort; `predictions:cleanup` sweeps abandoned sessions anyway.
     }
   }
 
