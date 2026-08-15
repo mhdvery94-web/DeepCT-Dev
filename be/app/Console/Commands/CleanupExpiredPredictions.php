@@ -28,11 +28,6 @@ class CleanupExpiredPredictions extends Command
             ->whereNull('files_deleted_at')
             ->get();
 
-        if ($expired->isEmpty()) {
-            $this->info('Nothing to clean up.');
-            return self::SUCCESS;
-        }
-
         $this->info(
             ($dryRun ? '[dry run] ' : '') .
             "Found {$expired->count()} expired prediction(s)."
@@ -41,6 +36,10 @@ class CleanupExpiredPredictions extends Command
         $freedBytes = 0;
         $failures = 0;
 
+        // Note: the temp sweeps below run whether or not anything expired.
+        // Returning early on an empty set would let abandoned uploads and
+        // orphaned download archives accumulate forever on an installation
+        // where nothing has reached its retention window yet.
         foreach ($expired as $record) {
             $directory = $record->storageDirectory();
             $size = $this->directorySize($directory);
@@ -67,6 +66,7 @@ class CleanupExpiredPredictions extends Command
         }
 
         $freedBytes += $this->sweepStaleDownloads($dryRun);
+        $freedBytes += $this->sweepAbandonedUploads($dryRun);
 
         $this->info(
             ($dryRun ? 'Would free ' : 'Freed ') . $this->human($freedBytes) .
@@ -108,6 +108,45 @@ class CleanupExpiredPredictions extends Command
                 $freed += $size;
             } catch (\Throwable) {
                 // Raced with another cleanup or the request itself; ignore.
+            }
+        }
+
+        return $freed;
+    }
+
+    /**
+     * Remove chunked-upload sessions nobody came back for.
+     *
+     * A user who closes the app mid-upload leaves a `.part` file that can run
+     * to hundreds of megabytes. The window is deliberately generous — resuming
+     * an interrupted upload is a supported feature, and deleting a session
+     * someone is still working through would be worse than the wasted space.
+     */
+    private function sweepAbandonedUploads(bool $dryRun): int
+    {
+        $cutoff = now()->subDay()->getTimestamp();
+        $freed = 0;
+
+        foreach (Storage::allFiles('temp/uploads') as $file) {
+            try {
+                if (Storage::lastModified($file) > $cutoff) {
+                    continue;
+                }
+
+                $size = Storage::size($file);
+
+                if ($dryRun) {
+                    $this->line('  would delete abandoned upload ' . basename($file) .
+                        ' (' . $this->human($size) . ')');
+                } else {
+                    Storage::delete($file);
+                    $this->line('  deleted abandoned upload ' . basename($file) .
+                        ' (' . $this->human($size) . ')');
+                }
+
+                $freed += $size;
+            } catch (\Throwable) {
+                // Raced with the uploader itself; leave it for the next run.
             }
         }
 

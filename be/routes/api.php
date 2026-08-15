@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\MeController;
+use App\Http\Controllers\API\PredictionUploadController;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\ModelController;
 use App\Http\Controllers\API\UserActivityController;
@@ -34,6 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('me')->group(function () {
         Route::get('/activities', [MeController::class, 'activities'])->name('api.me.activities');
         Route::get('/stats', [MeController::class, 'stats'])->name('api.me.stats');
+        Route::get('/models', [MeController::class, 'models'])->name('api.me.models');
     });
 
 
@@ -67,6 +69,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // Prediction pipeline (FASE 3). Every action is scoped to the caller in
     // AnalysisController, so these are open to any authenticated role.
     Route::prefix('predictions')->group(function () {
+        // Chunked upload. Declared before the /{id} routes so "uploads" is
+        // never swallowed as a prediction id.
+        Route::post('/uploads', [PredictionUploadController::class, 'start'])->name('api.predictions.uploads.start');
+        Route::get('/uploads/{uploadId}', [PredictionUploadController::class, 'status'])->name('api.predictions.uploads.status');
+        Route::patch('/uploads/{uploadId}', [PredictionUploadController::class, 'chunk'])->name('api.predictions.uploads.chunk');
+        Route::post('/uploads/{uploadId}/finalize', [PredictionUploadController::class, 'finalize'])->name('api.predictions.uploads.finalize');
+        Route::delete('/uploads/{uploadId}', [PredictionUploadController::class, 'abort'])->name('api.predictions.uploads.abort');
+
         Route::get('/', [AnalysisController::class, 'index'])->name('api.predictions.index');
         Route::post('/', [AnalysisController::class, 'store'])->name('api.predictions.store');
         Route::get('/{id}', [AnalysisController::class, 'show'])->name('api.predictions.show');

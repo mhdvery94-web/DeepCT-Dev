@@ -53,6 +53,35 @@ class MeController extends Controller
     }
 
     /**
+     * GET /api/me/models
+     *
+     * Models a researcher may submit work to. Deliberately narrow: id, name,
+     * version and reachability only. `endpoint_url` stays admin-only, since
+     * knowing it would let anyone bypass the platform and hit the GPU worker
+     * directly.
+     */
+    public function models()
+    {
+        $models = Model::where('is_active', true)
+            ->orderByDesc('status') // online sorts before offline
+            ->orderBy('name')
+            ->get(['id', 'name', 'version', 'status', 'description', 'accuracy']);
+
+        return response()->json([
+            'success' => true,
+            'data' => $models->map(fn($m) => [
+                'id' => $m->id,
+                'name' => $m->name,
+                'version' => $m->version,
+                'status' => $m->status,
+                'description' => $m->description,
+                'accuracy' => $m->accuracy,
+                'is_available' => $m->status === 'online',
+            ]),
+        ]);
+    }
+
+    /**
      * GET /api/me/stats
      *
      * Counters for the user dashboard. `analyses` stays at zero until the

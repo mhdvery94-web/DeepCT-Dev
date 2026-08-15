@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
@@ -93,6 +96,63 @@ class ApiClient {
     );
   }
 
+  /// Multipart POST/PATCH with upload progress.
+  ///
+  /// Uploads get their own generous timeouts: the default 30s is fine for a
+  /// JSON call but not for pushing megabytes over a tunnel.
+  Future<Map<String, dynamic>> sendMultipart(
+    String path, {
+    required FormData data,
+    String method = 'POST',
+    ProgressCallback? onSendProgress,
+    Duration sendTimeout = const Duration(minutes: 10),
+    Duration receiveTimeout = const Duration(minutes: 5),
+  }) async {
+    return _send(
+      () => _dio.request(
+        path,
+        data: data,
+        onSendProgress: onSendProgress,
+        options: Options(
+          method: method,
+          sendTimeout: sendTimeout,
+          receiveTimeout: receiveTimeout,
+          // FormData sets its own multipart boundary; leaving the JSON
+          // content-type in place would make the server reject the body.
+          contentType: 'multipart/form-data',
+        ),
+      ),
+    );
+  }
+
+  /// Fetches a binary payload (a results ZIP) with download progress.
+  ///
+  /// Returns the bytes plus the response headers, so the caller can verify
+  /// the `X-Checksum-MD5` the API sends alongside every download.
+  Future<({Uint8List bytes, Headers headers})> getBytes(
+    String path, {
+    ProgressCallback? onReceiveProgress,
+    Duration receiveTimeout = const Duration(minutes: 10),
+  }) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        path,
+        onReceiveProgress: onReceiveProgress,
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: receiveTimeout,
+        ),
+      );
+
+      return (
+        bytes: Uint8List.fromList(response.data ?? const []),
+        headers: response.headers,
+      );
+    } on DioException catch (e) {
+      throw _translateBinary(e);
+    }
+  }
+
   Future<Map<String, dynamic>> put(
     String path, {
     Map<String, dynamic>? data,
@@ -139,6 +199,29 @@ class ApiClient {
     } on DioException catch (e) {
       throw _translate(e);
     }
+  }
+
+  /// A failed binary request still carries a JSON error body, but Dio hands it
+  /// back as raw bytes because we asked for [ResponseType.bytes]. Decode it so
+  /// the user sees the server's message instead of "Request failed".
+  ApiException _translateBinary(DioException error) {
+    final data = error.response?.data;
+
+    if (data is List<int>) {
+      try {
+        final decoded = jsonDecode(utf8.decode(data));
+        if (decoded is Map && decoded['message'] != null) {
+          return ApiException(
+            decoded['message'].toString(),
+            statusCode: error.response?.statusCode,
+          );
+        }
+      } catch (_) {
+        // Not JSON after all; fall through to the generic translation.
+      }
+    }
+
+    return _translate(error);
   }
 
   ApiException _translate(DioException error) {

@@ -25,6 +25,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] - 2026-08-15
+
+### 📤 FASE 3 client: upload, watch, download
+
+The researcher console can now run the whole pipeline end to end.
+
+#### Added — Frontend
+
+- **`UploadScreen`** — model picker, ZIP picker, live progress. Requirements
+  are stated up front (numbered frames, a *gap* between numbers, size limits),
+  because each one is otherwise a rejection the user only discovers after
+  uploading. Offline models are shown but not selectable.
+- **`PredictionHistoryScreen`** — job cards with status, queue position,
+  expiry countdown, both download variants and delete. Polls every 10s **only**
+  while something is pending or processing, and cancels the timer once
+  everything has settled. A failed background refresh leaves the list on screen
+  instead of blanking it.
+- **`PredictionService`** — picks the upload transport for the caller: a single
+  request under 1 MB, the resumable chunked flow above that. Chunk size comes
+  from the server's session response, never hard-coded.
+- **`Prediction` model** with lifecycle helpers (`isActive`, `canDownload`,
+  `expiryLabel`).
+- Downloads are **checksum-verified**: the client recomputes MD5 over the
+  received bytes and compares it to `X-Checksum-MD5`, surfacing a mismatch
+  rather than silently saving a corrupt archive.
+- `file_download` utilities generalised from text to bytes so the same
+  web/native split serves both the CSV export and results archives.
+
+#### Added — Backend
+
+- **Chunked upload** (`PredictionUploadController`): start → PATCH chunks →
+  finalize, plus status (for resuming) and abort. Out-of-order chunks are
+  rejected with **409** rather than silently assembling a corrupt archive;
+  re-sending a chunk that already landed is idempotent so clients can retry.
+  Ownership is enforced by the storage path, so another account's `upload_id`
+  simply 404s.
+- **`PredictionIntake` service** — extraction, validation, record creation and
+  dispatch, shared by the direct and chunked paths so the two cannot drift
+  apart. Extraction now flattens nested entries; previously a ZIP with a
+  wrapping folder would extract frames the job could never see, because
+  `Storage::files()` does not recurse.
+- **`GET /api/me/models`** — a researcher could not previously see any model at
+  all (the registry is admin-only), so there was nothing to pick on the upload
+  screen. Returns id, name, version and reachability only; `endpoint_url` stays
+  admin-only, since knowing it would let anyone bypass the platform and hit the
+  GPU worker directly.
+
+#### Fixed
+
+- **`predictions:cleanup` returned early when nothing had expired**, so
+  abandoned upload sessions and orphaned download archives were never swept on
+  an installation where no prediction had yet reached its retention window.
+  A stale `.part` file can be hundreds of megabytes.
+- **Chunk size is now computed from the server's own limits** rather than fixed
+  at 4 MB. On a stock Windows `php.ini` (`upload_max_filesize = 2M`) a 4 MB
+  chunk would be rejected before the application ever saw it.
+- Abandoned upload sessions older than 24 hours are now swept. The window is
+  deliberately generous: resuming an interrupted upload is a supported feature.
+
+#### Dependency note
+
+`file_picker` returns, pinned to **^11.0.0**, which is bounded on both sides:
+6.x and **8.x** still reference the v1 embedding (`PluginRegistry.Registrar`)
+and fail `flutter build apk` with "cannot find symbol: class Registrar"
+(verified against 8.0.0), while 12.x needs `win32 ^6.3.0` against
+`flutter_secure_storage` 9.x's `win32 ^5.0.0`. 11.x also moved `pickFiles` to a
+static method.
+
+#### Correction to v1.5.0's notes
+
+v1.5.0 recorded that PHP's `upload_max_filesize` made direct upload unusable.
+That was wrong: under Octane, **RoadRunner parses the multipart body itself**,
+so the PHP SAPI limit does not apply — a 4 MB direct upload succeeds against a
+2 MB `upload_max_filesize`. The real ceiling is RoadRunner's `max_request_size`.
+The chunked flow still earns its place for resumability, honest progress, and
+deployments behind nginx + PHP-FPM where those limits do apply.
+
+#### Verified against the live Kaggle worker, at realistic frame sizes
+
+Using two 1024x1024 16-bit TIFF frames (2 MB each, 4 MB archive):
+
+- Chunked upload split into **3 chunks of 1.6 MB**, the size the server
+  computed from its own limits
+- Resume endpoint reported byte counts correctly between chunks
+- Out-of-order chunk → **409**; duplicate chunk → idempotent; premature
+  finalize → **409**; another account's `upload_id` → **404**; abort → 200
+- Finalize queued the job; the worker produced **3 frames of 2 MB each**
+- `download/results` → 200 with `X-Checksum-MD5` matching the actual file MD5
+- `predictions:cleanup` swept the abandoned sessions and reported bytes freed
+- `flutter analyze` clean, 21/21 tests pass
+
+---
+
 ## [1.5.0] - 2026-08-15
 
 ### 🔬 FASE 3 backend: the prediction pipeline actually runs

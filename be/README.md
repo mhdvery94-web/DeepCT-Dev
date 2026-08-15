@@ -18,7 +18,7 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (23 Total)
+### API Endpoints (35 Total)
 
 Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
@@ -48,13 +48,15 @@ Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 - `POST /api/admin/models/{id}/health-check` - Manual health check
 - `POST /api/admin/models/{id}/test` - Test prediction
 
-#### Self-service (2) - Any authenticated user
+#### Self-service (3) - Any authenticated user
 - `GET /api/me/stats` - Counters for the caller's own dashboard
 - `GET /api/me/activities` - The caller's own audit trail, paginated
+- `GET /api/me/models` - Models this user may submit work to
 
-Both are scoped server-side to `$request->user()`, so there is no id to pass
-and no way to read another account's data. `me/stats` reports model
-availability as a **count only** — endpoint URLs stay admin-only.
+All three are scoped server-side, so there is no id to pass and no way to read
+another account's data. Neither `me/stats` nor `me/models` ever exposes
+`endpoint_url`: knowing it would let anyone bypass the platform and hit the GPU
+worker directly.
 
 Without these an ordinary researcher could reach nothing but `GET /user`,
 since everything under `/admin` requires the admin role.
@@ -76,20 +78,62 @@ interpolates what is missing between them. `frame_001.tif` + `frame_005.tif`
 generates 002, 003 and 004. Consecutive frames are rejected with a clear
 message, as is any job that would generate more than 200 frames.
 
+#### Chunked upload (5) - Any authenticated user
+
+`POST /api/predictions` sends the whole archive in one request. This resumable
+flow is the alternative, and the right choice for anything large:
+
+- `POST /api/predictions/uploads` - open a session → `{ upload_id, chunk_size }`
+- `PATCH /api/predictions/uploads/{id}` - append one chunk (`offset` + `chunk`)
+- `GET /api/predictions/uploads/{id}` - how many bytes landed, for resuming
+- `POST /api/predictions/uploads/{id}/finalize` - assemble and queue the job
+- `DELETE /api/predictions/uploads/{id}` - abandon the session
+
+Chunks must arrive in order; a gap returns **409** rather than silently
+assembling a corrupt archive. Re-sending a chunk that already landed is
+idempotent, so a client can retry safely. Session state lives beside the
+partial file, so an upload survives a server restart. Ownership is enforced by
+the storage path — another account's `upload_id` simply 404s.
+
+**Chunk size is computed, not fixed.** `php.ini` here reads
+`upload_max_filesize = 2M` / `post_max_size = 8M`, so the server derives a
+chunk that actually fits (80% of the smaller limit — currently **1.6 MB**) and
+returns it in the session response. The Flutter client uses whatever the server
+advertises rather than hard-coding a size, so raising the ini settings is the
+only change needed to speed uploads up.
+
+> **Note on those PHP limits:** under Octane they mostly do not apply.
+> RoadRunner parses the multipart body itself, so `upload_max_filesize` never
+> gets a say — a 4 MB direct upload was verified to succeed against a 2 MB
+> `upload_max_filesize`. The real ceiling is RoadRunner's own
+> `max_request_size`, configurable in `.rr.yaml`.
+>
+> The chunked flow still earns its place: it resumes after a dropped
+> connection, reports real progress, and keeps working if the app is ever
+> deployed behind nginx + PHP-FPM, where `php.ini` *does* apply. The computed
+> chunk size means it behaves correctly under either server.
+
 #### Activity Logs (3) - Admin Only
 - `GET /api/admin/activities` - List all activities with filters
 - `GET /api/admin/activities/types` - Get activity types
 - `GET /api/users/{id}/activities` - Get user activities
 
 ### Background Jobs
-- `ProcessDeepLearningImage` - Process prediction job
+- `ProcessDeepLearningImage` - Fills frame gaps by recursive interpolation at
+  t=0.5, calling the model once per generated frame
 - `CheckModelsHealth` - Auto health check (scheduled every 5 minutes)
+
+⚠️ **Predictions need a queue worker.** Without `php artisan queue:work` an
+upload succeeds but the job stays `pending` forever.
 
 ### Scheduled Commands
 Registered in `routes/console.php` (Laravel 12 has no `app/Console/Kernel.php`):
 
 - `php artisan models:health-check` - Check all models health status (every 5 min)
 - `php artisan tokens:cleanup` - Delete tokens older than 7 days (daily)
+- `php artisan predictions:cleanup` - Enforce the 24-hour retention window on
+  prediction output, and sweep abandoned uploads / orphaned download archives
+  (hourly). Supports `--dry-run`.
 
 ⚠️ **These only run if a scheduler process is running.** Neither Laragon nor
 Octane starts one. Without it, `models.status` in the database goes stale — it

@@ -1,0 +1,499 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+
+import '../../models/prediction.dart';
+import '../../services/api_client.dart';
+import '../../services/me_service.dart';
+import '../../services/prediction_service.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/async_state_views.dart';
+
+/// Start a new interpolation job: pick a model, pick a ZIP, upload.
+///
+/// Upload transport is chosen for the user by [PredictionService] — a single
+/// request for small archives, the resumable chunked flow otherwise — so this
+/// screen only tracks one 0..1 progress figure.
+class UploadScreen extends StatefulWidget {
+  /// Called once a job has been queued, so the shell can show the history.
+  final void Function(Prediction queued)? onQueued;
+
+  const UploadScreen({super.key, this.onQueued});
+
+  @override
+  State<UploadScreen> createState() => _UploadScreenState();
+}
+
+class _UploadScreenState extends State<UploadScreen> {
+  final MeService _meService = MeService();
+  final PredictionService _service = PredictionService();
+
+  bool _loadingModels = true;
+  String? _loadError;
+  List<AvailableModel> _models = const [];
+  AvailableModel? _selectedModel;
+
+  Uint8List? _fileBytes;
+  String? _fileName;
+
+  bool _uploading = false;
+  double _progress = 0;
+  String? _uploadError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadModels();
+  }
+
+  Future<void> _loadModels() async {
+    setState(() {
+      _loadingModels = true;
+      _loadError = null;
+    });
+
+    try {
+      final models = await _meService.models();
+
+      if (!mounted) return;
+      setState(() {
+        _models = models;
+        // Preselect the first reachable model so the common case is one tap.
+        _selectedModel =
+            models.where((m) => m.isAvailable).firstOrNull ??
+            models.firstOrNull;
+        _loadingModels = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = e.message;
+        _loadingModels = false;
+      });
+    }
+  }
+
+  Future<void> _pickFile() async {
+    // file_picker 11 exposes this statically; the older `FilePicker.platform`
+    // accessor is gone.
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['zip'],
+      // The chunked uploader needs the bytes in memory anyway, and on web
+      // there is no path to read from.
+      withData: true,
+    );
+
+    final file = result?.files.firstOrNull;
+    if (file?.bytes == null) return;
+
+    if (!mounted) return;
+    setState(() {
+      _fileBytes = file!.bytes;
+      _fileName = file.name;
+      _uploadError = null;
+    });
+  }
+
+  Future<void> _submit() async {
+    final bytes = _fileBytes;
+    final model = _selectedModel;
+    if (bytes == null || model == null) return;
+
+    setState(() {
+      _uploading = true;
+      _progress = 0;
+      _uploadError = null;
+    });
+
+    try {
+      final queued = await _service.upload(
+        bytes: bytes,
+        filename: _fileName ?? 'frames.zip',
+        modelId: model.id,
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p);
+        },
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _fileBytes = null;
+        _fileName = null;
+        _progress = 0;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Queued: ${queued.inputFilesCount} frames, '
+            'position ${queued.queuePosition ?? 1} in the queue.',
+          ),
+          backgroundColor: AppTheme.success,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+
+      widget.onQueued?.call(queued);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _uploadError = e.message;
+      });
+    }
+  }
+
+  bool get _canSubmit =>
+      !_uploading &&
+      _fileBytes != null &&
+      _selectedModel != null &&
+      _selectedModel!.isAvailable;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loadingModels) {
+      return const LoadingView(message: 'Loading models...');
+    }
+
+    if (_loadError != null) {
+      return ErrorView(message: _loadError!, onRetry: _loadModels);
+    }
+
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isNarrow ? 16 : 24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'New Analysis',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Upload boundary frames and the platform fills the gaps '
+                'between them by recursive interpolation at t=0.5.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 24),
+
+              const _RequirementsCard(),
+              const SizedBox(height: 20),
+
+              _section(context, '1. Choose a model'),
+              const SizedBox(height: 8),
+              _buildModelPicker(context),
+              const SizedBox(height: 24),
+
+              _section(context, '2. Choose your archive'),
+              const SizedBox(height: 8),
+              _buildFilePicker(context),
+              const SizedBox(height: 24),
+
+              if (_uploading) ...[
+                _buildProgress(context),
+                const SizedBox(height: 16),
+              ],
+
+              if (_uploadError != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.errorLight,
+                    border: Border.all(color: AppTheme.error),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: AppTheme.error,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(_uploadError!)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _canSubmit ? _submit : null,
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: Text(_uploading ? 'UPLOADING...' : 'START ANALYSIS'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Results are deleted automatically 24 hours after they are '
+                'generated. Download them before then.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _section(BuildContext context, String label) =>
+      Text(label, style: Theme.of(context).textTheme.titleMedium);
+
+  Widget _buildModelPicker(BuildContext context) {
+    if (_models.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.warningLight,
+          border: Border.all(color: AppTheme.warning),
+        ),
+        child: const Text(
+          'No active model is registered. Ask an administrator to add one.',
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (final model in _models)
+          _ModelOption(
+            model: model,
+            selected: _selectedModel?.id == model.id,
+            onTap: model.isAvailable
+                ? () => setState(() => _selectedModel = model)
+                : null,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFilePicker(BuildContext context) {
+    final hasFile = _fileBytes != null;
+
+    return InkWell(
+      onTap: _uploading ? null : _pickFile,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: hasFile ? AppTheme.successLight : AppTheme.surface,
+          border: Border.all(
+            color: hasFile ? AppTheme.success : AppTheme.borderDark,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              hasFile ? Icons.check_circle_outline : Icons.upload_file_outlined,
+              size: 36,
+              color: hasFile ? AppTheme.success : AppTheme.textMuted,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              hasFile ? _fileName! : 'Tap to choose a .zip archive',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              hasFile
+                  ? _formatBytes(_fileBytes!.length)
+                  : 'The archive holds your .tif frames',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (hasFile && !_uploading) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _pickFile,
+                child: const Text('CHOOSE A DIFFERENT FILE'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProgress(BuildContext context) {
+    final percent = (_progress * 100).clamp(0, 100).toStringAsFixed(0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Uploading', style: Theme.of(context).textTheme.bodySmall),
+            Text('$percent%', style: Theme.of(context).textTheme.labelLarge),
+          ],
+        ),
+        const SizedBox(height: 6),
+        LinearProgressIndicator(
+          value: _progress == 0 ? null : _progress,
+          minHeight: 6,
+          backgroundColor: AppTheme.border,
+        ),
+      ],
+    );
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1048576) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1073741824) {
+      return '${(bytes / 1048576).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / 1073741824).toStringAsFixed(2)} GB';
+  }
+}
+
+/// What the archive has to contain. Stated up front, because every one of
+/// these is a rejection the user would otherwise hit after uploading.
+class _RequirementsCard extends StatelessWidget {
+  const _RequirementsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    const rules = [
+      'A .zip archive containing .tif or .tiff frames',
+      'At least two frames',
+      'Frame numbers in the filenames, e.g. frame_001.tif',
+      'A gap between those numbers — 001 and 005 generates 002, 003 and 004',
+      'Up to 50 MB per frame, and at most 200 generated frames per job',
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.accentLight,
+        border: Border.all(color: AppTheme.accent),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.checklist, size: 18, color: AppTheme.accent),
+              const SizedBox(width: 8),
+              Text(
+                'Before you upload',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          for (final rule in rules)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('•  '),
+                  Expanded(
+                    child: Text(
+                      rule,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModelOption extends StatelessWidget {
+  final AvailableModel model;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _ModelOption({required this.model, required this.selected, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = onTap == null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: selected ? AppTheme.primaryLight : AppTheme.surface,
+            border: Border.all(
+              color: selected ? AppTheme.primary : AppTheme.border,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                size: 18,
+                color: disabled
+                    ? AppTheme.borderDark
+                    : (selected ? AppTheme.primary : AppTheme.textMuted),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      model.label,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: disabled ? AppTheme.textMuted : null,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (model.accuracy != null)
+                      Text(
+                        'Accuracy ${model.accuracy!.toStringAsFixed(1)}%',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                color: model.isAvailable
+                    ? AppTheme.successLight
+                    : AppTheme.errorLight,
+                child: Text(
+                  model.status.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: model.isAvailable
+                        ? AppTheme.success
+                        : AppTheme.error,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

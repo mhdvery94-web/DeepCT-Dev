@@ -233,7 +233,7 @@ deepCT-gemini/
 
 ### Root Documentation
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Arsitektur sistem dan flow diagram
-- [API_DOCS.md](API_DOCS.md) - Dokumentasi API endpoint (23 endpoints + `/api/health`)
+- [API_DOCS.md](API_DOCS.md) - Dokumentasi API endpoint (35 endpoints + `/api/health`)
 - [DESIGN.md](DESIGN.md) - Design system dan UI/UX guidelines
 - [PRD.md](PRD.md) - Product Requirements Document
 - [SETUP.md](SETUP.md) - Panduan instalasi detail
@@ -401,4 +401,4 @@ Diverifikasi langsung terhadap aplikasi yang berjalan, bukan dari catatan lama:
 | Angka "30/30" & "23/23" di dokumen lama | ⚠️ itu checklist `curl` manual, bukan suite |
 | Scheduler (`schedule:work`) | ❌ tidak jalan by default — status model jadi basi kalau tidak dijalankan |
 | Version control | ✅ git repository aktif di root (branch `main`) |
-| FASE 3 (upload/prediksi) | ⏳ belum mulai — route `predictions` masih dikomentari di `be/routes/api.php` |
+| FASE 3 (upload/prediksi) | ✅ jalan end-to-end: upload (langsung & berpotong), interpolasi rekursif, download + MD5, retensi 24 jam |
