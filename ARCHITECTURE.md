@@ -182,10 +182,15 @@ Satu job bisa menghasilkan ~1,5 GB. Berkas dihapus, **record tetap disimpan**
 dan ditandai `files_deleted_at`, sehingga peneliti tetap melihat riwayatnya dan
 mendapat pesan "kedaluwarsa" yang jelas, bukan unduhan yang rusak.
 
-### Kenapa satu sesi per akun
-Login mencabut seluruh token lama. Akun dibuat admin dan dibagikan dengan
-password default, jadi membatasi ke satu sesi membuat penyalahgunaan kredensial
-langsung terlihat oleh pemilik sah akun.
+### Kenapa sesi paralel diizinkan
+Peneliti wajar memakai laptop dan HP bergantian, dan membatasi ke satu sesi
+berarti salah satunya selalu terputus. Pernah dicoba dua bentuk pembatasan —
+menendang perangkat lama, lalu menolak login baru — keduanya lebih mengganggu
+daripada melindungi: aplikasi yang tertutup paksa mengunci akun sampai
+token kedaluwarsa.
+
+Batas keamanannya sekarang ada di masa berlaku token (7 hari) dan pembersihan
+harian, bukan di jumlah sesi.
 
 ### Kenapa `deleteFileAfterSend()` tidak dipakai
 Symfony melakukan unlink-nya di dalam `BinaryFileResponse::sendContent()`, dan

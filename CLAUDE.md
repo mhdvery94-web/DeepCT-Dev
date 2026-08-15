@@ -144,14 +144,9 @@ real worker. A passing build says nothing about whether interpolation works.
 
 New users get `BrinResearch2026`.
 
-**One session per account, and a second login is refused rather than taking
-over.** If the account is in use, `POST /login` answers **409** with a message
-telling the caller to sign out first. A session counts as "in use" while its
-token was exercised within the last 15 minutes
-(`AuthController::SESSION_IDLE_MINUTES`); past that it is treated as abandoned
-and the new login takes it over.
+**Concurrent sessions are allowed.** Each login mints its own token and leaves
+existing ones alone, so the same account can be signed in on a laptop and a
+phone at once, and a script logging in does not disturb anyone. Tokens expire
+after 7 days (`config/sanctum.php`); `tokens:cleanup` sweeps the expired rows.
 
-That window exists because the alternative is worse: without it, an app that
-was force-closed would lock the account until the token expired seven days
-later. It also means **your scripts cannot log in as the same user twice** —
-reuse the token, or log out first.
+Logging out revokes only the token that made the request.

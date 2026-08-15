@@ -33,6 +33,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.11.0] - 2026-08-15
+
+### 🔓 Concurrent sessions restored, on request
+
+v1.9.0 refused a second login while an account was in use. That has been
+reverted: **one account may now be signed in on several devices at once.**
+
+Each login mints its own token and leaves the others untouched; `POST /logout`
+revokes only the token that made the request. Expiry is handled centrally
+rather than per-login — 7 days via `config/sanctum.php`, swept daily by
+`tokens:cleanup`.
+
+Worth recording that this is a *third* behaviour, not a return to the first:
+
+| | Behaviour |
+|---|---|
+| Originally | Login revoked all other tokens — single session, newest wins |
+| v1.9.0 | Login refused while a session was active — single session, oldest wins |
+| Now | Sessions coexist |
+
+Neither restriction earned its keep. A researcher moving between a laptop and a
+phone was interrupted by both, and the second form could lock an account out
+after a force-closed app. The security boundary now sits in token lifetime and
+daily cleanup, not in a session count.
+
+The three single-session tests were replaced with three that assert the
+opposite: two devices can hold sessions at once, an admin is not exempt, and
+signing out on one device leaves the other working. Verified on the running
+server as well.
+
+Docs corrected in six places — `CLAUDE.md`, `be/README.md`, `API.md`,
+`README.md` (twice), `ARCHITECTURE.md` and `ROADMAP.md` — all of which had
+described the old rule.
+
+---
+
 ## [1.10.0] - 2026-08-15
 
 ### 🖼️ Frame preview — results can finally be looked at

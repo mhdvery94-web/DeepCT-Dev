@@ -83,7 +83,7 @@ bukan disalin dari catatan lama.
 | Bagian | Status |
 |---|---|
 | Autentikasi (Sanctum, token 7 hari) | ✅ |
-| Satu sesi per akun — login kedua ditolak 409, idle 15 menit bisa diambil alih | ✅ |
+| Sesi paralel — satu akun bisa aktif di beberapa perangkat | ✅ |
 | Admin console — user, model, activity log, CSV export | ✅ |
 | Researcher console — dashboard, upload, hasil, riwayat | ✅ |
 | Pipeline prediksi — upload → interpolasi rekursif → download | ✅ |
@@ -162,10 +162,9 @@ Kaggle, bukan backend.
 User baru dibuat admin dengan password `BrinResearch2026`. Tidak ada registrasi
 mandiri dan tidak ada alur "lupa password".
 
-⚠️ **Satu sesi per akun.** Login kedua saat akun sedang dipakai **ditolak
-(HTTP 409)** dengan pesan yang menjelaskan, dan perangkat yang sudah login tidak
-ditendang. Sesi yang menganggur lebih dari 15 menit dianggap ditinggalkan,
-sehingga akun tidak terkunci kalau aplikasi tertutup paksa.
+Satu akun boleh aktif di **beberapa perangkat sekaligus**. Tiap login
+menerbitkan token sendiri; logout hanya mencabut token perangkat itu. Token
+berlaku 7 hari.
 
 ---
 

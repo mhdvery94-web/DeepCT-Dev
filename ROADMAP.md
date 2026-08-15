@@ -93,7 +93,7 @@ Belum menyentuh kode — rancangan dulu. Lihat catatan di bawah.
 - [x] Chunked upload resumable di sisi server
 - [x] Konsol peneliti (dashboard, unggah, hasil, riwayat, aktivitas)
 - [x] Pratinjau frame — TIFF 16-bit dirender jadi PNG di server
-- [x] Satu sesi per akun, dengan ambang idle 15 menit
+- [x] Sesi paralel — satu akun bisa aktif di beberapa perangkat
 - [x] Suite test backend (89 test) dan Flutter (21 test)
 - [x] Konsolidasi dokumentasi, 28 berkas jadi 10
 - [x] Git remote + cadangan lokal
