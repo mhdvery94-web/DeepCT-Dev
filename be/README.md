@@ -140,8 +140,10 @@ Octane starts one. Without it, `models.status` in the database goes stale — it
 keeps whatever value the last manual check wrote. Start one with:
 
 ```bash
-php artisan schedule:work     # foreground, dev
+npm run serve:all             # API + queue worker + scheduler, one command
 ```
+
+Or individually: `npm run octane`, `npm run queue`, `npm run schedule`.
 
 Run `php artisan models:health-check` by hand to refresh statuses on demand.
 
@@ -305,10 +307,34 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-⚠️ `tests/` contains only Laravel's stock `ExampleTest` stubs — there is **no
-real test suite yet**. The "30/30 API tests PASS" figure in the root docs refers
-to the manual `curl` checklist recorded in
-[../README.md](../README.md), not to `php artisan test`.
+**67 tests, 223 assertions, ~20s.** They run against MySQL, not sqlite: two
+migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
+the application long outgrew, so a sqlite suite would produce both false passes
+and false failures. Create the database once:
+
+```sql
+CREATE DATABASE db_aict_test;
+```
+
+| Suite | Covers |
+|---|---|
+| `AuthTest` | login, logout, token revocation, single-session, audit trail |
+| `AuthorizationTest` | every admin route refuses a researcher; `/me/*` is owner-scoped; `endpoint_url` never leaks |
+| `PredictionPipelineTest` | recursive interpolation, worker contract, failure paths, counter release |
+| `ChunkedUploadTest` | ordering, idempotency, ownership, session cleanup |
+| `PredictionCleanupTest` | 24-hour retention and the temp sweeps |
+
+Two things to know before adding tests:
+
+- **Use `$this->apiAs($token)`**, never `withHeader('Authorization', ...)`.
+  Laravel caches the resolved guard for the lifetime of a test method, so a
+  second request skips token verification entirely -- a revoked token would keep
+  answering 200 and the assertion would pass while proving nothing.
+- **Call `Storage::fake('local')` in `setUp()`** if the test touches files.
+  `RefreshDatabase` rolls back the database but leaves the filesystem alone.
+
+The GPU worker is always faked. A real call costs ~20s and Kaggle quota, and
+what is worth testing is our orchestration, not the model.
 
 ### Performance Testing
 Benchmark figures are in [../README.md](../README.md).

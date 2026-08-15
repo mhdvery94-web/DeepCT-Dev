@@ -33,6 +33,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.0] - 2026-08-15
+
+### 🧪 A real backend test suite, and one command to run the stack
+
+#### Added
+
+**67 tests, 223 assertions, ~20 seconds.** `be/tests/` previously held nothing
+but Laravel's `ExampleTest` stubs, so `php artisan test` proved nothing.
+
+| Suite | Covers |
+|---|---|
+| `AuthTest` (8) | login, logout, token revocation, single-session, audit trail |
+| `AuthorizationTest` (22) | all 15 admin routes refuse a researcher; `/me/*` is owner-scoped; `endpoint_url` never leaks |
+| `PredictionPipelineTest` (18) | recursive interpolation, worker contract, failure paths, counter release |
+| `ChunkedUploadTest` (11) | ordering, idempotency, ownership, session cleanup |
+| `PredictionCleanupTest` (8) | 24-hour retention and the temp sweeps |
+
+The GPU worker is faked throughout — a real call costs ~20s and Kaggle quota,
+and what needs testing is our orchestration. The fake reproduces the worker's
+actual contract, **including a handled failure arriving as JSON with HTTP 200**,
+which has its own test.
+
+**`npm run serve:all`** starts the API, queue worker and scheduler together via
+`concurrently`. Verified by uploading a job and watching the worker pick it up in
+6 seconds with no manual `queue:work`.
+
+**`npm run octane:reset`** kills whatever holds the port and clears the stale
+state file, because `octane:stop` cannot do it on Windows — it calls
+`posix_kill()` and crashes before stopping anything.
+
+#### Changed
+
+- **Tests run against MySQL, not sqlite.** `phpunit.xml` pointed at sqlite
+  `:memory:`, which cannot work here: two migrations use
+  `ALTER TABLE ... MODIFY`, and `activity_type` begins as an enum of five values
+  the application long outgrew, so its CHECK constraint would reject rows the
+  real app writes. A sqlite suite would produce both false passes and false
+  failures. Requires `CREATE DATABASE db_aict_test` once.
+- `SANCTUM_STATEFUL_DOMAINS` is empty under test — see below.
+
+#### Two traps found while writing these tests
+
+**A revoked token kept answering 200.** Not an application bug: Laravel's
+`AuthManager` caches the resolved guard *and its user* for the lifetime of a
+test method, so a second request never re-checks the token. Confirmed by
+diagnosis — after logout the token row was gone from the database, yet
+`/api/user` still returned 200 until `forgetGuards()` was called. `TestCase`
+now exposes `apiAs($token)`, which resets the guard first; using
+`withHeader('Authorization', …)` directly would make revocation tests pass
+while asserting nothing.
+
+Sanctum's default `stateful` list also contains `localhost`, and test requests
+default to that host, so `EnsureFrontendRequestsAreStateful` would switch
+authentication to the session guard entirely. The real clients hold a bearer
+token and never use the SPA cookie flow, so the test env forces the token guard.
+
+**The tests polluted real storage.** `RefreshDatabase` rolls back the database
+but leaves the filesystem alone, and these tests write real frames: a single run
+left 132 files under `storage/app/private/predictions/`. Fixed with
+`Storage::fake('local')`, and the accumulated debris removed.
+
+---
+
 ## [1.7.0] - 2026-08-15
 
 ### 📚 Documentation consolidated: 28 files → 10

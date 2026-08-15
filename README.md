@@ -37,12 +37,15 @@ php artisan migrate --seed
 npm run octane                    # http://127.0.0.1:8000
 ```
 
-Dua proses pendamping, di terminal terpisah — **keduanya tidak jalan sendiri**:
+Backend butuh **tiga proses**. Satu perintah menjalankan semuanya:
 
 ```bash
-php artisan queue:work            # tanpa ini, prediksi selamanya "pending"
-php artisan schedule:work         # retensi 24 jam + health check model
+npm run serve:all                 # API + queue worker + scheduler
 ```
+
+Tanpa queue worker, upload berhasil tapi prediksi selamanya `pending`; tanpa
+scheduler, berkas kedaluwarsa tidak pernah dihapus. Kalau Octane menolak start,
+jalankan `npm run octane:reset` dulu (lihat CLAUDE.md soal `posix_kill`).
 
 ### 2. Frontend
 
@@ -86,7 +89,8 @@ bukan disalin dari catatan lama.
 | Chunked upload resumable | ✅ |
 | Retensi 24 jam (`predictions:cleanup`) | ✅ |
 | 35 endpoint API + `/api/health` | ✅ |
-| `flutter analyze` 0 issue, 21 test lulus | ✅ |
+| `flutter analyze` 0 issue, 21 test Flutter lulus | ✅ |
+| **67 test backend lulus** (223 assertion, ~20 detik) | ✅ |
 | Build web & APK release | ✅ (APK ~52 MB) |
 
 Terverifikasi end-to-end terhadap worker Kaggle sungguhan dengan dua frame
@@ -97,8 +101,7 @@ unduhan cocok dengan header.
 
 | Hal | Catatan |
 |---|---|
-| **Test suite backend** | `be/tests/` masih stub bawaan Laravel — `php artisan test` tidak membuktikan apa pun |
-| **Test untuk layar yang mengambil data** | Butuh mocking API; yang ada baru layout, parsing, dan navigasi |
+| **Test untuk layar Flutter yang mengambil data** | Butuh mocking API; yang ada baru layout, parsing, dan navigasi |
 | **Git remote** | Repo ini lokal saja — tidak ada cadangan di luar mesin ini |
 | **Pratinjau frame hasil** | Hasil hanya bisa diunduh, belum bisa dilihat di aplikasi |
 | **Resume upload dari sisi klien** | Server sudah mendukung; klien belum menyimpan sesi yang terputus |

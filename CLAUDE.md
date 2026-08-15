@@ -74,12 +74,13 @@ happily show a route the running server has never loaded.
 ### Predictions need a queue worker
 
 ```bash
-php artisan queue:work
+cd be && npm run serve:all      # API + queue worker + scheduler
 ```
 
-Without it an upload succeeds and the job sits at `pending` forever. Separately,
-`php artisan schedule:work` is what runs the 24-hour retention cleanup and the
-5-minute model health check. Neither starts on its own.
+Without the queue worker an upload succeeds and the job sits at `pending`
+forever; without the scheduler, expired files are never deleted and model
+status goes stale. Neither starts on its own, which is why `serve:all` exists.
+`npm run octane:reset` handles the restart dance below.
 
 ### The model worker's contract
 
@@ -116,11 +117,15 @@ nginx + PHP-FPM.
 ## Verify your work
 
 ```bash
-cd be && php artisan test          # stubs only today — see README
+cd be && php artisan test          # 67 tests, needs the db_aict_test database
 cd fe && flutter analyze           # must be clean
 cd fe && flutter test              # 21 tests
 cd fe && flutter build apk --release
 ```
+
+Writing a backend test? Two traps, both documented in `be/README.md`: use
+`$this->apiAs($token)` rather than setting the Authorization header yourself,
+and call `Storage::fake('local')` if the test touches files.
 
 For anything touching the prediction pipeline, run it end to end against the
 real worker. A passing build says nothing about whether interpolation works.
