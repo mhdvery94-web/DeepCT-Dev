@@ -33,6 +33,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.0] - 2026-08-15
+
+### 🔐 A second login is now refused, not silently granted
+
+#### Changed — breaking
+
+`POST /api/login` previously let the newest login win: it revoked every
+existing token and issued a fresh one, so a second person using the same
+credentials would quietly kick the first off, and neither would know.
+
+It now **refuses** with **HTTP 409** while the account is in use:
+
+```json
+{ "success": false,
+  "message": "This account is already signed in on another device. Sign out there first, or try again in a few minutes." }
+```
+
+The device already holding the session keeps working. Applies to
+administrators and researchers alike.
+
+**"In use" means the token was exercised within the last 15 minutes**
+(`AuthController::SESSION_IDLE_MINUTES`). Sanctum stamps `last_used_at` on
+every authenticated request, so an app in normal use keeps its own session
+alive; anything idle past that window counts as abandoned and the new login
+takes it over, clearing the stale token.
+
+That idle window is load-bearing, not a nicety. A strict "refuse while any
+token exists" rule would lock an account out for the full seven-day token
+lifetime after an app was force-closed, a browser shut, or a phone died — and
+an administrator who locked themselves out that way would leave nobody able to
+help. This was raised before implementing, and the idle-takeover behaviour was
+chosen deliberately.
+
+Consequence worth knowing: **a script cannot log in as the same user twice.**
+Reuse the token or log out first.
+
+#### Added
+
+Five tests covering the new rule, including the ones that matter most:
+an abandoned session *can* be taken over, an active one cannot, activity
+refreshes the window, and logging out frees the account immediately.
+
+`AuthService._handleError` now handles 409 explicitly rather than relying on
+fallthrough, and no longer assumes the error body is a map.
+
+#### Verified on the live server, not only in tests
+
+- First login → 200
+- Second login while active → **409** with the message above
+- The first session still answers 200 — it is not kicked off
+- Admin subject to the same rule
+- 71 backend tests, 238 assertions
+- `flutter analyze` clean, 21 Flutter tests pass
+
+---
+
 ## [1.8.0] - 2026-08-15
 
 ### 🧪 A real backend test suite, and one command to run the stack

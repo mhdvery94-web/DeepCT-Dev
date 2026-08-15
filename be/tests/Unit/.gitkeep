@@ -1,0 +1,5 @@
+Unit tests go here.
+
+Everything so far is a Feature test, because the behaviour worth protecting in
+this codebase lives in the interaction between controller, job, model worker
+and storage rather than in isolated classes.

@@ -137,6 +137,16 @@ real worker. A passing build says nothing about whether interpolation works.
 | Admin | admin@brin.go.id | admin123 |
 | Researcher | researcher@brin.go.id | user123 |
 
-New users get `BrinResearch2026`. Login revokes every other token for that
-account — **one active session per user**, so two terminals logged in as the
-same researcher will fight each other.
+New users get `BrinResearch2026`.
+
+**One session per account, and a second login is refused rather than taking
+over.** If the account is in use, `POST /login` answers **409** with a message
+telling the caller to sign out first. A session counts as "in use" while its
+token was exercised within the last 15 minutes
+(`AuthController::SESSION_IDLE_MINUTES`); past that it is treated as abandoned
+and the new login takes it over.
+
+That window exists because the alternative is worse: without it, an app that
+was force-closed would lock the account until the token expired seven days
+later. It also means **your scripts cannot log in as the same user twice** —
+reuse the token, or log out first.

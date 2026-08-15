@@ -399,8 +399,24 @@ php artisan queue:retry all
 - Laravel Sanctum for API token authentication
 - Token stored in `personal_access_tokens` table
 - Token expires after **7 days** (10080 minutes)
-- **Single session per account**: Login baru otomatis revoke semua token lama (force logout di device lain)
 - Auto cleanup expired tokens (scheduled daily via `tokens:cleanup` command)
+
+#### One session per account
+
+A login while the account is already in use is **refused with HTTP 409**, so
+two people cannot quietly share one set of credentials. The device already
+holding the session keeps working; it is not kicked off.
+
+"In use" means the token was exercised within the last **15 minutes**
+(`AuthController::SESSION_IDLE_MINUTES`). Sanctum stamps `last_used_at` on
+every authenticated request, so an app in normal use keeps its own session
+alive. Anything idle past that window counts as abandoned and the new login
+takes it over, clearing the stale token.
+
+The idle window is not a detail to trim away. Without it, a force-closed app
+or a dead phone would lock the account out until the token expired seven days
+later — and an administrator locking themselves out that way would leave nobody
+able to help.
 
 ### Authorization
 - Role-based middleware (`role:admin`)
