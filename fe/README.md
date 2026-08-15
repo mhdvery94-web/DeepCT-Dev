@@ -415,8 +415,9 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 6 tests, passing
+- ✅ `flutter test` — 12 tests, passing
 - ✅ Landing page made responsive (was a fixed desktop layout)
+- ✅ Status bar no longer covered on Android
 
 ### Not Started (FASE 3)
 - ⏳ User dashboard (`screens/user/user_dashboard.dart` is a placeholder)
@@ -428,12 +429,13 @@ Blocked on the FASE 3 backend: the `predictions` routes are still commented out
 in `be/routes/api.php`.
 
 ### Testing
-`test/widget_test.dart` holds **6** tests: a boot smoke test plus a layout
-check of the landing page at five viewports, which fails if any section
-overflows. That is the entire automated suite — the file was Flutter's
-counter-app scaffold until 15 Aug 2026, and it *failed*. The "23/23 contract
-tests" in [test_auth.md](test_auth.md) are a manual `curl` checklist, not a
-runnable suite.
+`test/widget_test.dart` holds **12** tests: a boot smoke test, a layout check of
+the landing page at seven viewports (fails if any section overflows), a status
+bar clearance check, and three header-navigation checks. That is the entire
+automated suite — the file was Flutter's counter-app scaffold until
+15 Aug 2026, and it *failed*. The "23/23 contract tests" in
+[test_auth.md](test_auth.md) are a manual `curl` checklist, not a runnable
+suite.
 
 ```bash
 flutter test
@@ -441,10 +443,28 @@ flutter test
 
 ### Responsive breakpoints
 
-`landing_page.dart` and `admin_shell.dart` both switch at **1000px**
-(`_desktopBreakpoint` / `_mobileBreakpoint`); the landing page additionally
-tightens its gutters below **600px**. Below 1000px the landing page stacks its
-two-column sections and collapses the header navigation into a menu button.
+| Constant | Width | What changes |
+|---|---|---|
+| `_desktopBreakpoint` (landing) / `_mobileBreakpoint` (admin shell) | **1000px** | Two-column sections stack; the admin sidebar becomes a drawer |
+| `_navBreakpoint` (landing) | **760px** | The header's inline tabs collapse into a hamburger that opens a drawer |
+| `_mobileBreakpoint` (landing) | **600px** | Section gutters tighten from 40/96px to 20/56px |
+
+The nav breakpoint is deliberately lower than the layout one: the four tabs plus
+the login button still fit at 760px, and collapsing them at 1000px hid the
+navigation on ordinary laptop windows. Both boundaries (760px and 759px) are
+covered by layout tests.
+
+### Status bar / safe area
+
+`LandingPage`, `LoginPage` and the wide `AdminShell` layout draw without an
+`AppBar`, so nothing reserves room for the system status bar and content
+rendered underneath the clock and battery icons on Android. All three now wrap
+their body in `SafeArea`, and `main()` sets a transparent status bar with dark
+icons to suit the light theme. A test asserts the landing header starts below a
+simulated 44px inset.
+
+**When adding a screen without an `AppBar`, wrap its body in `SafeArea`.**
+Scaffold only applies the inset automatically when an `AppBar` is present.
 
 ### Planned
 - ⏳ Image viewer/gallery

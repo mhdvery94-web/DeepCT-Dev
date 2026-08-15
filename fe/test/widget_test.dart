@@ -7,11 +7,20 @@ import 'package:fe/main.dart';
 import 'package:fe/screens/landing/landing_page.dart';
 
 /// Renders the whole app at [size] and returns once it has settled.
-Future<void> _pumpAppAt(WidgetTester tester, Size size) async {
+///
+/// [statusBarHeight] simulates the system inset a phone reserves for the
+/// clock and battery icons.
+Future<void> _pumpAppAt(
+  WidgetTester tester,
+  Size size, {
+  double statusBarHeight = 0,
+}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
+  tester.view.padding = FakeViewPadding(top: statusBarHeight);
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
+  addTearDown(tester.view.resetPadding);
 
   await tester.pumpWidget(const MyApp());
 
@@ -32,8 +41,9 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
   });
 
-  testWidgets('boots to the public landing page when no token is stored',
-      (WidgetTester tester) async {
+  testWidgets('boots to the public landing page when no token is stored', (
+    WidgetTester tester,
+  ) async {
     await _pumpAppAt(tester, const Size(1440, 1024));
 
     expect(find.byType(LandingPage), findsOneWidget);
@@ -46,6 +56,10 @@ void main() {
     const viewports = <String, Size>{
       'phone': Size(390, 844),
       'small phone': Size(360, 640),
+      // Exactly on _navBreakpoint: the tightest width that still shows the
+      // four inline tabs beside the login button.
+      'nav breakpoint': Size(760, 900),
+      'just below nav breakpoint': Size(759, 900),
       'tablet': Size(768, 1024),
       'desktop': Size(1440, 1024),
       'short desktop': Size(1280, 720),
@@ -68,5 +82,56 @@ void main() {
         );
       });
     }
+  });
+
+  // The landing page draws its own header inside a Stack rather than using an
+  // AppBar, so nothing reserved room for the system status bar and the header
+  // rendered underneath the clock and battery icons.
+  testWidgets('landing header clears the system status bar', (tester) async {
+    const statusBarHeight = 44.0;
+    await _pumpAppAt(
+      tester,
+      const Size(390, 844),
+      statusBarHeight: statusBarHeight,
+    );
+
+    final headerTop = tester.getTopLeft(find.byKey(LandingPage.headerKey)).dy;
+
+    expect(
+      headerTop,
+      greaterThanOrEqualTo(statusBarHeight),
+      reason: 'header must start below the status bar, not under it',
+    );
+  });
+
+  group('landing header navigation', () {
+    testWidgets('shows inline tabs on a laptop-width window', (tester) async {
+      await _pumpAppAt(tester, const Size(900, 800));
+
+      expect(find.text('HOME'), findsOneWidget);
+      expect(find.text('RESEARCH'), findsOneWidget);
+      expect(find.byIcon(Icons.menu), findsNothing);
+    });
+
+    testWidgets('collapses to a hamburger on a phone', (tester) async {
+      await _pumpAppAt(tester, const Size(390, 844));
+
+      expect(find.byIcon(Icons.menu), findsOneWidget);
+      // The tabs live in the closed drawer, so none are on screen.
+      expect(find.text('RESEARCH'), findsNothing);
+    });
+
+    testWidgets('hamburger opens a drawer holding the sections', (
+      tester,
+    ) async {
+      await _pumpAppAt(tester, const Size(390, 844));
+
+      await tester.tap(find.byIcon(Icons.menu));
+      await tester.pumpAndSettle();
+
+      expect(find.text('HOME'), findsOneWidget);
+      expect(find.text('RESEARCH'), findsOneWidget);
+      expect(find.text('LOGIN'), findsWidgets);
+    });
   });
 }

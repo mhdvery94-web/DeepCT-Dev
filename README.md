@@ -394,7 +394,7 @@ Diverifikasi langsung terhadap aplikasi yang berjalan, bukan dari catatan lama:
 | Tunnel ngrok backend | ✅ hidup (domain reserved, tetap sama antar restart) |
 | Endpoint model AI (Kaggle) | ✅ `online` — **mati saat sesi Kaggle putus**, cek ulang dengan `php artisan models:health-check` |
 | `flutter analyze` | ✅ 0 issues |
-| `flutter test` | ✅ 6 test lulus (boot + layout di 5 viewport) |
+| `flutter test` | ✅ 12 test lulus (boot, layout 7 viewport, status bar, nav) |
 | `flutter build apk --release` | ✅ `app-release.apk` 51 MB |
 | `flutter build web --release` | ✅ `build/web` (`--wasm` belum bisa, lihat fe/README) |
 | Test otomatis backend | ❌ belum ada — `be/tests/` cuma stub bawaan Laravel |
