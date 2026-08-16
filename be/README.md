@@ -18,7 +18,7 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (71 Total)
+### API Endpoints (88 Total)
 
 Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
@@ -173,6 +173,48 @@ an initials frame, and a server-side placeholder would be a second opinion
 about what "no photo" looks like. Every payload carrying a user now carries
 `avatar_url` (null when there is none); `avatar_path` and `avatar_mime` are
 hidden, since where the file sits on disk is nobody's business.
+
+#### Model Training (17)
+
+Managed training. The platform **never trains anything** — it records what
+should be trained and what came back. Three constraints force that: this
+machine has no GPU and a PHP backend, the Kaggle session that does have a GPU
+expires every 9–12 hours, and training takes days.
+
+Admin (11):
+- `GET|POST /api/admin/training/datasets`, `DELETE .../{id}`
+- `GET|POST /api/admin/training/jobs`, `GET|DELETE .../{id}`
+- `POST /api/admin/training/jobs/{id}/cancel`
+- `GET /api/admin/training/jobs/{id}/weights`
+- `POST /api/admin/training/jobs/{id}/register-model`
+
+Worker (6), under `/api/training/worker/*`: `claim`, `jobs/{id}/dataset`,
+`heartbeat`, `checkpoint`, `complete`, `fail`.
+
+**The worker authenticates with a shared secret**, not a Sanctum token — it is
+a machine, not a person, its credential lives in a notebook for weeks, and it
+must reach nothing but these six routes. Generate one with
+`php artisan training:token`, put it in `TRAINING_WORKER_TOKEN`. With no token
+set, every worker route answers **503**: a half-configured deployment fails
+closed.
+
+**A worker going quiet is not a failure.** A Kaggle session ending is the
+normal course of events, so `training:reclaim` (scheduled every 5 minutes)
+returns a job whose heartbeat is older than 15 minutes to `queued` **with its
+checkpoint intact**, and the next worker resumes from the epoch already
+reached. Without that, every expired session would strand a job forever and a
+multi-day training could never finish.
+
+**A dataset is an upload or a URL.** Uploads travel through this machine, so
+they stay modest; anything large is registered as a URL the worker fetches for
+itself. Sending 20 GB up a home tunnel and back down to Kaggle is the thing
+that design avoids.
+
+**Completion does not produce a usable model.** `register-model` writes a row
+into `models` with the weights' path, `is_active = false` and no endpoint.
+Weights are a file; a model here is a running FastAPI worker with a URL, and
+nothing in this platform can deploy one to a GPU. Pretending otherwise would
+only surface when a researcher's prediction failed.
 
 #### User Management (7) - Admin Only
 - `GET /api/admin/users` - List users with pagination & filters
@@ -475,7 +517,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**177 tests, 726 assertions, ~80s.** They run against MySQL, not sqlite: three
+**216 tests, 883 assertions, ~70s.** They run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:
@@ -492,6 +534,7 @@ CREATE DATABASE db_aict_test;
 | `MessagingTest` | one thread per account, unread in both directions, archiving, guest messages |
 | `NotificationTest` | who each event reaches, the unread counters, and that nobody can read another account's |
 | `NewsPostTest` | the publish switch, slide order, the upload guard, a draft's photo staying private |
+| `TrainingTest` | worker auth, the claim lock, resume-after-death, checkpoint rotation, registering weights |
 | `AvatarTest` | own vs anyone else's, the upload guard, `avatar_url` in every payload, the 404 for no photo |
 | `PredictionPipelineTest` | recursive interpolation, worker contract, failure paths, counter release |
 | `ChunkedUploadTest` | ordering, idempotency, ownership, session cleanup |

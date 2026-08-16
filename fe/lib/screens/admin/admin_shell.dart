@@ -14,6 +14,7 @@ import 'activity_logs_screen.dart';
 import 'dashboard_home_screen.dart';
 import 'model_management_screen.dart';
 import 'news_management_screen.dart';
+import 'training_screen.dart';
 import 'user_management_screen.dart';
 
 /// Navigation destinations available to an administrator.
@@ -23,6 +24,7 @@ enum AdminSection {
   accessRequests('Access Requests', Icons.how_to_reg_outlined),
   messages('Messages', Icons.forum_outlined),
   news('Research News', Icons.article_outlined),
+  training('Model Training', Icons.model_training_outlined),
   models('Model Management', Icons.memory_outlined),
   activities('Activity Logs', Icons.history);
 
@@ -110,6 +112,8 @@ class _AdminShellState extends State<AdminShell> {
         );
       case AdminSection.news:
         return const NewsManagementScreen();
+      case AdminSection.training:
+        return const TrainingScreen();
       case AdminSection.models:
         return const ModelManagementScreen();
       case AdminSection.activities:

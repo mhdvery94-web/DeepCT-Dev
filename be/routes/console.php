@@ -30,3 +30,10 @@ Schedule::command('tokens:cleanup')->daily();
 // Hourly rather than daily so files expire close to their stated deadline
 // instead of lingering until the next 02:00.
 Schedule::command('predictions:cleanup')->hourly();
+
+// Hand back training jobs whose worker stopped reporting.
+//
+// Every five minutes rather than every ten seconds: the window it enforces is
+// fifteen minutes, and reclaiming a job the moment it goes quiet would steal
+// work from a GPU that is merely busy with a long epoch.
+Schedule::command('training:reclaim')->everyFiveMinutes()->withoutOverlapping(5);

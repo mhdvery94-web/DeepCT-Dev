@@ -9,6 +9,8 @@ use App\Http\Controllers\API\AvatarController;
 use App\Http\Controllers\API\MeController;
 use App\Http\Controllers\API\MessageController;
 use App\Http\Controllers\API\NewsController;
+use App\Http\Controllers\API\TrainingController;
+use App\Http\Controllers\API\TrainingWorkerController;
 use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\PredictionUploadController;
 use App\Http\Controllers\API\UserController;
@@ -51,6 +53,19 @@ Route::post('/messages/public', [MessageController::class, 'storePublic'])
 // the token itself rather than sitting behind auth middleware.
 Route::get('/news', [NewsController::class, 'index'])->name('api.news.index');
 Route::get('/news/{id}/image', [NewsController::class, 'image'])->name('api.news.image');
+
+// GPU training workers. Outside `auth:sanctum` on purpose: a worker is a
+// machine with a long-lived shared secret, not a person with an account, and
+// it must not be able to reach anything but these six routes. See
+// EnsureTrainingWorker and ARCHITECTURE.md 7.
+Route::middleware('training.worker')->prefix('training/worker')->group(function () {
+    Route::post('/claim', [TrainingWorkerController::class, 'claim'])->name('api.training.worker.claim');
+    Route::get('/jobs/{id}/dataset', [TrainingWorkerController::class, 'dataset'])->name('api.training.worker.dataset');
+    Route::post('/jobs/{id}/heartbeat', [TrainingWorkerController::class, 'heartbeat'])->name('api.training.worker.heartbeat');
+    Route::post('/jobs/{id}/checkpoint', [TrainingWorkerController::class, 'checkpoint'])->name('api.training.worker.checkpoint');
+    Route::post('/jobs/{id}/complete', [TrainingWorkerController::class, 'complete'])->name('api.training.worker.complete');
+    Route::post('/jobs/{id}/fail', [TrainingWorkerController::class, 'fail'])->name('api.training.worker.fail');
+});
 
 // Protected routes (authentication required)
 Route::middleware('auth:sanctum')->group(function () {
@@ -122,6 +137,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/news/{id}', [NewsController::class, 'update'])->name('api.admin.news.update');
         Route::patch('/news/{id}/toggle', [NewsController::class, 'toggle'])->name('api.admin.news.toggle');
         Route::delete('/news/{id}', [NewsController::class, 'destroy'])->name('api.admin.news.destroy');
+
+        // Managed model training. The platform records what should be trained
+        // and what came back; the GPU lives on Kaggle and talks to the worker
+        // routes below, outside this group.
+        Route::get('/training/datasets', [TrainingController::class, 'datasets'])->name('api.admin.training.datasets');
+        Route::post('/training/datasets', [TrainingController::class, 'storeDataset'])->name('api.admin.training.datasets.store');
+        Route::delete('/training/datasets/{id}', [TrainingController::class, 'destroyDataset'])->name('api.admin.training.datasets.destroy');
+
+        Route::get('/training/jobs', [TrainingController::class, 'jobs'])->name('api.admin.training.jobs');
+        Route::post('/training/jobs', [TrainingController::class, 'storeJob'])->name('api.admin.training.jobs.store');
+        Route::get('/training/jobs/{id}', [TrainingController::class, 'showJob'])->name('api.admin.training.jobs.show');
+        Route::post('/training/jobs/{id}/cancel', [TrainingController::class, 'cancelJob'])->name('api.admin.training.jobs.cancel');
+        Route::delete('/training/jobs/{id}', [TrainingController::class, 'destroyJob'])->name('api.admin.training.jobs.destroy');
+        Route::get('/training/jobs/{id}/weights', [TrainingController::class, 'downloadWeights'])->name('api.admin.training.jobs.weights');
+        Route::post('/training/jobs/{id}/register-model', [TrainingController::class, 'registerModel'])->name('api.admin.training.jobs.register');
 
         // Support conversations
         Route::get('/conversations', [MessageController::class, 'adminIndex'])->name('api.admin.conversations.index');

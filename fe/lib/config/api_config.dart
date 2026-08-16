@@ -53,6 +53,12 @@ class ApiConfig {
   static const String adminAccessRequests = '/admin/access-requests';
   static const String adminConversations = '/admin/conversations';
   static const String adminNews = '/admin/news';
+
+  // Managed model training. The GPU worker's own routes
+  // (/training/worker/*) are not here: that side authenticates with a shared
+  // secret from a notebook, not from this app.
+  static const String adminTrainingDatasets = '/admin/training/datasets';
+  static const String adminTrainingJobs = '/admin/training/jobs';
   static const String adminModels = '/admin/models';
   static const String adminActivities = '/admin/activities';
 

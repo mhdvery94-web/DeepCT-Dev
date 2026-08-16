@@ -33,6 +33,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.18.0] - 2026-08-17
+
+### 🎛️ Model training, from a GUI
+
+ARCHITECTURE.md §7 had the design; this builds it. An administrator registers a
+dataset, queues a job, and watches it train — from the web console or a phone,
+which matters because training takes days.
+
+#### The platform manages training. It never runs it.
+
+Three constraints force that, and none are negotiable: this machine has no GPU
+and a PHP backend, the Kaggle session that *does* have a GPU expires every 9–12
+hours, and training takes days. So a job is a row a remote worker claims,
+reports against, and hands weights back to.
+
+#### A worker going quiet is not a failure
+
+This is the centre of the whole thing. A Kaggle session ending is the **normal**
+course of events, so `training:reclaim` returns a job whose heartbeat is older
+than 15 minutes to `queued` *with its checkpoint intact*, and the next worker
+resumes from the epoch already reached. Treating silence as failure would mean
+no multi-day training ever finishes.
+
+Verified live, end to end: a job checkpointed at epoch 8, its "session died",
+the sweep put it back in the queue, a second worker claimed it and was told
+`resume_from_epoch: 8`, finished at 20/20, and the weights registered as a
+model version.
+
+#### Added — Backend
+
+- `training_datasets` and `training_jobs`, eleven admin routes and six worker
+  routes.
+- **Workers authenticate with a shared secret**, not a Sanctum token: a worker
+  is a machine whose credential lives in a notebook for weeks and must reach
+  nothing else. No token configured → **503**, so a half-configured deployment
+  fails closed. `php artisan training:token` generates one.
+- Claiming takes a row lock, so two notebooks starting at once cannot train the
+  same job twice on the same quota.
+- A heartbeat is answered with `continue: false` for a cancelled job — the
+  worker stops instead of burning hours on work nobody wants.
+- A dataset is an upload **or a URL the worker fetches itself**. The second is
+  the right answer for anything large: sending 20 GB up a home tunnel and back
+  down to Kaggle wastes both trips.
+- `register-model` writes a row with the weights' path, `is_active = false` and
+  no endpoint. Weights are a file; a model here is a running worker with a URL,
+  and nothing in this platform can deploy a `.h5` to a GPU. Pretending
+  otherwise would surface as a researcher's failed prediction.
+- 27 tests.
+
+#### Added — Frontend and worker
+
+- `TrainingScreen`: datasets beside the job queue on a desktop, stacked on a
+  phone. Live epoch, metrics and worker label, polled every 20s — slower than
+  the model status light, because an epoch takes minutes.
+- A job whose worker has gone quiet says so *and* says why it is not an error.
+- `scripts/training_worker.py` — the protocol client for Kaggle: claim, fetch,
+  heartbeat on a thread, checkpoint, resume, complete, fail. `train_one_epoch()`
+  raises `NotImplementedError` and is left that way deliberately: the
+  discriminator is not in this repository, and inventing the loss here would
+  produce a model nobody could defend.
+- 9 tests.
+
+### 🚀 Deployment planned, and one plan ruled out
+
+Written up as ARCHITECTURE.md §8, for `brin.fajrianhost.my.id`.
+
+**The Flutter web build belongs on Vercel** — it is static files, which is what
+Vercel does best. `brin.fajrianhost.my.id` → CNAME → Vercel, with the API
+address injected at build time through `--dart-define`.
+
+**The Laravel backend cannot go on Vercel**, and not for want of configuration.
+Octane is a server that stays alive; `queue:work` is a process that stays alive;
+the health check runs every 10 seconds where Vercel Cron's floor is a minute; a
+prediction job may run 7200 seconds; results reach ~1.5 GB on disk. A serverless
+PHP runtime would undo the Octane migration this project already measured — 8–11
+seconds down to 1.3–1.7 — and lose the queue, the scheduler and the storage with
+it. §8 gives the supervisor and nginx configuration for a small VPS instead, and
+Cloudflare Tunnel as the no-VPS alternative.
+
+---
+
 ## [1.17.0] - 2026-08-16
 
 ### 🖼️ News photos that actually appear, and a model status light

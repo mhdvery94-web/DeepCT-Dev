@@ -223,30 +223,36 @@ Kosong. Sembilan item terakhir sudah selesai; lihat "Sudah selesai" di bawah.
 - [x] **6.** Resume upload dari sisi klien — sesi disimpan di perangkat,
       potongan yang gagal dicoba ulang 3× setelah menyinkronkan ulang offset
       ke server, dan upload yang terputus ditawarkan untuk dilanjutkan.
-- [x] **7.** Rancangan sistem pelatihan model — ditulis di
-      [ARCHITECTURE.md](ARCHITECTURE.md) §7, bukan sebagai berkas baru.
+- [x] **7.** Sistem pelatihan model — **dibangun**, bukan lagi cuma rancangan.
+      Tabel dataset + job, enam route worker berautentikasi token khusus, layar
+      admin di web dan mobile, dan `scripts/training_worker.py` sebagai klien
+      protokolnya. Yang masih kosong satu fungsi: `train_one_epoch()`, dan itu
+      memang pekerjaan riset (lihat "Belum dibangun" di bawah).
 
 ---
 
 ## Belum dibangun, dan alasannya
 
-**Melatih model dari dalam aplikasi.** Rancangannya **sudah ada** —
-[ARCHITECTURE.md](ARCHITECTURE.md) §7 — tapi belum ada satu baris kode pun, dan
-itu disengaja.
+**Kode training-nya sendiri.** Seluruh sistem di sekelilingnya sudah jalan dan
+terverifikasi: admin mendaftarkan dataset, mengantrekan job, worker mengklaim,
+melapor, checkpoint, dan job yang worker-nya mati kembali ke antrean lalu
+dilanjutkan worker berikutnya dari epoch terakhir.
 
-Tiga kenyataan yang menentukan: notebook di repo ini nol kode training (modelnya
-generator GAN 25,6 juta parameter yang discriminator-nya tidak ada di sini),
-sesi Kaggle putus tiap ~9–12 jam sementara training butuh berhari-hari, dan
-mesin ini tidak punya GPU. Jadi platform **mengelola** training, tidak pernah
-menjalankannya.
+Yang belum ada cuma `train_one_epoch()` di `scripts/training_worker.py`, dan
+itu memang disengaja.
+
+Alasannya: notebook di repo ini nol kode training — modelnya generator GAN 25,6
+juta parameter yang **discriminator-nya tidak ada di sini**, dan loss,
+augmentasi, serta sampling t yang seimbang justru inti dari latihan ulangnya.
+Menuliskannya dari tebakan menghasilkan angka yang tidak bisa dipertanggung-
+jawabkan siapa pun.
 
 Nilainya besar: kalau model dilatih ulang dengan dataset t seimbang,
 **metode rekursif tidak lagi diperlukan** — ia ada justru untuk menyiasati bias
 yang hanya bisa dihilangkan lewat retrain. Lihat
 [AI_EXPERIMENTS.md](AI_EXPERIMENTS.md).
 
-Skalanya setara seluruh FASE 3, ditambah notebook training yang harus ditulis
-lebih dulu sebagai pekerjaan riset. Karena itu ia berhenti di rancangan.
+Sisanya satu fungsi, bukan satu sistem.
 
 **Notifikasi email.** Notifikasi in-app sudah ada (no. 9), tapi aplikasi belum
 mengirim satu email pun — balasan untuk pengirim tamu masih harus dikirim admin

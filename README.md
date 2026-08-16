@@ -93,9 +93,10 @@ bukan disalin dari catatan lama.
 | Formulir Join → permintaan akses → admin menyetujui & akun dibuat | ✅ |
 | Pesan ke admin di dalam aplikasi, dan dari halaman login untuk yang terkunci | ✅ |
 | Notifikasi in-app untuk admin dan peneliti (lonceng + penanda) | ✅ |
-| 71 endpoint API + `/api/health` | ✅ |
-| `flutter analyze` 0 issue, 89 test Flutter lulus | ✅ |
-| **177 test backend lulus** (726 assertion, ~80 detik) | ✅ |
+| Sistem pelatihan model terkelola — dataset, antrean job, worker GPU, lanjut setelah sesi Kaggle mati | ✅ |
+| 88 endpoint API + `/api/health` | ✅ |
+| `flutter analyze` 0 issue, 120 test Flutter lulus | ✅ |
+| **216 test backend lulus** (883 assertion, ~70 detik) | ✅ |
 | Build web & APK release | ✅ (APK ~53 MB, `id.go.brin.neutronct`) |
 
 Terverifikasi end-to-end terhadap worker Kaggle sungguhan dengan dua frame
@@ -108,7 +109,8 @@ unduhan cocok dengan header.
 |---|---|
 | **Test untuk layar Flutter yang mengambil data** | Butuh mocking API; yang ada baru layout, parsing, dan navigasi |
 | **Notifikasi email** | Balasan tiket tamu harus dikirim admin dari email-nya sendiri; aplikasi belum mengirim apa pun |
-| **Deployment** | Belum ada; masih development di Laragon + ngrok |
+| **Deployment** | Rencananya ada di [ARCHITECTURE.md](ARCHITECTURE.md) §8. Ringkasnya: frontend cocok di Vercel, **backend tidak bisa** di Vercel — butuh VPS kecil. Sekarang masih Laragon + ngrok |
+| **Kode training itu sendiri** | Protokolnya jalan; `train_one_epoch()` di `scripts/training_worker.py` masih kosong, dan itu pekerjaan riset |
 
 ### Diketahui bermasalah
 
@@ -143,7 +145,7 @@ Kaggle, bukan backend.
 | [CLAUDE.md](CLAUDE.md) | Kontrak kerja untuk agent + jebakan yang memakan waktu |
 | [ROADMAP.md](ROADMAP.md) | Rencana kerja berurutan, dan apa yang sengaja tidak dikerjakan |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Komponen, alur data, skema database, keputusan teknis |
-| [API.md](API.md) | Referensi 71 endpoint |
+| [API.md](API.md) | Referensi 88 endpoint |
 | [be/README.md](be/README.md) | Setup, troubleshooting, dan perintah backend |
 | [fe/README.md](fe/README.md) | Struktur, breakpoint, dan konvensi frontend |
 | [CHANGELOG.md](CHANGELOG.md) | Riwayat perubahan beserta alasannya |

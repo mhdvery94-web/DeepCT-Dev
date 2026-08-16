@@ -70,6 +70,13 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
     public site by accident
   - Filter by published/draft; drafts show their photo to an admin only
 
+- ✅ **Model Training**
+  - Register a dataset by upload or by URL, queue a job, watch its progress
+  - Live epoch counter, metrics and worker label, refreshed every 20s
+  - A job whose worker has gone quiet says so, and says why it is not an error
+  - Cancel a run; register finished weights as a new (inactive) model version
+  - Warns plainly when no worker token is configured — nothing would ever run
+
 - ✅ **Profile photos**
   - Change or remove your own from the sidebar avatar
   - An admin can set or clear anyone's from the user list
@@ -258,6 +265,7 @@ lib/
 │   │   ├── model_management_screen.dart
 │   │   ├── access_requests_screen.dart
 │   │   ├── news_management_screen.dart
+│   ├── training_screen.dart
 │   │   └── activity_logs_screen.dart
 │   ├── messages/
 │   │   ├── message_thread_screen.dart       # The researcher's one thread
@@ -529,7 +537,7 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 89 tests, passing
+- ✅ `flutter test` — 120 tests, passing
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
