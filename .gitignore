@@ -50,3 +50,8 @@ $RECYCLE.BIN/
 # it must not travel with the repository.
 script-deepct.py
 scripts/*-secret.py
+
+# Personal connection helpers. `koneksi-vps.bat` carries a server address and
+# is a local convenience, not part of the project.
+koneksi-vps.bat
+*.local.bat

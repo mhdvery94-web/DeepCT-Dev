@@ -142,6 +142,20 @@ class TrainingService {
     );
   }
 
+  /// POST /admin/training/jobs/{id}/dispatch
+  ///
+  /// Push the job to a trainer URL on the GPU host, the same way a prediction
+  /// is pushed to a model endpoint. The job stays `queued` until the trainer's
+  /// first heartbeat — accepting is not starting.
+  Future<String> dispatchJob(int id, {String? trainerUrl}) async {
+    final body = await _api.post(
+      '${ApiConfig.adminTrainingJobs}/$id/dispatch',
+      data: {'trainer_url': ?trainerUrl},
+    );
+
+    return body['message']?.toString() ?? 'Sent to the trainer.';
+  }
+
   /// POST /admin/training/jobs/{id}/cancel
   Future<void> cancelJob(int id) async {
     await _api.post('${ApiConfig.adminTrainingJobs}/$id/cancel');

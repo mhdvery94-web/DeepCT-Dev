@@ -178,6 +178,29 @@ class _TrainingScreenState extends State<TrainingScreen> {
     if (queued == true) await _load();
   }
 
+  /// Push a queued job to the GPU host, the way a prediction is pushed to a
+  /// model endpoint.
+  Future<void> _dispatchJob(TrainingJob job) async {
+    final url = await showAppDialog<String>(
+      context: context,
+      maxWidth: 480,
+      builder: (_) => _DispatchForm(job: job),
+    );
+
+    if (url == null) return;
+
+    try {
+      final message = await _service.dispatchJob(
+        job.id,
+        trainerUrl: url.isEmpty ? null : url,
+      );
+      _report(message);
+      await _load();
+    } on ApiException catch (e) {
+      _report(e.message, isError: true);
+    }
+  }
+
   Future<void> _cancelJob(TrainingJob job) async {
     final confirmed = await showAppAlertDialog<bool>(
       context: context,
@@ -366,6 +389,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
           for (final job in _jobs) ...[
             _JobCard(
               job: job,
+              onDispatch: () => _dispatchJob(job),
               onCancel: () => _cancelJob(job),
               onDelete: () => _deleteJob(job),
               onRegister: () => _registerModel(job),
@@ -510,12 +534,14 @@ class _Chip extends StatelessWidget {
 
 class _JobCard extends StatelessWidget {
   final TrainingJob job;
+  final VoidCallback onDispatch;
   final VoidCallback onCancel;
   final VoidCallback onDelete;
   final VoidCallback onRegister;
 
   const _JobCard({
     required this.job,
+    required this.onDispatch,
     required this.onCancel,
     required this.onDelete,
     required this.onRegister,
@@ -624,9 +650,26 @@ class _JobCard extends StatelessWidget {
             ),
           ],
 
+          if (job.isAwaitingTrainer) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Sent to the trainer. It stays queued until the first heartbeat '
+              'arrives — accepting a job is not the same as starting it.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+
           const SizedBox(height: 6),
           Wrap(
             children: [
+              if (job.isQueued)
+                TextButton.icon(
+                  onPressed: onDispatch,
+                  icon: const Icon(Icons.send_outlined, size: 16),
+                  label: Text(
+                    job.isAwaitingTrainer ? 'SEND AGAIN' : 'SEND TO TRAINER',
+                  ),
+                ),
               if (!job.isFinished)
                 TextButton.icon(
                   onPressed: onCancel,
@@ -1315,6 +1358,86 @@ class _RegisterModelFormState extends State<_RegisterModelForm> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+/// Where a queued job is pushed to.
+///
+/// Empty means "use the server's configured trainer" — the common case once
+/// `TRAINING_TRAINER_URL` is set, and the reason this is a text field rather
+/// than a required one.
+class _DispatchForm extends StatefulWidget {
+  final TrainingJob job;
+
+  const _DispatchForm({required this.job});
+
+  @override
+  State<_DispatchForm> createState() => _DispatchFormState();
+}
+
+class _DispatchFormState extends State<_DispatchForm> {
+  late final TextEditingController _url = TextEditingController(
+    text: widget.job.trainerUrl ?? '',
+  );
+
+  @override
+  void dispose() {
+    _url.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Send to trainer',
+              style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          Text(
+            'The platform posts this job to a URL on the GPU host, exactly the '
+            'way a prediction is posted to a model endpoint. The notebook '
+            'starts training and reports progress back here.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 20),
+
+          TextFormField(
+            controller: _url,
+            decoration: const InputDecoration(
+              labelText: 'Trainer URL',
+              hintText: 'Leave empty to use the server default',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'The job stays queued until the first heartbeat arrives. If the '
+            'GPU session dies later, the job returns to the queue with its '
+            'checkpoint and can be sent again.',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              const Spacer(),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, _url.text.trim()),
+                child: const Text('SEND'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

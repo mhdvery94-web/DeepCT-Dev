@@ -1,6 +1,6 @@
 # Referensi API
 
-88 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
+89 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
 `php artisan route:list --path=api` per 15 Agustus 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 
@@ -446,6 +446,7 @@ inbox tapi tetap ada, dan pesan baru dari orangnya menariknya kembali.
 | `GET` | `/admin/training/jobs` — filter `status` |
 | `POST` | `/admin/training/jobs` |
 | `GET` | `/admin/training/jobs/{id}` |
+| `POST` | `/admin/training/jobs/{id}/dispatch` — dorong ke trainer |
 | `POST` | `/admin/training/jobs/{id}/cancel` |
 | `DELETE` | `/admin/training/jobs/{id}` |
 | `GET` | `/admin/training/jobs/{id}/weights` |
@@ -459,6 +460,25 @@ perlu dicek saat job "diam saja".
 ini; `source_type: url` cuma mencatat alamat yang nanti diambil sendiri oleh
 worker. Yang kedua itulah yang benar untuk dataset besar — mengirim 20 GB naik
 ke server lalu turun lagi ke Kaggle memboroskan dua-duanya.
+
+**`POST /admin/training/jobs/{id}/dispatch`** — mendorong job ke GPU, bentuknya
+persis seperti prediksi didorong ke endpoint model. Body opsional
+`trainer_url`; kalau kosong dipakai `TRAINING_TRAINER_URL`. URL yang terpakai
+disimpan di baris job-nya.
+
+Yang dikirim ke trainer: id job, epoch, hyperparameter, sumber dataset, **dan
+`callback`** berisi `base_url` + `worker_token`. Tanpa dua yang terakhir,
+trainer bisa melatih dengan sempurna lalu tidak punya tempat menaruh hasilnya.
+
+| Kondisi | Hasil |
+|---|---|
+| Job bukan `queued` | **409** |
+| Tidak ada trainer URL / worker token | **422** |
+| Trainer menolak atau tidak terjangkau | **502**, job **tetap `queued`** |
+
+Job **tetap `queued`** setelah berhasil dikirim. Trainer bilang ia *menerima*;
+yang membuktikan ia *mulai* adalah heartbeat pertama. Menandainya `running` di
+sini membuat job yang tidak pernah jalan terlihat sehat selamanya.
 
 **`register-model` sengaja langkah terpisah.** Bobot itu berkas; "model" di
 platform ini adalah worker FastAPI yang hidup dan punya URL. Tidak ada apa pun
@@ -509,7 +529,7 @@ tidak akan pernah ada training yang selesai.
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1:8000/api/login \
   -H "Content-Type: application/json" -H "Accept: application/json" \
-  -d '{"email":"researcher@brin.go.id","password":"user123"}' \
+  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
   | python -c "import sys,json;print(json.load(sys.stdin)['data']['token'])")
 
 curl -s http://127.0.0.1:8000/api/me/stats \

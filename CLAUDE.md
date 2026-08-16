@@ -135,7 +135,7 @@ nginx + PHP-FPM.
 ## Verify your work
 
 ```bash
-cd be && php artisan test          # 216 tests, needs the db_aict_test database
+cd be && php artisan test          # 224 tests, needs the db_aict_test database
 cd fe && flutter analyze           # must be clean
 cd fe && flutter test              # 120 tests
 cd fe && flutter build apk --release
@@ -150,12 +150,14 @@ real worker. A passing build says nothing about whether interpolation works.
 
 ## Credentials (development)
 
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@brin.go.id | admin123 |
-| Researcher | researcher@brin.go.id | user123 |
+Nothing is hard-coded. `php artisan db:seed` creates the first administrator
+from `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`; leave the password unset and
+the seeder generates one and prints it once.
 
-New users get `BrinResearch2026`.
+New accounts created by an administrator get the default in
+`UserController::DEFAULT_PASSWORD` and **cannot reach the console** until they
+replace it — `PasswordGate` stands in the way. An admin password reset re-arms
+that.
 
 **Concurrent sessions are allowed.** Each login mints its own token and leaves
 existing ones alone, so the same account can be signed in on a laptop and a

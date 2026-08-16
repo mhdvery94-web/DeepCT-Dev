@@ -1,12 +1,8 @@
 class ApiConfig {
   /// Backend base URL, including the `/api` prefix.
   ///
-  /// The default is the reserved ngrok domain that fronts the local Octane
-  /// server. It is a *reserved* domain, so it survives ngrok restarts, and it
-  /// works unchanged for Flutter web and for a real Android device on any
-  /// network — which is why it is the default rather than `localhost`.
-  ///
-  /// Override it per build without editing this file:
+  /// Defaults to the production API. Every other target is supplied at build
+  /// time, so no checkout carries anyone's private tunnel address:
   ///
   /// ```
   /// # Android emulator talking to the host machine
@@ -15,15 +11,15 @@ class ApiConfig {
   /// # Real device on the same Wi-Fi as the backend
   /// flutter build apk --dart-define=API_BASE_URL=http://192.168.1.10:8000/api
   ///
-  /// # Web against a local backend (backend must allow the origin)
+  /// # Web against a local backend (the backend must allow the origin)
   /// flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000/api
   /// ```
   ///
-  /// Note: plain-HTTP overrides only work on Android because the manifest sets
+  /// Plain-HTTP overrides only work on Android, where the manifest sets
   /// `android:usesCleartextTraffic="true"`.
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://nucleus-drone-grueling.ngrok-free.dev/api',
+    defaultValue: 'https://api.brin.fajrianhost.my.id/api',
   );
 
   // Timeouts

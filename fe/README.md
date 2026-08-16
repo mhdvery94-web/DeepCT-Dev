@@ -157,19 +157,17 @@ flutter pub get
 
 2. **Configure API Endpoint**
 
-The default in `lib/config/api_config.dart` is the reserved ngrok domain that
-fronts the local Octane server:
+`lib/config/api_config.dart` defaults to the production API:
 
 ```dart
 static const String baseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://nucleus-drone-grueling.ngrok-free.dev/api',
+  defaultValue: 'https://api.brin.fajrianhost.my.id/api',
 );
 ```
 
-It is a *reserved* ngrok domain, so it survives tunnel restarts and works
-unchanged for web and for a real Android device on any network. Point it
-somewhere else per build — **no file edit needed**:
+Point it somewhere else per build — **no file edit needed**, and no checkout
+ever carries someone's private tunnel address:
 
 ```bash
 # Android emulator → host machine
@@ -185,9 +183,9 @@ flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000/api
 Plain-HTTP overrides only work on Android, where the manifest sets
 `android:usesCleartextTraffic="true"`.
 
-**If every request fails:** the ngrok tunnel is probably down. Start it with
-`ngrok http 8000` on the backend machine and confirm with
-`curl https://nucleus-drone-grueling.ngrok-free.dev/api/health`.
+**If every request fails:** the backend is unreachable. Confirm it directly
+with `curl <API_BASE_URL>/health` — that endpoint needs no token, so a failure
+there is the network or the server, never authentication.
 
 3. **Run Application**
 
@@ -369,7 +367,7 @@ Google Fonts: **IBM Plex Sans** (UI) and **Lora** (display headings).
 
 **Admin Credentials:**
 - Email: `admin@brin.go.id`
-- Password: `admin123`
+- Password: whatever the backend seeder printed
 
 **Test Flow:**
 1. Login as admin

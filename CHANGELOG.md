@@ -33,6 +33,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.0] - 2026-08-17
+
+### 🚢 Release pipeline, iOS, and training you can start with a button
+
+#### Training can now be pushed, not only pulled
+
+Asked directly: could training work like prediction — register an endpoint URL,
+and the notebook starts training on the dataset we uploaded? Yes, and it does
+now.
+
+`POST /admin/training/jobs/{id}/dispatch` posts the job to a trainer URL on the
+GPU host, exactly as a prediction is posted to a model endpoint.
+`scripts/training_server.py` is the notebook side: FastAPI with `POST /train`,
+the twin of the inference server already in use.
+
+Three things make it work where a naive version would not:
+
+- The request only asks the trainer to **accept** the job, with a short
+  timeout. A connection held open for a multi-day run times out on any network,
+  so the notebook answers immediately and trains on a background thread.
+- The job stays **`queued`** after a successful push. The trainer said it
+  *accepted*; the first heartbeat is what proves it *started*. Marking it
+  running here would leave a job that never began looking healthy forever.
+- Pushing does **not** bypass the reporting protocol — it carries the callback
+  URL and worker token so the trainer heartbeats and checkpoints exactly like a
+  polling worker. That is precisely why a pushed job still survives its Kaggle
+  session expiring.
+
+A failed push leaves the job queued, so a polling worker can still take it.
+Polling remains the safety net; this is the button. 8 tests.
+
+#### iOS
+
+`IPHONEOS_DEPLOYMENT_TARGET` was already 13.0, which covers **iPhone X** with
+room to spare — that device runs iOS 11 through 16.7, and modern Flutter does
+not support below 13 anyway.
+
+Two things were actually wrong. The app was called **"Fe"** on the home screen,
+the Flutter scaffold's directory name. And `Info.plist` had no
+`NSPhotoLibraryUsageDescription`, which is not a warning on iOS: the system
+**terminates the app** the first time the picker touches the library — which is
+the moment someone changes their profile photo.
+
+#### Release pipeline
+
+`.github/workflows/release.yml` builds web, Android **and iOS** on a version
+tag, publishes a GitHub Release, and uploads all three to Google Drive.
+
+The iOS job runs on a macOS runner, so an iOS build is produced without anyone
+owning a Mac. It is unsigned: installing on a device needs an Apple Developer
+account, and no amount of CI substitutes for that.
+
+The Drive step uses rclone with a **personal OAuth token, not a service
+account** — a service account has no Drive storage quota of its own, so
+uploading into a folder in someone's My Drive fails with "Service Accounts do
+not have storage quota", a message that reads like a permissions problem and is
+not one. Without the secrets the step is skipped rather than failed, and says
+what is missing.
+
+#### Repository hygiene, before publishing
+
+- **Seeded credentials removed from the code.** `AdminUserSeeder` held a
+  password in its own source; it now reads `SEED_ADMIN_PASSWORD` from the
+  environment and generates-and-prints one when unset. The sample researcher is
+  skipped entirely when `APP_ENV=production`.
+- **The private tunnel address is gone** from the client default and the docs.
+  The API base now defaults to the production host and is set per build with
+  `--dart-define`.
+- **Documented passwords removed** from README, CLAUDE.md, be/README and the
+  API examples.
+- **README rewritten** for readers who are not us: what the platform does, how
+  it is built, how it is run, and what deploying it requires.
+
+---
+
 ## [1.18.0] - 2026-08-17
 
 ### 🎛️ Model training, from a GUI

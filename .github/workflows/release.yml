@@ -1,0 +1,225 @@
+name: Release
+
+# Builds the three client targets and publishes them.
+#
+# Triggered by pushing a version tag, or by hand from the Actions tab:
+#
+#     git tag v1.2.0 && git push origin v1.2.0
+#
+# Artifacts go to a GitHub Release, and — when the Drive secrets are present —
+# to Google Drive as well. The Drive step is skipped rather than failed when it
+# is not configured, so the release still happens.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'API base URL to compile into the clients'
+        required: false
+        default: ''
+
+env:
+  FLUTTER_VERSION: '3.44.0'
+  # Where the built clients look for the backend. Set the repository variable
+  # API_BASE_URL to change it without touching this file.
+  API_BASE_URL: >-
+    ${{ github.event.inputs.api_base_url
+        || vars.API_BASE_URL
+        || 'https://api.brin.fajrianhost.my.id/api' }}
+
+jobs:
+  # Nothing is published from a tree that does not pass its own tests. Two
+  # minutes, and it has caught more than it has delayed.
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Analyze and test
+        working-directory: fe
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+
+  web:
+    name: Web
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Build
+        working-directory: fe
+        run: |
+          flutter pub get
+          flutter build web --release --dart-define=API_BASE_URL=$API_BASE_URL
+
+      - name: Package
+        working-directory: fe/build/web
+        run: zip -r "$GITHUB_WORKSPACE/brin-neutron-ct-web.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: brin-neutron-ct-web.zip
+
+  android:
+    name: Android APK
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Build
+        working-directory: fe
+        run: |
+          flutter pub get
+          flutter build apk --release --dart-define=API_BASE_URL=$API_BASE_URL
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             "$GITHUB_WORKSPACE/brin-neutron-ct.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: brin-neutron-ct.apk
+
+  ios:
+    name: iOS
+    needs: test
+    # iOS can only be built on macOS, and this is the whole point of the job:
+    # it produces an iOS build without anyone owning a Mac.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Build (unsigned)
+        working-directory: fe
+        # --no-codesign because signing needs an Apple Developer account and a
+        # provisioning profile. The result is a real, complete iOS build that
+        # simply cannot be installed on a device until it is signed. Add the
+        # certificate as a secret and drop this flag when that account exists.
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign \
+            --dart-define=API_BASE_URL=$API_BASE_URL
+
+      - name: Package
+        working-directory: fe/build/ios/iphoneos
+        run: |
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          zip -qr "$GITHUB_WORKSPACE/brin-neutron-ct-ios-unsigned.ipa" Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: brin-neutron-ct-ios-unsigned.ipa
+
+  publish:
+    name: Publish
+    needs: [web, android, ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Secrets are lifted into the job environment because a step's `if:` cannot
+    # read the `secrets` context — it can read `env`. This is the supported way
+    # to make a step conditional on a secret existing.
+    env:
+      RCLONE_DRIVE_TOKEN: ${{ secrets.RCLONE_DRIVE_TOKEN }}
+      GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: List what was built
+        run: ls -lh
+
+      - name: GitHub Release
+        # Tags only. A manual run still leaves the artifacts on the run itself,
+        # without inventing a release for an untagged commit.
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            brin-neutron-ct-web.zip
+            brin-neutron-ct.apk
+            brin-neutron-ct-ios-unsigned.ipa
+          generate_release_notes: true
+          body: |
+            **Web** — unzip and serve as static files.
+            **Android** — `brin-neutron-ct.apk`, universal build.
+            **iOS** — unsigned; signing needs an Apple Developer account.
+
+            All three were compiled against `${{ env.API_BASE_URL }}`.
+
+      # rclone with an OAuth token for a *personal* Google account, not a
+      # service account. That choice matters: a service account has no Drive
+      # storage quota of its own, so uploading into a folder in someone's My
+      # Drive fails with "Service Accounts do not have storage quota" — a
+      # message that sounds like a permissions problem, is not one, and costs
+      # an afternoon.
+      #
+      # To configure, once, on any machine with rclone installed:
+      #
+      #     rclone authorize "drive"
+      #
+      # Sign in, then put the JSON it prints into the repository secret
+      # RCLONE_DRIVE_TOKEN, and the destination folder id — the last segment of
+      # the folder's URL — into GDRIVE_FOLDER_ID.
+      - name: Upload to Google Drive
+        if: env.RCLONE_DRIVE_TOKEN != '' && env.GDRIVE_FOLDER_ID != ''
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.RCLONE_DRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq rclone
+
+          # One subfolder per release, so successive builds do not overwrite
+          # each other and "which APK was that?" stays answerable.
+          RELEASE_DIR="${GITHUB_REF_NAME:-manual-$(date +%Y%m%d-%H%M)}"
+
+          rclone mkdir "gdrive:$RELEASE_DIR"
+          rclone copy brin-neutron-ct-web.zip          "gdrive:$RELEASE_DIR" -P
+          rclone copy brin-neutron-ct.apk              "gdrive:$RELEASE_DIR" -P
+          rclone copy brin-neutron-ct-ios-unsigned.ipa "gdrive:$RELEASE_DIR" -P
+
+          echo "Uploaded to Drive folder: $RELEASE_DIR"
+
+      - name: Say why Drive was skipped
+        if: env.RCLONE_DRIVE_TOKEN == '' || env.GDRIVE_FOLDER_ID == ''
+        run: |
+          echo "::notice::Google Drive upload skipped."
+          echo "Set the repository secrets RCLONE_DRIVE_TOKEN and GDRIVE_FOLDER_ID"
+          echo "to enable it. See the comment in .github/workflows/release.yml."

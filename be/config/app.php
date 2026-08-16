@@ -16,6 +16,21 @@ return [
     'name' => env('APP_NAME', 'Laravel'),
 
     /*
+    |---------------------------------------------------------------------------
+    | First administrator
+    |---------------------------------------------------------------------------
+    |
+    | Used by AdminUserSeeder. The password is read from the environment and
+    | never written in the seeder: a credential committed to a repository is a
+    | credential everyone has, and that seeder runs on production too.
+    |
+    | Leave the password unset and one is generated and printed once.
+    |
+    */
+    'seed_admin_email' => env('SEED_ADMIN_EMAIL', 'admin@brin.go.id'),
+    'seed_admin_password' => env('SEED_ADMIN_PASSWORD'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------

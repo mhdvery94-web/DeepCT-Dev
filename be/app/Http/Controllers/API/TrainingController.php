@@ -8,7 +8,7 @@ use App\Models\TrainingDataset;
 use App\Models\TrainingJob;
 use App\Models\UserActivity;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -214,6 +214,133 @@ class TrainingController extends Controller
         ], 201);
     }
 
+    /**
+     * POST /api/admin/training/jobs/{id}/dispatch
+     *
+     * Push the job to a trainer, the same way a prediction is pushed to a model
+     * endpoint: the GPU host exposes a URL, the platform posts the job to it,
+     * and the notebook starts training.
+     *
+     * The alternative — a worker polling `claim` — still exists and is still
+     * the safety net after a session dies. This is simply the button an
+     * administrator expects: register a URL, press start.
+     *
+     * Two things make this work where a naive version would not:
+     *
+     *  - The request only asks the trainer to **accept** the job, with a short
+     *    timeout. A notebook that held the connection open for the length of a
+     *    multi-day training would time out on any network in the world.
+     *  - The payload carries the callback base and the worker token, so the
+     *    trainer reports progress through exactly the same protocol a polling
+     *    worker uses. Heartbeats, checkpoints and resume-after-death are not
+     *    bypassed by pushing — they are the reason a pushed job survives its
+     *    session expiring.
+     */
+    public function dispatchJob(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'trainer_url' => 'nullable|url|max:500',
+        ]);
+
+        $job = TrainingJob::with('dataset')->findOrFail($id);
+
+        if ($job->status !== 'queued') {
+            return response()->json([
+                'success' => false,
+                'message' => "This job is {$job->status}; only a queued job can be dispatched.",
+            ], 409);
+        }
+
+        $trainerUrl = $validated['trainer_url']
+            ?? $job->trainer_url
+            ?? config('training.trainer_url');
+
+        if (empty($trainerUrl)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No trainer URL is configured. Set TRAINING_TRAINER_URL, '
+                    . 'or give one with this request.',
+            ], 422);
+        }
+
+        $token = config('training.worker_token');
+
+        if (empty($token)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No worker token is configured, so the trainer '
+                    . 'would have no way to report back.',
+            ], 422);
+        }
+
+        $callback = rtrim((string) config('training.callback_url'), '/');
+        $dataset = $job->dataset;
+
+        try {
+            $response = Http::timeout((int) config('training.dispatch_timeout', 30))
+                ->withoutVerifying() // tunnel certificates
+                ->withHeaders(['ngrok-skip-browser-warning' => 'true'])
+                ->post($trainerUrl, [
+                    'job_id' => $job->id,
+                    'name' => $job->name,
+                    'total_epochs' => $job->total_epochs,
+                    'resume_from_epoch' => $job->current_epoch,
+                    'hyperparameters' => $job->hyperparameters ?? [],
+                    'dataset' => [
+                        'id' => $dataset?->id,
+                        'name' => $dataset?->name,
+                        'source_type' => $dataset?->source_type,
+                        'source_url' => $dataset?->source_url,
+                        'download_url' => $dataset && $dataset->isHosted()
+                            ? "{$callback}/api/training/worker/jobs/{$job->id}/dataset"
+                            : null,
+                        'checksum' => $dataset?->checksum,
+                    ],
+                    // Everything the trainer needs to report back with. Without
+                    // these it could train perfectly and still have nowhere to
+                    // put the result.
+                    'callback' => [
+                        'base_url' => "{$callback}/api",
+                        'worker_token' => $token,
+                        'heartbeat_seconds' => 60,
+                    ],
+                ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not reach the trainer: ' . $this->trim($e->getMessage()),
+            ], 502);
+        }
+
+        if (!$response->successful()) {
+            return response()->json([
+                'success' => false,
+                'message' => "The trainer refused the job (HTTP {$response->status()}).",
+            ], 502);
+        }
+
+        // Deliberately still `queued`, not `running`. The trainer says it
+        // *accepted* the job; only its first heartbeat proves it started. A
+        // job marked running by us and never actually begun would sit there
+        // looking healthy forever.
+        $job->update([
+            'trainer_url' => $trainerUrl,
+            'dispatched_at' => now(),
+            'error_message' => null,
+        ]);
+
+        $this->record($request, 'training_job_dispatched',
+            "Dispatched training job #{$job->id} to a trainer", [
+                'job_id' => $job->id,
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'The trainer accepted the job. It reports back as it trains.',
+            'data' => $this->serialiseJob($job->fresh()->load('dataset')),
+        ]);
+    }
+
     /** POST /api/admin/training/jobs/{id}/cancel */
     public function cancelJob(Request $request, $id)
     {
@@ -392,6 +519,8 @@ class TrainingController extends Controller
             'progress' => $job->progress(),
             'metrics' => $job->metrics,
             'worker_label' => $job->worker_label,
+            'trainer_url' => $job->trainer_url,
+            'dispatched_at' => $job->dispatched_at?->toIso8601String(),
             'error_message' => $job->error_message,
             'has_weights' => $job->weights_path !== null,
             'has_checkpoint' => $job->checkpoint_path !== null,
@@ -420,6 +549,15 @@ class TrainingController extends Controller
         }
 
         return $data;
+    }
+
+    /** Guzzle messages carry the whole URL and stack noise; trim them. */
+    private function trim(string $message): string
+    {
+        $message = strtok($message, "
+");
+
+        return strlen($message) > 180 ? substr($message, 0, 180) . '...' : $message;
     }
 
     private function record(Request $request, string $type, string $description, array $metadata = []): void

@@ -18,6 +18,48 @@ return [
 
     /*
     |---------------------------------------------------------------------------
+    | Trainer endpoint
+    |---------------------------------------------------------------------------
+    |
+    | A URL on the GPU host that accepts a job and starts training, exactly the
+    | way a model endpoint accepts a pair of frames and returns an interpolated
+    | one. Optional: without it a worker can still poll /training/worker/claim.
+    |
+    | An administrator may override it per dispatch, and the URL used is stored
+    | on the job — over months a project runs against several notebooks, and
+    | "which machine trained this?" should be answerable from the row.
+    |
+    */
+    'trainer_url' => env('TRAINING_TRAINER_URL'),
+
+    /*
+    |---------------------------------------------------------------------------
+    | Callback base
+    |---------------------------------------------------------------------------
+    |
+    | What the platform tells the trainer to report back to. Defaults to
+    | APP_URL, which is right in production and wrong behind a tunnel — set it
+    | explicitly when the GPU host reaches this server by a different name than
+    | the browser does.
+    |
+    */
+    'callback_url' => env('TRAINING_CALLBACK_URL', env('APP_URL')),
+
+    /*
+    |---------------------------------------------------------------------------
+    | Dispatch timeout
+    |---------------------------------------------------------------------------
+    |
+    | Seconds to wait for the trainer to *accept* a job. Deliberately short: the
+    | trainer must acknowledge and train in the background. A notebook that
+    | holds the request open for the length of the training run would time out
+    | on any network in the world.
+    |
+    */
+    'dispatch_timeout' => (int) env('TRAINING_DISPATCH_TIMEOUT', 30),
+
+    /*
+    |---------------------------------------------------------------------------
     | Upload limits
     |---------------------------------------------------------------------------
     |

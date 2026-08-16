@@ -87,6 +87,10 @@ class TrainingJob {
   /// Which GPU holds it, in the worker's own words.
   final String? workerLabel;
 
+  /// The trainer this job was pushed to, if it was pushed rather than polled.
+  final String? trainerUrl;
+  final DateTime? dispatchedAt;
+
   final String? errorMessage;
   final bool hasWeights;
   final bool hasCheckpoint;
@@ -111,6 +115,8 @@ class TrainingJob {
     this.metrics = const {},
     this.hyperparameters = const {},
     this.workerLabel,
+    this.trainerUrl,
+    this.dispatchedAt,
     this.errorMessage,
     this.hasWeights = false,
     this.hasCheckpoint = false,
@@ -149,6 +155,8 @@ class TrainingJob {
       metrics: _map(json['metrics']),
       hyperparameters: _map(json['hyperparameters']),
       workerLabel: json['worker_label']?.toString(),
+      trainerUrl: json['trainer_url']?.toString(),
+      dispatchedAt: _date(json['dispatched_at']),
       errorMessage: json['error_message']?.toString(),
       hasWeights: json['has_weights'] == true,
       hasCheckpoint: json['has_checkpoint'] == true,
@@ -168,6 +176,12 @@ class TrainingJob {
   }
 
   bool get isQueued => status == 'queued';
+
+  /// Sent to a trainer, but no worker has reported on it yet.
+  ///
+  /// Accepting is not starting: the trainer said it took the job, and only a
+  /// heartbeat proves it began.
+  bool get isAwaitingTrainer => isQueued && dispatchedAt != null;
   bool get isActive => status == 'claimed' || status == 'running';
   bool get isFinished =>
       status == 'completed' || status == 'failed' || status == 'cancelled';

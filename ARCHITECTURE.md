@@ -458,6 +458,40 @@ Notebook training-nya sendiri. Itu pekerjaan riset (arsitektur discriminator,
 loss, augmentasi), bukan pekerjaan platform, dan menulis kontrak API tanpa tahu
 bentuk akhirnya justru menghasilkan kontrak yang salah.
 
+### Dua cara memulai: ditarik worker, atau didorong platform
+
+Rancangan awalnya *pull*: worker mem-polling `claim`. Itu tetap ada dan tetap
+jadi jaring pengaman. Tapi ada cara kedua yang bentuknya persis seperti
+prediksi, dan itu yang biasanya diharapkan orang:
+
+```
+Konsol admin ──POST /train──► notebook GPU ──heartbeat/checkpoint──► platform
+```
+
+Admin mendaftarkan **trainer URL** (`TRAINING_TRAINER_URL`, atau diisi saat
+menekan tombolnya), lalu menekan **SEND TO TRAINER** pada job yang antre.
+Platform mem-POST job itu — id, epoch, hyperparameter, sumber dataset,
+**alamat callback dan worker token** — ke URL tersebut.
+`scripts/training_server.py` adalah sisi notebook-nya: FastAPI dengan
+`POST /train`, kembarannya server inferensi yang sudah ada.
+
+Tiga hal yang membuat ini bekerja, dan versi naifnya tidak:
+
+1. **Request-nya cuma minta "terima job ini"**, dengan timeout pendek.
+   Notebook harus menjawab langsung dan melatih di thread latar. Koneksi yang
+   ditahan selama training berhari-hari akan timeout di jaringan mana pun.
+2. **Job tetap `queued` setelah dikirim.** Trainer bilang ia *menerima*; yang
+   membuktikan ia *mulai* adalah heartbeat pertama. Kalau platform langsung
+   menandainya `running`, job yang tidak pernah jalan akan terlihat sehat
+   selamanya.
+3. **Mendorong tidak melewati protokol pelaporan.** Justru itu yang membuat
+   job hasil dorongan selamat saat sesinya mati: heartbeat, checkpoint, dan
+   `training:reclaim` bekerja persis sama.
+
+Kalau dorongannya gagal — trainer menolak atau tidak terjangkau — job tetap
+`queued`. Push yang gagal tidak boleh membuat job terlantar; worker yang
+mem-polling masih bisa mengambilnya.
+
 ### Ukurannya
 
 Setara seluruh FASE 3 — tabel, endpoint, worker protocol, layar admin, dan
@@ -564,11 +598,78 @@ demo dan skripsi, tidak untuk layanan yang dipakai orang lain.
    `SANCTUM_STATEFUL_DOMAINS` maupun domain cookie.
 2. **`APP_DEBUG=false`** dan `APP_ENV=production`. Sekarang debug menyala, dan
    stack trace Laravel membocorkan path serta konfigurasi.
-3. **Ganti semua kredensial contoh.** `admin123` dan `user123` ada di dokumen
-   yang ikut ter-push.
+3. **Isi `SEED_ADMIN_PASSWORD`** sebelum `db:seed`. Kalau kosong, seeder
+   membuat password acak dan mencetaknya sekali — jangan sampai terlewat di
+   log CI.
 4. **`TRAINING_WORKER_TOKEN` baru** untuk produksi — token pengembangan sudah
    pernah lewat terminal dan log.
 5. **`script-deepct.py` jangan di-commit.** Berkas itu memuat token otentikasi
    ngrok dalam teks polos. Saat ini belum ter-track; biarkan begitu, atau
    pindahkan tokennya ke variabel lingkungan lebih dulu.
 6. **Backup database.** Belum ada satu pun sekarang.
+
+
+---
+
+## 9. Rilis dan distribusi klien
+
+`.github/workflows/release.yml` membangun ketiga target dan menerbitkannya.
+Pemicunya tag versi:
+
+```bash
+git tag v1.2.0 && git push origin v1.2.0
+```
+
+| Job | Runner | Hasil |
+|---|---|---|
+| `test` | ubuntu | `flutter analyze` + `flutter test`; sisanya tidak jalan kalau ini merah |
+| `web` | ubuntu | `brin-neutron-ct-web.zip` |
+| `android` | ubuntu | `brin-neutron-ct.apk` |
+| `ios` | **macos** | `brin-neutron-ct-ios-unsigned.ipa` |
+| `publish` | ubuntu | GitHub Release + unggah ke Google Drive |
+
+Alamat API dikompilasi masuk, jadi CI membacanya dari repository variable
+`API_BASE_URL`.
+
+### iOS tanpa punya Mac
+
+iOS hanya bisa dibangun di macOS — itu batas Apple, bukan batas Flutter. Job
+`ios` berjalan di runner macOS GitHub, jadi build iOS tetap dihasilkan tanpa
+siapa pun memiliki Mac.
+
+**Targetnya sudah cocok untuk iPhone X.** `IPHONEOS_DEPLOYMENT_TARGET = 13.0`,
+sementara iPhone X (2017) menjalankan iOS 11 sampai 16.7 — jadi ia masuk dengan
+selisih yang lega. Menurunkannya lebih jauh tidak ada gunanya: Flutter modern
+sendiri tidak mendukung di bawah iOS 13.
+
+Yang **tidak** bisa diselesaikan CI: penandatanganan. Build-nya `--no-codesign`,
+artinya lengkap tapi tidak bisa dipasang ke perangkat. Memasangnya ke iPhone X
+sungguhan butuh akun Apple Developer (US$99/tahun) plus provisioning profile;
+setelah itu sertifikatnya ditaruh sebagai secret dan flag itu dilepas.
+
+Info.plist juga sudah diisi `NSPhotoLibraryUsageDescription` dan
+`NSCameraUsageDescription`. Tanpa itu iOS **menghentikan aplikasi** saat pemilih
+berkas pertama kali menyentuh galeri — yaitu saat mengganti foto profil. Itu
+crash, bukan peringatan.
+
+### Google Drive
+
+Langkah unggahnya memakai **rclone dengan token OAuth akun pribadi**, bukan
+service account. Ini disengaja: service account tidak punya kuota penyimpanan
+Drive sendiri, jadi mengunggah ke folder di My Drive orang lain gagal dengan
+pesan "Service Accounts do not have storage quota" — pesan yang terdengar
+seperti masalah izin, padahal bukan.
+
+Sekali saja, di mesin mana pun yang punya rclone:
+
+```bash
+rclone authorize "drive"
+```
+
+Login, salin JSON yang tercetak ke repository secret **`RCLONE_DRIVE_TOKEN`**,
+dan id folder tujuan — segmen terakhir URL folder-nya — ke
+**`GDRIVE_FOLDER_ID`**. Tiap rilis mendapat subfolder sendiri, supaya build
+berikutnya tidak menimpa yang lama.
+
+Tanpa kedua secret itu langkahnya **dilewati, bukan gagal**: rilisnya tetap
+terbit, dan log menjelaskan apa yang kurang.

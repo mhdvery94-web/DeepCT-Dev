@@ -148,6 +148,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/training/jobs', [TrainingController::class, 'jobs'])->name('api.admin.training.jobs');
         Route::post('/training/jobs', [TrainingController::class, 'storeJob'])->name('api.admin.training.jobs.store');
         Route::get('/training/jobs/{id}', [TrainingController::class, 'showJob'])->name('api.admin.training.jobs.show');
+        Route::post('/training/jobs/{id}/dispatch', [TrainingController::class, 'dispatchJob'])->name('api.admin.training.jobs.dispatch');
         Route::post('/training/jobs/{id}/cancel', [TrainingController::class, 'cancelJob'])->name('api.admin.training.jobs.cancel');
         Route::delete('/training/jobs/{id}', [TrainingController::class, 'destroyJob'])->name('api.admin.training.jobs.destroy');
         Route::get('/training/jobs/{id}/weights', [TrainingController::class, 'downloadWeights'])->name('api.admin.training.jobs.weights');

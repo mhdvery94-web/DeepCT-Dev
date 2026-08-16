@@ -18,7 +18,7 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (88 Total)
+### API Endpoints (89 Total)
 
 Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
@@ -184,6 +184,7 @@ expires every 9–12 hours, and training takes days.
 Admin (11):
 - `GET|POST /api/admin/training/datasets`, `DELETE .../{id}`
 - `GET|POST /api/admin/training/jobs`, `GET|DELETE .../{id}`
+- `POST /api/admin/training/jobs/{id}/dispatch` — push the job to a trainer URL
 - `POST /api/admin/training/jobs/{id}/cancel`
 - `GET /api/admin/training/jobs/{id}/weights`
 - `POST /api/admin/training/jobs/{id}/register-model`
@@ -204,6 +205,14 @@ returns a job whose heartbeat is older than 15 minutes to `queued` **with its
 checkpoint intact**, and the next worker resumes from the epoch already
 reached. Without that, every expired session would strand a job forever and a
 multi-day training could never finish.
+
+**A job can be pushed as well as pulled.** `dispatch` posts the job to a URL on
+the GPU host — the same shape as a prediction posted to a model endpoint — so an
+administrator presses a button instead of going to start a poller. The payload
+carries the callback base and worker token, so the trainer reports back through
+the very same protocol; pushing changes who starts the work, not how it is
+reported. That is why a pushed job still survives its session dying. A push that
+fails leaves the job `queued`, so a polling worker can still take it.
 
 **A dataset is an upload or a URL.** Uploads travel through this machine, so
 they stay modest; anything large is registered as a URL the worker fetches for
@@ -478,20 +487,23 @@ are documented in [../ARCHITECTURE.md](../ARCHITECTURE.md) §3.
 
 ---
 
-## 👥 Default Users
+## 👥 First administrator
 
-### Admin Account
-- **Email:** admin@brin.go.id
-- **Password:** admin123
-- **Role:** admin
+`php artisan db:seed` creates one account, from the environment:
 
-### Sample Researcher
-- **Email:** researcher@brin.go.id
-- **Password:** user123
-- **Role:** user
+```env
+SEED_ADMIN_EMAIL=admin@example.org
+SEED_ADMIN_PASSWORD=            # leave empty and one is generated, printed once
+```
 
-### Default Password (New Users)
-- **Password:** BrinResearch2026
+Nothing is hard-coded — this seeder runs on production too, and a password
+written into a repository is a password everyone has. The sample researcher is
+skipped when `APP_ENV=production`.
+
+Accounts created afterwards (by an administrator, or by approving a landing-page
+request) get `UserController::DEFAULT_PASSWORD` and **cannot reach the console
+until they replace it**: `must_change_password` is set at issue and cleared only
+by `POST /api/me/password`. An admin password reset arms it again.
 
 ---
 
@@ -505,7 +517,7 @@ curl http://127.0.0.1:8000/api/health
 # Login
 curl -X POST http://127.0.0.1:8000/api/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@brin.go.id","password":"admin123"}'
+  -d '{"email":"$ADMIN_EMAIL","password":"$ADMIN_PASSWORD"}'
 
 # Get models (with token)
 curl http://127.0.0.1:8000/api/admin/models \
@@ -517,7 +529,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**216 tests, 883 assertions, ~70s.** They run against MySQL, not sqlite: three
+**224 tests, 907 assertions, ~70s.** They run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:
