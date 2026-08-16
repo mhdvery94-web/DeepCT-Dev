@@ -189,6 +189,18 @@ Plain-HTTP overrides only work on Android, where the manifest sets
 flutter run -d chrome
 ```
 
+`flutter run` binds the dev server to a **random free port** on every launch —
+that is what `http://localhost:PORT/` in the terminal output actually is. It is
+not a stable app URL: stop and restart `flutter run` (or let it crash) and the
+next session gets a different port. Reopening the old tab/bookmark then just
+hangs trying to reach a port nothing is listening on anymore, which looks like
+the landing page stuck loading forever but is really "wrong address." Pin the
+port if you want the same URL to survive restarts:
+
+```bash
+flutter run -d chrome --web-port=57193
+```
+
 **Android (Emulator):**
 ```bash
 flutter run

@@ -35,10 +35,15 @@ Route::post('/access-requests', [AccessRequestController::class, 'store'])
     ->name('api.access-requests.store');
 
 // A message from the sign-in page, for people who cannot get in — the third
-// and last unauthenticated write path. Throttled per hour rather than per
-// minute: someone genuinely stuck writes once, not five times a minute.
+// and last unauthenticated write path.
+//
+// 5 per 10 minutes, not 5 per hour. The hourly window was picked to be tight
+// against spam and turned out to be tight against *people*: someone testing
+// the form, or writing again because they forgot a detail, hit "Too many
+// attempts" and had no way to tell it apart from a broken button. A ten-minute
+// window still bounds abuse, and forgives a real person within one coffee.
 Route::post('/messages/public', [MessageController::class, 'storePublic'])
-    ->middleware('throttle:5,60')
+    ->middleware('throttle:5,10')
     ->name('api.messages.public');
 
 // Research news for the landing page slideshow. Read-only and published-only;
@@ -64,6 +69,10 @@ Route::middleware('auth:sanctum')->group(function () {
         // Own profile photo.
         Route::post('/avatar', [AvatarController::class, 'updateOwn'])->name('api.me.avatar.update');
         Route::delete('/avatar', [AvatarController::class, 'destroyOwn'])->name('api.me.avatar.destroy');
+
+        // Own password. Without this the only way to change one is an admin
+        // reset to the shared default, which every admin then knows.
+        Route::post('/password', [AuthController::class, 'changePassword'])->name('api.me.password');
     });
 
     // Serving a photo is authenticated rather than public: avatars appear

@@ -6,6 +6,7 @@ import '../../models/chat_message.dart';
 import '../../services/api_client.dart';
 import '../../services/message_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/message_bubbles.dart';
 import '../../widgets/user_avatar.dart';
@@ -148,27 +149,24 @@ class _AdminConversationScreenState extends State<AdminConversationScreen> {
   }
 
   Future<void> _delete() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppAlertDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Delete conversation'),
-        content: const Text(
-          'This removes the whole thread and every message in it. '
-          'Archiving keeps it out of the inbox without destroying anything.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('DELETE'),
-          ),
-        ],
+      title: 'Delete conversation',
+      content: const Text(
+        'This removes the whole thread and every message in it. '
+        'Archiving keeps it out of the inbox without destroying anything.',
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('DELETE'),
+        ),
+      ],
     );
 
     if (confirmed != true) return;

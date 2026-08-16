@@ -29,8 +29,16 @@ class ModelHealthChecker
     /** Requests slower than this are reported as `trouble`. */
     public const SLOW_THRESHOLD_MS = 5000;
 
-    /** Hard timeout for the probe. */
-    public const TIMEOUT_SECONDS = 15;
+    /**
+     * Hard timeout for the probe.
+     *
+     * Must stay under the ten-second schedule interval, or a probe against a
+     * dead tunnel would still be running when the next one is due. Eight
+     * seconds costs nothing in accuracy: anything past [SLOW_THRESHOLD_MS] is
+     * already reported as `trouble`, so the extra seconds only ever confirmed
+     * a verdict that had been reached at five.
+     */
+    public const TIMEOUT_SECONDS = 8;
 
     /**
      * Probe the model endpoint and persist the resulting status.
@@ -147,9 +155,9 @@ class ModelHealthChecker
             'health_check_error' => $error,
         ]);
 
-        // Only on a *transition*. This runs every five minutes, so a model
-        // that is down overnight would otherwise wake the administrator up
-        // with 288 identical notifications.
+        // Only on a *transition*. This runs every ten seconds, so a model that
+        // is down overnight would otherwise produce 8,640 identical
+        // notifications in a day.
         if ($previous !== $status) {
             if ($status === 'offline') {
                 Notifier::modelWentOffline($model, $error);

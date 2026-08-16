@@ -8,6 +8,7 @@ use App\Models\Model;
 use App\Models\UserActivity;
 use App\Services\IntakeException;
 use App\Services\PredictionIntake;
+use App\Services\QueueHealth;
 use App\Services\TiffPreview;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -121,6 +122,13 @@ class AnalysisController extends Controller
                 'total' => $predictions->total(),
                 'last_page' => $predictions->lastPage(),
             ],
+            // Whether anything is actually consuming the queue. A job sitting
+            // at `pending` for ever with no error anywhere is the most
+            // confusing state this application has, and it is invisible unless
+            // we say so — see App\Services\QueueHealth.
+            'meta' => app(QueueHealth::class)->inspect() + [
+                'queue_message' => app(QueueHealth::class)->message(),
+            ],
         ]);
     }
 
@@ -165,6 +173,11 @@ class AnalysisController extends Controller
         if ($prediction->status === 'pending') {
             $data['queue_position'] = $this->getQueuePosition($prediction);
             $data['estimated_wait_minutes'] = $this->estimateWaitTime($prediction);
+
+            // "Queued" with no worker behind it looks exactly like "queued"
+            // with one. Say which it is rather than leaving someone watching
+            // a clock icon that will never change.
+            $data['queue_stalled_message'] = app(QueueHealth::class)->message();
         }
 
         // Add completed_at if completed

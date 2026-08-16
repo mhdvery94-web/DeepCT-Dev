@@ -10,6 +10,7 @@ import '../../services/admin_user_service.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/avatar_editor_sheet.dart';
 import '../../widgets/pagination_bar.dart';
@@ -108,9 +109,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   // ---------------------------------------------------------------- actions
 
   Future<void> _openUserDialog({UserModel? existing}) async {
-    final saved = await showDialog<bool>(
+    final saved = await showAppDialog<bool>(
       context: context,
       barrierDismissible: false,
+      maxWidth: 480,
       builder: (_) => _UserFormDialog(service: _service, existing: existing),
     );
 
@@ -164,39 +166,37 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       if (!mounted) return;
 
       // Surface the new credential so the admin can pass it on.
-      await showDialog<void>(
+      if (!mounted) return;
+      await showAppAlertDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          title: const Text('Password reset'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('New password for ${user.username}:'),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                color: AppTheme.background,
-                child: SelectableText(
-                  password,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+        title: 'Password reset',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('New password for ${user.username}:'),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              color: AppTheme.background,
+              child: SelectableText(
+                password,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('DONE'),
             ),
           ],
         ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('DONE'),
+          ),
+        ],
       );
     } on ApiException catch (e) {
       _showMessage(e.message, isError: true);
@@ -230,26 +230,23 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     required String confirmLabel,
     bool destructive = false,
   }) {
-    return showDialog<bool>(
+    return showAppAlertDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            style: destructive
-                ? ElevatedButton.styleFrom(backgroundColor: AppTheme.error)
-                : null,
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(confirmLabel),
-          ),
-        ],
-      ),
+      title: title,
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton(
+          style: destructive
+              ? ElevatedButton.styleFrom(backgroundColor: AppTheme.error)
+              : null,
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(confirmLabel),
+        ),
+      ],
     );
   }
 
@@ -660,14 +657,21 @@ class _UserFormDialogState extends State<_UserFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      title: Text(_isEdit ? 'Edit user' : 'Add user'),
-      content: SizedBox(
-        width: 420,
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
+    // showAppDialog already clamps width and scrolls; this only supplies the
+    // title / form / actions AlertDialog used to lay out.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _isEdit ? 'Edit user' : 'Add user',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 16),
+          Form(
+            key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -752,27 +756,34 @@ class _UserFormDialogState extends State<_UserFormDialog> {
               ],
             ),
           ),
-        ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: _isSaving
+                    ? null
+                    : () => Navigator.pop(context, false),
+                child: const Text('CANCEL'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _isSaving ? null : _submit,
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(_isEdit ? 'SAVE' : 'CREATE'),
+              ),
+            ],
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _isSaving ? null : () => Navigator.pop(context, false),
-          child: const Text('CANCEL'),
-        ),
-        ElevatedButton(
-          onPressed: _isSaving ? null : _submit,
-          child: _isSaving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Text(_isEdit ? 'SAVE' : 'CREATE'),
-        ),
-      ],
     );
   }
 }

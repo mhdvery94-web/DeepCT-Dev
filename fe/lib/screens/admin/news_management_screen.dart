@@ -8,6 +8,9 @@ import '../../models/pagination.dart';
 import '../../services/api_client.dart';
 import '../../services/news_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/file_extension.dart';
+import '../../widgets/app_dialog.dart';
+import '../../widgets/authed_image.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
 
@@ -93,8 +96,9 @@ class _NewsManagementScreenState extends State<NewsManagementScreen> {
   }
 
   Future<void> _edit([NewsPost? post]) async {
-    final saved = await showDialog<bool>(
+    final saved = await showAppDialog<bool>(
       context: context,
+      maxWidth: 520,
       builder: (_) => _PostEditor(post: post),
     );
 
@@ -102,24 +106,21 @@ class _NewsManagementScreenState extends State<NewsManagementScreen> {
   }
 
   Future<void> _delete(NewsPost post) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppAlertDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Delete post'),
-        content: Text('Delete "${post.title}"? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('DELETE'),
-          ),
-        ],
-      ),
+      title: 'Delete post',
+      content: Text('Delete "${post.title}"? This cannot be undone.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('DELETE'),
+        ),
+      ],
     );
 
     if (confirmed != true) return;
@@ -303,14 +304,14 @@ class _PostCard extends StatelessWidget {
           SizedBox(
             width: 84,
             height: 64,
-            child: post.imageUrl != null
-                ? Image.network(
-                    post.imageUrl!,
-                    fit: BoxFit.cover,
-                    headers: const {'ngrok-skip-browser-warning': 'true'},
-                    errorBuilder: (_, _, _) => const _Thumb(),
-                  )
-                : const _Thumb(),
+            // AuthedImage, not Image.network: a *draft's* photo is served
+            // only to an administrator, and a plain image request carries no
+            // bearer token. It 404s and shows the placeholder, which looks
+            // exactly like the upload having failed.
+            child: AuthedImage(
+              path: post.imagePath,
+              placeholder: const _Thumb(),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -457,9 +458,13 @@ class _PostEditorState extends State<_PostEditor> {
   }
 
   Future<void> _pickImage() async {
+    // `FileType.image` rather than an extension list: an extension-based
+    // `accept` attribute is not something a mobile browser can reliably turn
+    // into an Android file-chooser filter, whereas `image/*` is understood by
+    // both. Broader than the four types the backend takes, so the name is
+    // checked below.
     final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      type: FileType.image,
       // Web has no path to read from, and the upload sends bytes either way.
       withData: true,
     );
@@ -468,10 +473,17 @@ class _PostEditorState extends State<_PostEditor> {
     if (file?.bytes == null) return;
 
     if (!mounted) return;
+
+    if (!hasExtension(file!.name, const ['jpg', 'jpeg', 'png', 'webp'])) {
+      setState(() => _error = 'Choose a JPEG, PNG or WebP image.');
+      return;
+    }
+
     setState(() {
-      _imageBytes = file!.bytes;
+      _imageBytes = file.bytes;
       _imageName = file.name;
       _removeImage = false;
+      _error = null;
     });
   }
 
@@ -508,13 +520,20 @@ class _PostEditorState extends State<_PostEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      title: Text(_isNew ? 'New post' : 'Edit post'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Form(
+    // showAppDialog already clamps width and scrolls; this only supplies the
+    // title / form / actions AlertDialog used to lay out.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _isNew ? 'New post' : 'Edit post',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 16),
+          Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -580,32 +599,37 @@ class _PostEditorState extends State<_PostEditor> {
               ],
             ),
           ),
-        ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('SAVE'),
+              ),
+            ],
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('CANCEL'),
-        ),
-        ElevatedButton(
-          onPressed: _saving ? null : _save,
-          child: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Text('SAVE'),
-        ),
-      ],
     );
   }
 
   Widget _buildImagePicker(BuildContext context) {
-    final existing = widget.post?.imageUrl;
+    final existing = widget.post?.imagePath;
     final hasNew = _imageBytes != null;
     final showsExisting = existing != null && !hasNew && !_removeImage;
 
@@ -621,14 +645,10 @@ class _PostEditorState extends State<_PostEditor> {
               height: 72,
               child: hasNew
                   ? Image.memory(_imageBytes!, fit: BoxFit.cover)
-                  : showsExisting
-                  ? Image.network(
-                      existing,
-                      fit: BoxFit.cover,
-                      headers: const {'ngrok-skip-browser-warning': 'true'},
-                      errorBuilder: (_, _, _) => const _Thumb(),
-                    )
-                  : const _Thumb(),
+                  : AuthedImage(
+                      path: showsExisting ? widget.post?.imagePath : null,
+                      placeholder: const _Thumb(),
+                    ),
             ),
             const SizedBox(width: 12),
             Expanded(

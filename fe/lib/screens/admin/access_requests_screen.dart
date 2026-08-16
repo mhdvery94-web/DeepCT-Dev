@@ -6,6 +6,7 @@ import '../../models/pagination.dart';
 import '../../services/access_request_service.dart';
 import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
 
@@ -105,27 +106,24 @@ class _AccessRequestsScreenState extends State<AccessRequestsScreen> {
   }
 
   Future<void> _delete(AccessRequest request) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppAlertDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Delete request'),
-        content: Text(
-          'Remove the record for ${request.email}? Any account already '
-          'created from it is left alone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
-            child: const Text('DELETE'),
-          ),
-        ],
+      title: 'Delete request',
+      content: Text(
+        'Remove the record for ${request.email}? Any account already '
+        'created from it is left alone.',
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+          child: const Text('DELETE'),
+        ),
+      ],
     );
 
     if (confirmed != true) return;
@@ -149,41 +147,38 @@ class _AccessRequestsScreenState extends State<AccessRequestsScreen> {
   }) async {
     final controller = TextEditingController();
 
-    final result = await showDialog<String>(
+    final result = await showAppAlertDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(body, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Note (optional)',
-                hintText: 'Kept on the record',
-              ),
+      title: title,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(body, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 16),
+          TextField(
+            controller: controller,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Note (optional)',
+              hintText: 'Kept on the record',
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
-            style: destructive
-                ? ElevatedButton.styleFrom(backgroundColor: AppTheme.error)
-                : null,
-            child: Text(confirmLabel),
           ),
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, controller.text),
+          style: destructive
+              ? ElevatedButton.styleFrom(backgroundColor: AppTheme.error)
+              : null,
+          child: Text(confirmLabel),
+        ),
+      ],
     );
 
     controller.dispose();
@@ -192,35 +187,32 @@ class _AccessRequestsScreenState extends State<AccessRequestsScreen> {
 
   /// The password exists in readable form exactly once, here.
   Future<void> _showCredentials(ApprovedAccount account) {
-    return showDialog<void>(
+    return showAppAlertDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Account created'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Pass these to ${account.name}. The password is not stored in '
-              'readable form and cannot be shown again.',
-              style: Theme.of(dialogContext).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 16),
-            _CredentialRow(label: 'Username', value: account.username),
-            const SizedBox(height: 8),
-            _CredentialRow(label: 'Email', value: account.email),
-            const SizedBox(height: 8),
-            _CredentialRow(label: 'Password', value: account.defaultPassword),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('DONE'),
+      title: 'Account created',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Pass these to ${account.name}. The password is not stored in '
+            'readable form and cannot be shown again.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
+          const SizedBox(height: 16),
+          _CredentialRow(label: 'Username', value: account.username),
+          const SizedBox(height: 8),
+          _CredentialRow(label: 'Email', value: account.email),
+          const SizedBox(height: 8),
+          _CredentialRow(label: 'Password', value: account.defaultPassword),
         ],
       ),
+      actions: [
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('DONE'),
+        ),
+      ],
     );
   }
 

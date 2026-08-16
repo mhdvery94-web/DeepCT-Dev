@@ -9,7 +9,9 @@ import '../../services/me_service.dart';
 import '../../services/prediction_service.dart';
 import '../../services/upload_resume_store.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/file_extension.dart';
 import '../../widgets/async_state_views.dart';
+import '../../widgets/model_status_strip.dart';
 
 /// Start a new interpolation job: pick a model, pick a ZIP, upload.
 ///
@@ -31,6 +33,7 @@ class _UploadScreenState extends State<UploadScreen> {
   final PredictionService _service = PredictionService();
 
   bool _loadingModels = true;
+  bool _refreshingModels = false;
   String? _loadError;
   List<AvailableModel> _models = const [];
   AvailableModel? _selectedModel;
@@ -92,12 +95,54 @@ class _UploadScreenState extends State<UploadScreen> {
     }
   }
 
+  /// Re-checks model status in place, without the full-screen loading state
+  /// [_loadModels] shows on first entry -- a model reported offline is the
+  /// whole reason to press this, and losing the file already picked in step 2
+  /// while checking would defeat the point.
+  Future<void> _refreshModels() async {
+    setState(() => _refreshingModels = true);
+
+    try {
+      final models = await _meService.models();
+      if (!mounted) return;
+
+      final currentId = _selectedModel?.id;
+      setState(() {
+        _models = models;
+        _selectedModel =
+            models.where((m) => m.id == currentId).firstOrNull ??
+            models.where((m) => m.isAvailable).firstOrNull ??
+            models.firstOrNull;
+        _refreshingModels = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _refreshingModels = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _pickFile() async {
     // file_picker 11 exposes this statically; the older `FilePicker.platform`
     // accessor is gone.
+    //
+    // `FileType.any` rather than a `.zip` filter, with the check done in Dart
+    // below instead. A `FileType.custom` filter is not portable, and asking
+    // for one actively broke mobile web:
+    //
+    //  - On Android the plugin resolves `custom` to an intent type of `*/*`
+    //    regardless, so it never filtered anything there in the first place.
+    //  - On a mobile browser it becomes `accept=" .zip"`, which Chrome must
+    //    translate into MIME types to build the Android file-chooser intent.
+    //    Providers report a ZIP as `application/octet-stream` or
+    //    `application/x-zip-compressed` at least as often as
+    //    `application/zip`, so the archive renders greyed out and cannot be
+    //    selected at all. The same upload works from a laptop browser, where
+    //    the OS dialog filters by extension rather than by MIME type.
     final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['zip'],
+      type: FileType.any,
       // The chunked uploader needs the bytes in memory anyway, and on web
       // there is no path to read from.
       withData: true,
@@ -107,8 +152,23 @@ class _UploadScreenState extends State<UploadScreen> {
     if (file?.bytes == null) return;
 
     if (!mounted) return;
+
+    // Nothing filtered this for us on any platform, so it is checked here.
+    if (!hasExtension(file!.name, const ['zip'])) {
+      setState(() {
+        // Cleared, so a previously chosen archive cannot be uploaded by
+        // accident while this error is on screen.
+        _fileBytes = null;
+        _fileName = null;
+        _uploadError =
+            '"${file.name}" is not a ZIP archive. Choose the .zip holding '
+            'your numbered .tif frames.';
+      });
+      return;
+    }
+
     setState(() {
-      _fileBytes = file!.bytes;
+      _fileBytes = file.bytes;
       _fileName = file.name;
       _uploadError = null;
     });
@@ -287,10 +347,47 @@ class _UploadScreenState extends State<UploadScreen> {
                 const SizedBox(height: 20),
               ],
 
+              // Availability, polled every ten seconds. The Kaggle session
+              // behind the model expires on its own, and starting an upload
+              // against a model that died four minutes ago wastes the whole
+              // archive.
+              ModelStatusStrip(
+                onChanged: (models) {
+                  if (!mounted) return;
+                  setState(() {
+                    _models = models;
+                    // Keep the selection, but re-read its availability so the
+                    // START button reflects what the strip just said.
+                    final selected = _selectedModel;
+                    if (selected != null) {
+                      _selectedModel = models
+                          .where((m) => m.id == selected.id)
+                          .firstOrNull;
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 20),
+
               const _RequirementsCard(),
               const SizedBox(height: 20),
 
-              _section(context, '1. Choose a model'),
+              Row(
+                children: [
+                  Expanded(child: _section(context, '1. Choose a model')),
+                  IconButton(
+                    tooltip: 'Refresh model status',
+                    onPressed: _refreshingModels ? null : _refreshModels,
+                    icon: _refreshingModels
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh, size: 20),
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
               _buildModelPicker(context),
               const SizedBox(height: 24),

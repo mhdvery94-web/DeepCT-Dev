@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../models/news_post.dart';
 import '../services/news_service.dart';
+import 'authed_image.dart';
 import '../theme/app_theme.dart';
+import 'app_dialog.dart';
 
 /// Research news, as a slideshow on the landing page.
 ///
@@ -198,19 +200,13 @@ class _NewsSlide extends StatelessWidget {
   }
 
   Widget _buildImage(BuildContext context) {
-    final url = post.imageUrl;
-
-    if (url == null) return const _PhotoFrame();
-
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      // Same reason the API client sends it: without this header ngrok serves
-      // its HTML interstitial instead of the image.
-      headers: const {'ngrok-skip-browser-warning': 'true'},
-      errorBuilder: (_, _, _) => const _PhotoFrame(),
-      loadingBuilder: (context, child, progress) =>
-          progress == null ? child : const _PhotoFrame(loading: true),
+    // Through the API client rather than `Image.network`: it carries the ngrok
+    // header, and the bearer token when there is one. A visitor has no token
+    // and needs none — these posts are published — but an administrator
+    // previewing the site gets the same code path.
+    return AuthedImage(
+      path: post.imagePath,
+      placeholder: const _PhotoFrame(),
     );
   }
 
@@ -256,27 +252,20 @@ class _NewsSlide extends StatelessWidget {
   }
 
   void _showFull(BuildContext context) {
-    showDialog<void>(
+    showAppAlertDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text(post.title),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: SingleChildScrollView(
-            child: Text(
-              post.body ?? post.summary,
-              style: Theme.of(dialogContext).textTheme.bodyMedium,
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('CLOSE'),
-          ),
-        ],
+      title: post.title,
+      maxWidth: 560,
+      content: Text(
+        post.body ?? post.summary,
+        style: Theme.of(context).textTheme.bodyMedium,
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('CLOSE'),
+        ),
+      ],
     );
   }
 
@@ -295,26 +284,21 @@ class _NewsSlide extends StatelessWidget {
 /// A frame rather than a blank: an empty rectangle looks like a bug, and this
 /// reads as "no picture" without pretending to be one.
 class _PhotoFrame extends StatelessWidget {
-  final bool loading;
-
-  const _PhotoFrame({this.loading = false});
+  const _PhotoFrame();
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: AppTheme.surface,
       alignment: Alignment.center,
-      child: loading
-          ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(
-              Icons.image_outlined,
-              size: 40,
-              color: AppTheme.border,
-            ),
+      // No separate loading state any more: AuthedImage shows this frame while
+      // it fetches, and a spinner that flickers for 200ms on a cached image is
+      // worse than the frame it replaces.
+      child: const Icon(
+        Icons.image_outlined,
+        size: 40,
+        color: AppTheme.border,
+      ),
     );
   }
 }

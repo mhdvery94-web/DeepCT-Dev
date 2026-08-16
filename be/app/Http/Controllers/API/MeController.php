@@ -65,7 +65,10 @@ class MeController extends Controller
         $models = Model::where('is_active', true)
             ->orderByDesc('status') // online sorts before offline
             ->orderBy('name')
-            ->get(['id', 'name', 'version', 'status', 'description', 'accuracy']);
+            ->get([
+                'id', 'name', 'version', 'status', 'description', 'accuracy',
+                'last_health_check', 'health_check_error',
+            ]);
 
         return response()->json([
             'success' => true,
@@ -77,6 +80,16 @@ class MeController extends Controller
                 'description' => $m->description,
                 'accuracy' => $m->accuracy,
                 'is_available' => $m->status === 'online',
+                // The client polls this every 10 seconds and shows how fresh
+                // the answer is. Without the timestamp a stale scheduler looks
+                // identical to a healthy model.
+                'last_health_check' => $m->last_health_check?->toIso8601String(),
+                // Why it is down, in the worker's own words — "Tunnel is not
+                // running (ERR_NGROK_3200)" tells a researcher to go restart
+                // Kaggle, where "offline" alone does not.
+                'health_check_error' => $m->status === 'online'
+                    ? null
+                    : $m->health_check_error,
             ]),
         ]);
     }

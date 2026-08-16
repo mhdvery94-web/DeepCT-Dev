@@ -166,11 +166,14 @@ class AccessRequestTest extends TestCase
         $this->assertSame($this->admin->id, $request->reviewed_by);
         $this->assertNotNull($request->created_user_id);
 
-        // The account genuinely works.
+        // The account genuinely works — and is told to replace the password it
+        // was handed, since that one is the same for everyone.
         $this->apiAs(null)->postJson('/api/login', [
             'email' => $email,
             'password' => $password,
-        ])->assertOk();
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.user.must_change_password', true);
     }
 
     public function test_a_username_collision_is_resolved(): void

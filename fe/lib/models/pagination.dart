@@ -65,9 +65,19 @@ class PaginatedResult<T> {
   final List<T> items;
   final Pagination pagination;
 
-  const PaginatedResult({required this.items, required this.pagination});
+  /// Set only by `GET /predictions`, and only when nothing is consuming the
+  /// queue -- see `App\Services\QueueHealth` on the backend. Null on every
+  /// other paginated endpoint, and null here too once a worker is running.
+  final String? queueMessage;
+
+  const PaginatedResult({
+    required this.items,
+    required this.pagination,
+    this.queueMessage,
+  });
 
   const PaginatedResult.empty()
     : items = const [],
-      pagination = const Pagination.empty();
+      pagination = const Pagination.empty(),
+      queueMessage = null;
 }

@@ -33,6 +33,201 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.17.0] - 2026-08-16
+
+### 🖼️ News photos that actually appear, and a model status light
+
+Four fixes reported from real use.
+
+#### A draft's photo was invisible to the administrator who uploaded it
+
+The upload worked; the photo simply never rendered. `Image.network` carries no
+bearer token, and a **draft's** photo is served only to an administrator — so
+the request 404'd and fell back to the placeholder, which looks exactly like a
+failed upload. Every newly created post is a draft, so this hit every single
+one.
+
+`AuthedImage` now fetches through `ApiClient`, which attaches the token, and
+caches the bytes. Avatars used to carry their own copy of that cache; both now
+share `AuthedImageCache`. Replacing a photo also invalidates it — the URL
+`/news/3/image` is the same string before and after, so nothing else would have
+told the cache the bytes had changed.
+
+#### Model availability, checked every ten seconds
+
+Five minutes was too coarse to be useful: the Kaggle session behind the model
+expires on its own, and a researcher would start an upload against a model that
+had been dead for four minutes.
+
+- The scheduler now runs `models:health-check` **every ten seconds**, with
+  `withoutOverlapping(2)` — at this cadence a probe against a dead tunnel would
+  otherwise pile runs on top of each other.
+- The probe timeout drops 15s → **8s** so it fits inside the window. Nothing is
+  lost: anything past 5s is already reported as `trouble`.
+- `ModelStatusStrip` polls the result at the same cadence on the upload screen
+  and in model management, showing the checker's **own** message — "Tunnel is
+  not running (ERR_NGROK_3200)" tells a researcher to restart Kaggle, where
+  "offline" alone does not — plus how old the answer is, since a stalled
+  scheduler otherwise looks identical to a healthy model.
+- Notifications still fire only on a *transition*; at this rate an overnight
+  outage would otherwise send 8,640 identical messages.
+
+#### One login button per layout
+
+A phone showed LOGIN in the header *and* in the drawer. The header one is gone;
+sign-in now lives beside the tabs on a wide window and inside the drawer on a
+phone, never both.
+
+#### A default password can no longer be kept
+
+Accounts are created by an administrator, or by approving a request, and every
+one starts on the same published default. Self-service password change already
+existed, but nothing made anyone use it.
+
+`users.must_change_password` is set when a default is issued — creation,
+approval, or an admin reset — and cleared when the user picks their own.
+`PasswordGate` sits between a signed-in account and its console until then.
+
+A screen, not a dialog: a dialog can be dismissed by the system back gesture,
+and a "required" step that a swipe skips is not required at all. Signing out is
+offered, because the alternative is trapping someone who opened the app by
+mistake.
+
+Verified live: a new account reported `must_change_password: true` at login,
+changing the password cleared it, and an admin reset armed it again. The
+scheduler was watched writing `last_health_check` at 16:44:03, :12 and :23.
+
+---
+
+## [1.16.3] - 2026-08-16
+
+### Uploading from a phone browser was impossible
+
+Reported from live testing: a researcher on Chrome for Android could not
+select a ZIP at all. The same account, same file, worked from the APK, and
+worked from a laptop browser. Three platforms, two of them fine — which is
+what identified the cause.
+
+Every picker asked for `FileType.custom` with an extension list. That means
+something different on each platform:
+
+| Where | What the filter becomes | Result |
+|-------|------------------------|--------|
+| Laptop browser | OS dialog filters by **extension** | works |
+| APK | plugin resolves `custom` to intent type `*/*` | works — it never filtered |
+| Chrome on Android | `accept=" .zip"`, which Chrome must map to **MIME types** | broken |
+
+Android's file providers report a ZIP as `application/octet-stream` or
+`application/x-zip-compressed` at least as often as `application/zip`, so the
+archive appeared greyed out and could not be tapped. Nothing was wrong with
+the file, the account, or the upload code that runs afterwards.
+
+`FileType.custom` is gone from all three pickers. The archive picker asks for
+`FileType.any`, and the two image pickers ask for `FileType.image` — `image/*`
+is a MIME filter both Android and the browser understand, and it brings the
+camera and gallery into the chooser on a phone. Since none of those filters
+narrows to the types actually accepted, the filename is now checked in Dart
+before anything uploads, via `hasExtension` in
+[`fe/lib/utils/file_extension.dart`](fe/lib/utils/file_extension.dart) (7
+tests). Picking the wrong file gets a plain message naming it, instead of a
+silent rejection later from the server.
+
+Worth noting the validation is new in its own right: on the APK the extension
+filter had never applied, so until now any file at all could be sent up.
+
+---
+
+## [1.16.2] - 2026-08-16
+
+### Live testing round: a login dead-end, a silent queue, and the app's own identity
+
+Testing against the real Kaggle worker surfaced a cluster of issues, all now
+fixed:
+
+**Self-service password change.** An admin's "reset password" sets the
+account back to the shared default — the only way for a researcher to get off
+that default was for an admin to know it too. `POST /api/me/password`
+(backend, added earlier this session) is now reachable from the app: a
+"Change password" entry sits next to "Sign out" in both console sidebars,
+opening [`fe/lib/widgets/change_password_dialog.dart`](fe/lib/widgets/change_password_dialog.dart).
+It requires the current password, rejects a new one identical to the old one,
+and — like the backend already did — signs out every other device on the
+account while leaving the one making the change alone.
+
+**The queue can now say it's stuck.** A researcher queued three ZIPs and
+watched all three sit at "QUEUED" indefinitely, despite the model's own
+health check reporting it reachable — because a healthy *model* says nothing
+about whether a queue *worker* (`npm run serve:all`) is actually running to
+pick jobs up. `App\Services\QueueHealth` (added earlier this session) already
+reported this on the backend; the frontend was silently dropping the field.
+`Results & History` now shows a warning banner sourced from `meta.queue_message`
+the moment nothing is consuming the queue, instead of leaving a clock icon
+spinning with no explanation.
+
+**Messaging's stale copy, fixed.** The guest contact form and its admin
+notification still described a reply "by email" — leftover language from
+before support tickets became in-app messaging. Nothing sends email in this
+app; a guest now sees an accurate message about needing an account and
+signing in to read the reply, and `MessageController`/`Notifier`'s comments
+say the same. The public-message throttle window (5 requests per 10 minutes,
+not the old 60) is now locked in by a test, so it can't quietly regress.
+
+**App identity.** The Android/web launcher icon, the browser favicon, and the
+placeholder `Icons.science` marks scattered through the login screen, both
+console sidebars and the landing page header/drawer were all generic Flutter
+defaults or programmer-art stand-ins. They're now the project's own marks:
+`assets/icon/app_icon.png` (a square crop of the DeepCT-AI logo) drives the
+Android and web app icons via `flutter_launcher_icons`, the web favicon is
+BRIN's own mark, and `assets/branding/brin_logo.png` replaced every placeholder
+icon used as branding in the app itself.
+
+**"New Analysis" can refresh model status.** Picking a model only checked
+availability once, on screen load — if it came back offline, the only fix was
+leaving the screen and returning. A refresh button next to "1. Choose a
+model" re-checks status in place, without the full-screen reload
+`_loadModels` shows on first entry (that would have discarded a file already
+picked in step 2 for no reason).
+
+**Not a bug, but worth writing down:** `http://localhost:PORT/` in `flutter
+run`'s terminal output is a random port picked fresh on every launch, not a
+stable address — reopening an old tab after the dev server restarted just
+hangs on a dead port, which reads as "the landing page won't load" but is
+really "wrong URL." `fe/README.md` now says so, with `--web-port` to pin it.
+
+---
+
+## [1.16.1] - 2026-08-16
+
+### One dialog pattern, everywhere
+
+Two related complaints about popups: the notification bell opened as a
+bottom sheet rather than centered, and several admin dialogs held a
+hard-coded `SizedBox(width: 420/460/520)` around their form with no clamp
+against the viewport — on a narrow phone the content ran off the edge of the
+screen instead of shrinking or scrolling.
+
+Both are symptoms of the same gap: nothing in `fe/lib` centralized how a
+dialog gets shown, so every screen called `showDialog` on its own and
+repeated `shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero)` by
+hand, and a couple of them added a fixed width that only happened to fit a
+desktop window.
+
+[`fe/lib/widgets/app_dialog.dart`](fe/lib/widgets/app_dialog.dart) is now the
+one way this app opens a dialog: `showAppDialog` centers on screen (a
+`Dialog` does that on its own), clamps width to the smaller of a requested
+`maxWidth` and 90% of the viewport, caps height at 85% of the viewport, and
+scrolls instead of overflowing. `showAppAlertDialog` covers the
+title/content/actions shape that used to be an `AlertDialog`, so most call
+sites changed by name only. Every `showDialog` call site in the app —
+admin's user, model and news management, activity log detail, access
+requests, both console shells' sign-out prompt, prediction history delete,
+the admin conversation delete, and the news "read more" dialog — now goes
+through it, and the hard-coded `SizedBox` widths are gone along with it. The
+notification bell's panel moved from `showModalBottomSheet` to the same
+centered dialog, keeping its existing list/mark-as-read state untouched.
+
+---
+
 ## [1.16.0] - 2026-08-15
 
 ### 💬 Tickets became messages, and the app started telling people things

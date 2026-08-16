@@ -103,6 +103,15 @@ first, then use it as a boundary for 1-4 and 4-7. There is no manual
   still reference the removed v1 embedding and break `flutter build apk` at Java
   compilation; 12.x needs `win32 ^6.3.0` against `flutter_secure_storage` 9.x's
   `win32 ^5.0.0`. Read the comment in `pubspec.yaml` before changing it.
+- **Never ask `file_picker` for `FileType.custom`.** The extension list means
+  three different things: an extension filter in a desktop browser's OS dialog
+  (works), intent type `*/*` on Android native (never filtered at all), and
+  `accept=" .zip"` on mobile web — which Chrome must translate to MIME types,
+  and Android reports a ZIP as `application/octet-stream` as often as
+  `application/zip`, so the file greys out and **cannot be selected**. Ask for
+  `FileType.any` (or `FileType.image`, a MIME filter that is portable) and
+  check the name yourself with `hasExtension` in `lib/utils/file_extension.dart`.
+  Testing an upload only on desktop web and the APK will not catch this.
 - **A screen without an `AppBar` needs `SafeArea`.** Scaffold only applies the
   status-bar inset when an `AppBar` is present, otherwise content renders under
   the clock and battery.

@@ -163,6 +163,9 @@ class AccessRequestController extends Controller
             'name' => $accessRequest->fullName(),
             'email' => $accessRequest->email,
             'password' => Hash::make(self::DEFAULT_PASSWORD),
+            // Handed out with a published default password, so the first sign-in
+            // has to replace it before anything else happens.
+            'must_change_password' => true,
             'role' => $validated['role'] ?? 'user',
             'is_active' => true,
             'email_verified_at' => now(),

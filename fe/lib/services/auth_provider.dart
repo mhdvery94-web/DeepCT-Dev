@@ -80,6 +80,19 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Record that the account is off its default password.
+  ///
+  /// Called by the gate after `/me/password` succeeds, rather than refetching
+  /// `/user`: the answer is already known and the console should appear at
+  /// once.
+  void clearMustChangePassword() {
+    final current = _user;
+    if (current == null) return;
+
+    _user = current.withPasswordChanged();
+    notifyListeners();
+  }
+
   /// Clear error message
   void clearError() {
     _errorMessage = null;

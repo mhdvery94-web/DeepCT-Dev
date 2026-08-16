@@ -1,10 +1,8 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
 import '../models/user_model.dart';
-import '../services/avatar_service.dart';
 import '../theme/app_theme.dart';
+import 'authed_image.dart';
 
 /// A person's profile photo, or an initials frame when there is none.
 ///
@@ -81,26 +79,14 @@ class UserAvatar extends StatelessWidget {
         border: bordered ? Border.all(color: AppTheme.border) : null,
       ),
       clipBehavior: Clip.hardEdge,
-      child: path == null
-          ? _buildInitials(context)
-          : FutureBuilder<Uint8List?>(
-              future: AvatarCache.load(path),
-              builder: (context, snapshot) {
-                final bytes = snapshot.data;
-
-                // Also the failure path: a photo that will not load falls back
-                // to the frame rather than a broken-image glyph.
-                if (bytes == null) return _buildInitials(context);
-
-                return Image.memory(
-                  bytes,
-                  fit: BoxFit.cover,
-                  width: size,
-                  height: size,
-                  errorBuilder: (_, _, _) => _buildInitials(context),
-                );
-              },
-            ),
+      // Loading, missing and failed all fall back to the frame rather than a
+      // broken-image glyph.
+      child: AuthedImage(
+        path: path,
+        width: size,
+        height: size,
+        placeholder: _buildInitials(context),
+      ),
     );
   }
 

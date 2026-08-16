@@ -192,8 +192,12 @@ class MessageController extends Controller
      *
      * Someone who cannot sign in cannot use the authenticated endpoint, and
      * that is precisely the group most likely to need support. The message
-     * lands in the same inbox; the only difference is that the answer goes out
-     * by email, because there is no account to show it in.
+     * lands in the same inbox as everyone else's, but there is no email
+     * fallback for the reply — this platform sends none. Whoever wrote it can
+     * only ever see the answer by getting an account (requesting one via
+     * `/api/access-requests` if they do not already have one) and signing in
+     * with this same address, at which point
+     * `Conversation::adoptGuestThreadsFor()` merges this thread into theirs.
      *
      * Deliberately *not* attached to an existing account when the address
      * happens to match one: the address is unverified, so attaching it would
@@ -225,8 +229,9 @@ class MessageController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Message sent. An administrator will reply to '
-                . $validated['email'] . '.',
+            'message' => 'Message sent. There is no account to email a reply to yet — '
+                . 'request access if you do not have one, then sign in with '
+                . $validated['email'] . ' to see the reply here.',
             'data' => ['id' => $conversation->id],
         ], 201);
     }

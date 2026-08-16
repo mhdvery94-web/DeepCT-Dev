@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../services/avatar_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/file_extension.dart';
 import 'user_avatar.dart';
 
 /// Change or remove a profile photo.
@@ -61,10 +62,18 @@ class _AvatarEditorSheetState extends State<_AvatarEditorSheet> {
 
   bool get _isSelf => widget.userId == null;
 
+  /// The four types the backend accepts.
+  static const List<String> _allowed = ['jpg', 'jpeg', 'png', 'webp'];
+
   Future<void> _pick() async {
+    // `FileType.image`, not a `FileType.custom` extension list: `custom`
+    // becomes an extension-based `accept` attribute, which a mobile browser
+    // cannot reliably turn into an Android file-chooser filter. `image/*` is
+    // a MIME filter both Android and the browser understand, and it lets the
+    // camera and gallery appear in the chooser. It is broader than the four
+    // types below, so the name is still checked afterwards.
     final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      type: FileType.image,
       withData: true,
     );
 
@@ -72,8 +81,14 @@ class _AvatarEditorSheetState extends State<_AvatarEditorSheet> {
     if (file?.bytes == null) return;
 
     if (!mounted) return;
+
+    if (!hasExtension(file!.name, _allowed)) {
+      setState(() => _error = 'Choose a JPEG, PNG or WebP image.');
+      return;
+    }
+
     setState(() {
-      _bytes = file!.bytes;
+      _bytes = file.bytes;
       _filename = file.name;
       _error = null;
     });

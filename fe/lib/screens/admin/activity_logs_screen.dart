@@ -10,6 +10,7 @@ import '../../services/admin_user_service.dart';
 import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/file_download.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
 import '../../widgets/user_avatar.dart';
@@ -472,54 +473,46 @@ class _ActivityLogsScreenState extends State<ActivityLogsScreen> {
   }
 
   void _showMetadata(ActivityLog log) {
-    showDialog<void>(
+    showAppAlertDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text(log.typeLabel),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
+      title: log.typeLabel,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: log.metadata!.entries.map((e) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: log.metadata!.entries.map((e) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 140,
-                        child: Text(
-                          _titleCase(e.key),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textMuted,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: SelectableText(
-                          '${e.value}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ],
+              children: [
+                SizedBox(
+                  width: 140,
+                  child: Text(
+                    _titleCase(e.key),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textMuted,
+                    ),
                   ),
-                );
-              }).toList(),
+                ),
+                Expanded(
+                  child: SelectableText(
+                    '${e.value}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('CLOSE'),
-          ),
-        ],
+          );
+        }).toList(),
       ),
+      actions: [
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('CLOSE'),
+        ),
+      ],
     );
   }
 

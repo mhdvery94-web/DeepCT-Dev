@@ -16,6 +16,15 @@ class AvailableModel {
   final double? accuracy;
   final bool isAvailable;
 
+  /// When the server last probed the worker. The console shows how old this
+  /// is: without it, a stalled scheduler looks exactly like a healthy model.
+  final DateTime? lastHealthCheck;
+
+  /// Why it is down, in the checker's own words — "Tunnel is not running
+  /// (ERR_NGROK_3200)" tells a researcher to go restart the Kaggle session,
+  /// where "offline" alone does not.
+  final String? healthCheckError;
+
   const AvailableModel({
     required this.id,
     required this.name,
@@ -24,6 +33,8 @@ class AvailableModel {
     this.description,
     this.accuracy,
     required this.isAvailable,
+    this.lastHealthCheck,
+    this.healthCheckError,
   });
 
   factory AvailableModel.fromJson(Map<String, dynamic> json) {
@@ -40,6 +51,10 @@ class AvailableModel {
       // MySQL DECIMAL arrives as a string through PDO.
       accuracy: acc is num ? acc.toDouble() : double.tryParse('${acc ?? ''}'),
       isAvailable: json['is_available'] == true,
+      lastHealthCheck: json['last_health_check'] == null
+          ? null
+          : DateTime.tryParse(json['last_health_check'].toString()),
+      healthCheckError: json['health_check_error']?.toString(),
     );
   }
 
@@ -72,6 +87,29 @@ class MeService {
           (e) => AvailableModel.fromJson(Map<String, dynamic>.from(e as Map)),
         )
         .toList();
+  }
+
+  /// POST /me/password — change your own password.
+  ///
+  /// [currentPassword] is required by the backend even though the caller is
+  /// already authenticated, so a token left on a shared machine cannot take
+  /// the account over permanently. On success every other device's token is
+  /// revoked; the one making this request survives.
+  Future<String> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  }) async {
+    final body = await _api.post(
+      ApiConfig.mePassword,
+      data: {
+        'current_password': currentPassword,
+        'password': newPassword,
+        'password_confirmation': newPasswordConfirmation,
+      },
+    );
+
+    return body['message']?.toString() ?? 'Password changed.';
   }
 
   /// GET /me/activities — the caller's own audit trail, newest first.

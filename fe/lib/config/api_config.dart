@@ -61,6 +61,7 @@ class ApiConfig {
   static const String meActivities = '/me/activities';
   static const String meStats = '/me/stats';
   static const String meModels = '/me/models';
+  static const String mePassword = '/me/password';
 
   // Prediction pipeline (FASE 3)
   static const String predictions = '/predictions';
