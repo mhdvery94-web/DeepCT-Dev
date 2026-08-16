@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth_provider.dart';
 import '../admin/admin_shell.dart';
+import 'password_gate.dart';
 import '../messages/public_message_sheet.dart';
 import '../user/user_shell.dart';
 
@@ -48,12 +49,18 @@ class _LoginPageState extends State<LoginPage> {
       if (authProvider.isAdmin) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const AdminShell()),
+          MaterialPageRoute(
+            // Behind the gate: an account still on the default password
+            // has to replace it before it reaches the console.
+            builder: (_) => const PasswordGate(child: AdminShell()),
+          ),
         );
       } else {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const UserShell()),
+          MaterialPageRoute(
+            builder: (_) => const PasswordGate(child: UserShell()),
+          ),
         );
       }
     } else {
@@ -135,7 +142,7 @@ class _LoginPageState extends State<LoginPage> {
           // Branding / Header
           Row(
             children: [
-              const Icon(Icons.science, size: 40, color: AppTheme.primary),
+              Image.asset('assets/branding/brin_logo.png', width: 40, height: 40),
               const SizedBox(width: 12),
               Text('BRIN', style: Theme.of(context).textTheme.headlineLarge),
             ],

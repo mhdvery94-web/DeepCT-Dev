@@ -6,8 +6,10 @@ import '../../models/pagination.dart';
 import '../../services/admin_model_service.dart';
 import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
+import '../../widgets/model_status_strip.dart';
 import '../../widgets/status_badge.dart';
 
 /// Admin screen for managing remotely deployed inference models.
@@ -78,9 +80,10 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
   // ---------------------------------------------------------------- actions
 
   Future<void> _openModelDialog({ModelInfo? existing}) async {
-    final saved = await showDialog<bool>(
+    final saved = await showAppDialog<bool>(
       context: context,
       barrierDismissible: false,
+      maxWidth: 480,
       builder: (_) => _ModelFormDialog(service: _service, existing: existing),
     );
 
@@ -148,27 +151,24 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
   }
 
   Future<void> _delete(ModelInfo model) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppAlertDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Delete model'),
-        content: Text(
-          'Permanently delete "${model.displayName}"? '
-          'This does not affect the remote deployment.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('DELETE'),
-          ),
-        ],
+      title: 'Delete model',
+      content: Text(
+        'Permanently delete "${model.displayName}"? '
+        'This does not affect the remote deployment.',
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('DELETE'),
+        ),
+      ],
     );
     if (confirmed != true) return;
 
@@ -192,6 +192,12 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildToolbar(),
+          const SizedBox(height: 16),
+          // Polled every ten seconds, matching the server's health-check
+          // schedule. The card list below it refreshes only when the poll
+          // sees a status actually change, so filters and scroll position
+          // survive an admin sitting on this screen.
+          ModelStatusStrip(onChanged: (_) => _load()),
           const SizedBox(height: 16),
           Expanded(child: _buildContent()),
           PaginationBar(
@@ -598,14 +604,21 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      title: Text(_isEdit ? 'Edit model' : 'Add model'),
-      content: SizedBox(
-        width: 460,
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
+    // showAppDialog already clamps width and scrolls; this only supplies the
+    // title / form / actions AlertDialog used to lay out.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _isEdit ? 'Edit model' : 'Add model',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 16),
+          Form(
+            key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -689,27 +702,34 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
               ],
             ),
           ),
-        ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: _isSaving
+                    ? null
+                    : () => Navigator.pop(context, false),
+                child: const Text('CANCEL'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _isSaving ? null : _submit,
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(_isEdit ? 'SAVE' : 'CREATE'),
+              ),
+            ],
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _isSaving ? null : () => Navigator.pop(context, false),
-          child: const Text('CANCEL'),
-        ),
-        ElevatedButton(
-          onPressed: _isSaving ? null : _submit,
-          child: _isSaving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Text(_isEdit ? 'SAVE' : 'CREATE'),
-        ),
-      ],
     );
   }
 }

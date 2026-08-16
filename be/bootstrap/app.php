@@ -18,6 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
+            // GPU training workers authenticate with a shared secret rather
+            // than a user token — they are machines, not people.
+            'training.worker' => \App\Http\Middleware\EnsureTrainingWorker::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [

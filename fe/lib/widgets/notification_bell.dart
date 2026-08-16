@@ -6,6 +6,7 @@ import '../models/app_notification.dart';
 import '../services/api_client.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
+import 'app_dialog.dart';
 
 /// The bell, with its unread badge and the panel behind it.
 ///
@@ -74,11 +75,9 @@ class NotificationBellState extends State<NotificationBell> {
   }
 
   Future<void> _openPanel() async {
-    final link = await showModalBottomSheet<String>(
+    final link = await showAppDialog<String>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      maxWidth: 440,
       builder: (_) => const _NotificationPanel(),
     );
 

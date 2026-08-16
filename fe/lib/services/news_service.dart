@@ -6,6 +6,7 @@ import '../config/api_config.dart';
 import '../models/news_post.dart';
 import '../models/pagination.dart';
 import 'api_client.dart';
+import 'authed_image_cache.dart';
 
 /// Research news: the public slideshow feed and the admin editor behind it.
 class NewsService {
@@ -84,9 +85,16 @@ class NewsService {
       data: form,
     );
 
-    return NewsPost.fromJson(
+    final saved = NewsPost.fromJson(
       Map<String, dynamic>.from(response['data'] as Map),
     );
+
+    // A replaced photo keeps its URL — `/news/3/image` before and after — so
+    // nothing else would tell the cache that the bytes have changed.
+    final path = saved.imagePath;
+    if (path != null) AuthedImageCache.invalidate(path);
+
+    return saved;
   }
 
   /// PATCH /admin/news/{id}/toggle — the publish switch.
@@ -101,5 +109,6 @@ class NewsService {
   /// DELETE /admin/news/{id}
   Future<void> delete(int id) async {
     await _api.delete('${ApiConfig.adminNews}/$id');
+    AuthedImageCache.invalidate('${ApiConfig.news}/$id/image');
   }
 }

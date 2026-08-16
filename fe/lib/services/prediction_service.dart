@@ -61,6 +61,8 @@ class PredictionService {
         .map((e) => Prediction.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
 
+    final meta = body['meta'];
+
     return PaginatedResult(
       items: items,
       pagination: body['pagination'] != null
@@ -68,6 +70,7 @@ class PredictionService {
               Map<String, dynamic>.from(body['pagination'] as Map),
             )
           : const Pagination.empty(),
+      queueMessage: meta is Map ? meta['queue_message']?.toString() : null,
     );
   }
 

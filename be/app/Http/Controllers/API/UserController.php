@@ -86,6 +86,7 @@ class UserController extends Controller
 
         // Use provided password or default
         $password = $request->input('password', self::DEFAULT_PASSWORD);
+        $isDefault = $request->input('password') === null;
 
         $user = User::create([
             'name' => $request->name,
@@ -93,6 +94,10 @@ class UserController extends Controller
             'email' => $request->email,
             'role' => $request->role,
             'password' => Hash::make($password),
+            // An account sitting on the published default is effectively
+            // public. The platform is the only thing that can insist the
+            // researcher picks their own, so it does.
+            'must_change_password' => $isDefault,
             'is_active' => true,
         ]);
 
@@ -261,6 +266,9 @@ class UserController extends Controller
         $user = User::findOrFail($id);
 
         $user->password = Hash::make(self::DEFAULT_PASSWORD);
+        // Back on the default, so the same rule applies again: the researcher
+        // must choose a new one before reaching the console.
+        $user->must_change_password = true;
         $user->save();
 
         // Log activity

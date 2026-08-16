@@ -6,6 +6,7 @@ import 'services/auth_provider.dart';
 import 'screens/landing/landing_page.dart';
 import 'screens/admin/admin_shell.dart';
 import 'screens/user/user_shell.dart';
+import 'screens/auth/password_gate.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,11 +76,12 @@ class _AppInitializerState extends State<AppInitializer> {
 
         // If logged in, route to appropriate dashboard
         if (authProvider.isLoggedIn) {
-          if (authProvider.isAdmin) {
-            return const AdminShell();
-          } else {
-            return const UserShell();
-          }
+          // Both consoles sit behind the gate, so a stored session belonging
+          // to an account still on its default password lands on the password
+          // form rather than the dashboard.
+          return PasswordGate(
+            child: authProvider.isAdmin ? const AdminShell() : const UserShell(),
+          );
         }
 
         // Not logged in, show landing page

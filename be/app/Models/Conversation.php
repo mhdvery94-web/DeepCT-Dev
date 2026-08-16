@@ -88,4 +88,50 @@ class Conversation extends EloquentModel
     {
         return $query->orderByDesc('last_message_at')->orderByDesc('id');
     }
+
+    /**
+     * Hand a signed-in account any threads it wrote before it could sign in.
+     *
+     * Someone locked out writes from the sign-in page, an administrator reads
+     * it and fixes their account — and the answer would otherwise be stranded
+     * in a thread nobody can open. Adopting it at **login** is what makes an
+     * in-app reply reach them, and doing it here rather than at write time is
+     * the whole point: signing in proves the address is theirs, so nothing is
+     * being taken on the word of an unverified email.
+     *
+     * @return int how many threads were adopted
+     */
+    public static function adoptGuestThreadsFor(User $user): int
+    {
+        $guestThreads = static::whereNull('user_id')
+            ->where('guest_email', $user->email)
+            ->orderBy('id')
+            ->get();
+
+        if ($guestThreads->isEmpty()) {
+            return 0;
+        }
+
+        $own = static::firstOrCreate(
+            ['user_id' => $user->id],
+            ['last_message_at' => now()],
+        );
+
+        foreach ($guestThreads as $thread) {
+            // The author stays null on those messages: they were written by
+            // someone not signed in, and rewriting history to say otherwise
+            // would be a lie about who typed them.
+            Message::where('conversation_id', $thread->id)
+                ->update(['conversation_id' => $own->id]);
+
+            $thread->delete();
+        }
+
+        $own->update([
+            'last_message_at' => $own->messages()->max('created_at') ?? now(),
+            'is_archived' => false,
+        ]);
+
+        return $guestThreads->count();
+    }
 }

@@ -8,6 +8,7 @@ import '../../services/api_client.dart';
 import '../../services/prediction_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/file_download.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
 import 'frame_gallery_screen.dart';
@@ -37,6 +38,11 @@ class _PredictionHistoryScreenState extends State<PredictionHistoryScreen> {
   bool _isLoading = true;
   String? _error;
   int _page = 1;
+
+  /// Set when nothing is consuming the queue at all -- see
+  /// `App\Services\QueueHealth` on the backend. Null once a worker picks
+  /// jobs up again, so this clears itself on the next poll.
+  String? _queueMessage;
 
   Timer? _poll;
 
@@ -71,6 +77,7 @@ class _PredictionHistoryScreenState extends State<PredictionHistoryScreen> {
       setState(() {
         _items = result.items;
         _pagination = result.pagination;
+        _queueMessage = result.queueMessage;
         _isLoading = false;
         _error = null;
       });
@@ -147,27 +154,24 @@ class _PredictionHistoryScreenState extends State<PredictionHistoryScreen> {
   }
 
   Future<void> _confirmDelete(Prediction prediction) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppAlertDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Delete analysis'),
-        content: Text(
-          'Delete "${prediction.displayName}" and its files? '
-          'This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
-            child: const Text('DELETE'),
-          ),
-        ],
+      title: 'Delete analysis',
+      content: Text(
+        'Delete "${prediction.displayName}" and its files? '
+        'This cannot be undone.',
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+          child: const Text('DELETE'),
+        ),
+      ],
     );
 
     if (confirmed != true) return;
@@ -218,6 +222,10 @@ class _PredictionHistoryScreenState extends State<PredictionHistoryScreen> {
               ),
             ],
           ),
+          if (_queueMessage != null) ...[
+            const SizedBox(height: 12),
+            _QueueWarningBanner(message: _queueMessage!),
+          ],
           const SizedBox(height: 16),
           Expanded(child: _buildBody(isNarrow)),
         ],
@@ -472,4 +480,35 @@ class _PredictionCard extends StatelessWidget {
 
   Widget _fact(BuildContext context, String text) =>
       Text(text, style: Theme.of(context).textTheme.bodySmall);
+}
+
+/// Nothing is consuming the queue -- a stuck clock icon with no explanation
+/// is the most confusing state this screen has, so say so plainly instead of
+/// leaving a "QUEUED" job to sit there indefinitely.
+class _QueueWarningBanner extends StatelessWidget {
+  final String message;
+
+  const _QueueWarningBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.warningLight,
+        border: Border.all(color: AppTheme.warning),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_outlined, size: 18, color: AppTheme.warning),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(message, style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
+      ),
+    );
+  }
 }

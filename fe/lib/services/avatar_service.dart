@@ -4,8 +4,13 @@ import 'package:dio/dio.dart';
 
 import '../config/api_config.dart';
 import 'api_client.dart';
+import 'authed_image_cache.dart';
 
-/// Profile photos: upload, removal, and the byte cache the widget reads.
+/// Profile photos: upload and removal.
+///
+/// Reading them is [AuthedImageCache]'s job — the endpoint needs a bearer
+/// token, so the bytes are fetched through [ApiClient] rather than by
+/// `Image.network`.
 class AvatarService {
   final ApiClient _api = ApiClient.instance;
 
@@ -24,7 +29,7 @@ class AvatarService {
   /// DELETE /me/avatar
   Future<void> removeOwn() async {
     await _api.delete(ApiConfig.meAvatar);
-    AvatarCache.clear();
+    AuthedImageCache.clear();
   }
 
   /// POST /admin/users/{id}/avatar — an administrator setting someone else's.
@@ -42,7 +47,7 @@ class AvatarService {
   /// DELETE /admin/users/{id}/avatar
   Future<void> removeFor(int userId) async {
     await _api.delete('${ApiConfig.adminUsers}/$userId/avatar');
-    AvatarCache.clear();
+    AuthedImageCache.clear();
   }
 
   String? _pathFrom(Map<String, dynamic> body) {
@@ -51,48 +56,8 @@ class AvatarService {
 
     // The bytes behind the old path are gone, and a list on screen would keep
     // showing them from cache.
-    AvatarCache.clear();
+    AuthedImageCache.clear();
 
     return path;
-  }
-}
-
-/// In-memory cache of fetched avatars, keyed by the path the API returned.
-///
-/// Photos are behind an authenticated endpoint, so `Image.network` cannot load
-/// them — the bearer token lives in secure storage and is read asynchronously
-/// by the Dio interceptor. Fetching bytes through [ApiClient] is what makes
-/// that work, and without a cache a list of twenty rows would fetch twenty
-/// times on every rebuild.
-///
-/// A miss is cached too: an account with no photo, or one whose file has gone,
-/// must not be re-requested on every frame.
-class AvatarCache {
-  static final Map<String, Uint8List?> _cache = {};
-  static final Map<String, Future<Uint8List?>> _inFlight = {};
-
-  static Future<Uint8List?> load(String path) {
-    if (_cache.containsKey(path)) return Future.value(_cache[path]);
-
-    // Two rows showing the same person must not race each other.
-    return _inFlight.putIfAbsent(path, () async {
-      try {
-        final result = await ApiClient.instance.getBytes(path);
-        _cache[path] = result.bytes;
-        return result.bytes;
-      } catch (_) {
-        _cache[path] = null;
-        return null;
-      } finally {
-        _inFlight.remove(path);
-      }
-    });
-  }
-
-  /// Called after any change, since a new upload writes a new path and the old
-  /// entry would otherwise linger for the life of the session.
-  static void clear() {
-    _cache.clear();
-    _inFlight.clear();
   }
 }

@@ -1,6 +1,6 @@
 # Referensi API
 
-71 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
+88 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
 `php artisan route:list --path=api` per 15 Agustus 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 
@@ -435,6 +435,64 @@ sekilas terlihat mana yang masih menunggu jawaban.
 Percakapan tamu ditandai `is_guest: true` dengan `guest_email` terisi dan
 `user: null`. Arsip **bukan** hapus: percakapan yang diarsipkan keluar dari
 inbox tapi tetap ada, dan pesan baru dari orangnya menariknya kembali.
+
+### Pelatihan model (11)
+
+| Method | Path |
+|---|---|
+| `GET` | `/admin/training/datasets` |
+| `POST` | `/admin/training/datasets` — multipart kalau ada arsipnya |
+| `DELETE` | `/admin/training/datasets/{id}` — **409** kalau masih dipakai job |
+| `GET` | `/admin/training/jobs` — filter `status` |
+| `POST` | `/admin/training/jobs` |
+| `GET` | `/admin/training/jobs/{id}` |
+| `POST` | `/admin/training/jobs/{id}/cancel` |
+| `DELETE` | `/admin/training/jobs/{id}` |
+| `GET` | `/admin/training/jobs/{id}/weights` |
+| `POST` | `/admin/training/jobs/{id}/register-model` |
+
+`meta.worker_configured` di daftar job memberitahu apakah `TRAINING_WORKER_TOKEN`
+sudah diisi. Kalau `false`, tidak akan ada yang berjalan — itu hal pertama yang
+perlu dicek saat job "diam saja".
+
+**Dataset punya dua bentuk.** `source_type: upload` mengirim arsip lewat server
+ini; `source_type: url` cuma mencatat alamat yang nanti diambil sendiri oleh
+worker. Yang kedua itulah yang benar untuk dataset besar — mengirim 20 GB naik
+ke server lalu turun lagi ke Kaggle memboroskan dua-duanya.
+
+**`register-model` sengaja langkah terpisah.** Bobot itu berkas; "model" di
+platform ini adalah worker FastAPI yang hidup dan punya URL. Tidak ada apa pun
+di sini yang bisa men-deploy `.h5` ke GPU, jadi model baru dibuat dengan
+`is_active: false` dan tanpa endpoint sampai ada yang men-deploy-nya.
+
+### Pekerja GPU — token khusus, bukan token user
+
+Enam route di bawah `/api/training/worker/*`, di luar `auth:sanctum`. Autentikasi
+lewat `Authorization: Bearer {TRAINING_WORKER_TOKEN}` — worker itu mesin, bukan
+orang: kredensialnya tinggal berminggu-minggu di notebook, tidak butuh akun, dan
+tidak boleh menyentuh apa pun selain enam route ini.
+
+| Method | Path | Untuk |
+|---|---|---|
+| `POST` | `/training/worker/claim` | Ambil job antrean tertua |
+| `GET` | `/training/worker/jobs/{id}/dataset` | Unduh arsip dataset |
+| `POST` | `/training/worker/jobs/{id}/heartbeat` | "Masih hidup" + epoch/metrik |
+| `POST` | `/training/worker/jobs/{id}/checkpoint` | Bobot sementara |
+| `POST` | `/training/worker/jobs/{id}/complete` | Bobot final |
+| `POST` | `/training/worker/jobs/{id}/fail` | Melapor gagal |
+
+Token kosong → **503** di semua route itu, bukan 401: deployment yang setengah
+jadi harus menolak, bukan menerima siapa saja.
+
+**Balasan heartbeat memuat `continue`.** Kalau admin membatalkan job,
+`continue: false` — worker berhenti alih-alih membakar berjam-jam GPU untuk
+pekerjaan yang tidak diinginkan siapa pun.
+
+**Worker yang diam bukan worker yang gagal.** `training:reclaim` mengembalikan
+job yang heartbeat-nya lewat 15 menit ke `queued` **beserta checkpoint-nya**, dan
+`claim` berikutnya menerima `resume_from_epoch`. Sesi Kaggle mati tiap 9–12 jam
+sementara training butuh berhari-hari; kalau tiap sesi mati berarti job gagal,
+tidak akan pernah ada training yang selesai.
 
 ### Activity log (3)
 

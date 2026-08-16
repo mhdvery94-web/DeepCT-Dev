@@ -246,7 +246,7 @@ class _LandingPageState extends State<LandingPage> {
       child: Row(
         children: [
           // Logo
-          const Icon(Icons.science, color: AppTheme.primary, size: 24),
+          Image.asset('assets/branding/brin_logo.png', width: 24, height: 24),
           const SizedBox(width: 12),
           // Flexible so a long brand block can never push the row past the edge.
           Flexible(
@@ -262,31 +262,31 @@ class _LandingPageState extends State<LandingPage> {
           // Navigation: inline tabs down to _navBreakpoint, a hamburger that
           // opens the drawer below that. Four tabs plus the login button do
           // not fit on a phone.
+          // Sign-in lives in exactly one place per layout: beside the tabs on
+          // a wide window, and inside the drawer on a phone. Showing it in the
+          // header *and* the drawer gave a phone two LOGIN buttons a few
+          // hundred pixels apart, and cost the header room it does not have.
           if (_isNavInline(context)) ...[
             _buildNavButton(context, 'home', 'HOME'),
             _buildNavButton(context, 'about', 'ABOUT'),
             _buildNavButton(context, 'research', 'RESEARCH'),
             _buildNavButton(context, 'join', 'JOIN'),
             const SizedBox(width: 24),
-          ] else ...[
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              },
+              child: const Text('LOGIN'),
+            ),
+          ] else
             IconButton(
               tooltip: 'Menu',
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               icon: const Icon(Icons.menu, size: 22),
             ),
-            const SizedBox(width: 4),
-          ],
-
-          // Login Button
-          ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-              );
-            },
-            child: const Text('LOGIN'),
-          ),
         ],
       ),
     );
@@ -319,7 +319,11 @@ class _LandingPageState extends State<LandingPage> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.science, color: AppTheme.primary, size: 24),
+                  Image.asset(
+                    'assets/branding/brin_logo.png',
+                    width: 24,
+                    height: 24,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

@@ -24,6 +24,12 @@ class Prediction {
   final int? queuePosition;
   final int? estimatedWaitMinutes;
 
+  /// Set only on the detail endpoint, only while [status] is `pending`, and
+  /// only when nothing is actually consuming the queue -- see
+  /// `App\Services\QueueHealth` on the backend. Null means either the job
+  /// isn't pending, or a worker is (as far as the backend can tell) alive.
+  final String? queueStalledMessage;
+
   final DateTime? createdAt;
   final DateTime? expiresAt;
   final DateTime? filesDeletedAt;
@@ -44,6 +50,7 @@ class Prediction {
     this.errorMessage,
     this.queuePosition,
     this.estimatedWaitMinutes,
+    this.queueStalledMessage,
     this.createdAt,
     this.expiresAt,
     this.filesDeletedAt,
@@ -87,6 +94,7 @@ class Prediction {
       errorMessage: json['error_message']?.toString(),
       queuePosition: _toIntOrNull(json['queue_position']),
       estimatedWaitMinutes: _toIntOrNull(json['estimated_wait_minutes']),
+      queueStalledMessage: json['queue_stalled_message']?.toString(),
       createdAt: _toDate(json['created_at']),
       expiresAt: _toDate(json['expires_at']),
       filesDeletedAt: _toDate(json['files_deleted_at']),

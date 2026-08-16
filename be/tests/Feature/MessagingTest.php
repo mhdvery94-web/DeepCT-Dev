@@ -278,8 +278,12 @@ class MessagingTest extends TestCase
 
     public function test_a_guest_thread_is_not_attached_to_a_matching_account(): void
     {
-        // The address is unverified, so attaching it would let anyone plant
-        // messages in that researcher's thread.
+        // The address is unverified at write time, so attaching it there
+        // would let anyone plant messages in that researcher's thread just by
+        // typing their address. (Signing in with that address later is a
+        // different, deliberate story — see the adoption-on-login tests: only
+        // someone who can pass the account's own password gets treated as
+        // its owner.)
         $this->postJson('/api/messages/public', [
             'name' => 'Impostor',
             'email' => $this->researcher->email,
@@ -287,11 +291,6 @@ class MessagingTest extends TestCase
         ])->assertCreated();
 
         $this->assertNull(Conversation::firstOrFail()->user_id);
-
-        $this->apiAs($this->tokenAs($this->researcher))
-            ->getJson('/api/messages')
-            ->assertOk()
-            ->assertJsonCount(0, 'data.messages');
     }
 
     public function test_a_guest_thread_is_flagged_in_the_inbox(): void
@@ -325,6 +324,101 @@ class MessagingTest extends TestCase
             ->getJson("/api/admin/conversations/{$id}")
             ->assertOk()
             ->assertJsonPath('data.messages.0.author', 'Dyanna');
+    }
+
+    // ------------------------------------------------------ rate limiting
+
+    public function test_the_public_message_route_allows_five_then_throttles(): void
+    {
+        $write = fn () => $this->postJson('/api/messages/public', [
+            'name' => 'Dyanna',
+            'email' => 'dyanna@brin.go.id',
+            'body' => 'Cannot sign in.',
+        ]);
+
+        for ($i = 0; $i < 5; $i++) {
+            $write()->assertCreated();
+        }
+
+        // The 6th request within the window is throttled...
+        $sixth = $write();
+        $sixth->assertStatus(429);
+
+        // ...and the window is 10 minutes (600s), not the old 60-minute one.
+        // A stale `throttle:5,60` would report a Retry-After close to 3600.
+        $retryAfter = (int) $sixth->headers->get('Retry-After');
+        $this->assertGreaterThan(0, $retryAfter);
+        $this->assertLessThanOrEqual(600, $retryAfter);
+    }
+
+    // ------------------------------------------------- adoption on login
+
+    public function test_a_guest_thread_is_merged_into_the_account_on_login(): void
+    {
+        $this->postJson('/api/messages/public', [
+            'name' => 'Researcher',
+            'email' => $this->researcher->email,
+            'body' => 'Locked out yesterday.',
+        ])->assertCreated();
+
+        $guestConversationId = Conversation::firstOrFail()->id;
+
+        // Signing in is what proves the address belongs to them.
+        $this->tokenAs($this->researcher);
+
+        $this->assertSame(1, Conversation::count());
+
+        $conversation = Conversation::firstOrFail();
+        $this->assertSame($this->researcher->id, $conversation->user_id);
+        $this->assertFalse($conversation->is_archived);
+        $this->assertNotNull($conversation->last_message_at);
+
+        $this->assertSame(1, $conversation->messages()->count());
+        $this->assertSame('Locked out yesterday.', $conversation->messages()->first()->body);
+
+        // The guest row itself is gone, not just detached.
+        $this->assertDatabaseMissing('conversations', ['id' => $guestConversationId]);
+    }
+
+    public function test_login_with_no_matching_guest_thread_changes_nothing(): void
+    {
+        $this->tokenAs($this->researcher);
+
+        $this->assertSame(0, Conversation::count());
+    }
+
+    public function test_login_appends_a_guest_thread_to_an_existing_conversation(): void
+    {
+        $this->send($this->researcher, 'My own message, written signed in.');
+        $ownId = Conversation::firstOrFail()->id;
+
+        $this->postJson('/api/messages/public', [
+            'name' => 'Researcher',
+            'email' => $this->researcher->email,
+            'body' => 'Also could not sign in once.',
+        ])->assertCreated();
+
+        // Two threads exist right up until login merges them.
+        $this->assertSame(2, Conversation::count());
+
+        $this->apiAs($this->tokenAs($this->admin))
+            ->patchJson("/api/admin/conversations/{$ownId}", ['is_archived' => true])
+            ->assertOk();
+
+        $this->tokenAs($this->researcher);
+
+        // Merged into the one the researcher already had — no duplicate.
+        $this->assertSame(1, Conversation::count());
+
+        $conversation = Conversation::findOrFail($ownId);
+        $this->assertSame(2, $conversation->messages()->count());
+        $this->assertSame(
+            ['My own message, written signed in.', 'Also could not sign in once.'],
+            $conversation->messages()->pluck('body')->all(),
+        );
+
+        // Signing in also pulls the merged thread back out of the archive.
+        $this->assertFalse($conversation->is_archived);
     }
 
     // ----------------------------------------------------------- permissions

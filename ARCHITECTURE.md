@@ -463,3 +463,112 @@ bentuk akhirnya justru menghasilkan kontrak yang salah.
 Setara seluruh FASE 3 — tabel, endpoint, worker protocol, layar admin, dan
 notebook training yang belum ada. Karena itu ia dijadwalkan terakhir, dan
 [ROADMAP.md](ROADMAP.md) mencatatnya sebagai sistem terpisah, bukan fitur.
+
+---
+
+## 8. Deployment: `brin.fajrianhost.my.id`
+
+Rencana: frontend di Vercel, backend di tempat lain, keduanya di bawah
+subdomain dari `fajrianhost.my.id`.
+
+### Frontend di Vercel — bisa, dan memang cocok
+
+`flutter build web` menghasilkan berkas statis. Itu persis yang Vercel jalankan
+paling baik, dan gratis untuk ukuran proyek ini.
+
+```
+brin.fajrianhost.my.id   →  CNAME  →  cname.vercel-dns.com
+```
+
+Build command-nya harus menyuntikkan alamat API, karena baseUrl dibaca saat
+kompilasi:
+
+```bash
+flutter build web --release \
+  --dart-define=API_BASE_URL=https://api.brin.fajrianhost.my.id/api
+```
+
+Output ada di `fe/build/web`. Di Vercel: framework preset **Other**, output
+directory `build/web`.
+
+### Backend di Vercel — **tidak bisa**, dan bukan soal konfigurasi
+
+Ini bukan hal yang selesai dengan `vercel.json`. Empat hal di aplikasi ini
+saling bertabrakan dengan model serverless, dan tiga di antaranya adalah
+fitur yang baru saja dibangun:
+
+| Yang dibutuhkan aplikasi | Yang diberikan Vercel |
+|---|---|
+| **Octane/RoadRunner** — server yang hidup terus | Fungsi serverless yang mati setelah tiap request |
+| **`queue:work`** — proses jaga untuk interpolasi | Tidak ada proses jaga sama sekali |
+| **Health check tiap 10 detik** | Vercel Cron minimum **1 menit** |
+| **Job prediksi sampai 7200 detik** | Batas eksekusi fungsi jauh di bawah itu |
+| **Berkas hasil sampai ~1,5 GB per job** | Filesystem sementara, hanya `/tmp`, hilang tiap invocation |
+
+Runtime PHP pihak ketiga untuk Vercel memang ada, tapi ia menjalankan PHP
+seperti CGI — satu request, satu proses. Justru itu yang ditinggalkan proyek
+ini waktu pindah ke Octane, dan angkanya ada di README: health check turun dari
+8–11 detik jadi 1,3–1,7 detik. Memaksa backend ke Vercel berarti membatalkan
+seluruh perbaikan itu **dan** kehilangan queue worker, scheduler, serta
+penyimpanan berkas.
+
+### Yang benar untuk backend: satu VPS kecil
+
+Semua yang dibutuhkan aplikasi ini sudah biasa di VPS termurah sekalipun:
+
+```
+api.brin.fajrianhost.my.id  →  A  →  <IP VPS>
+```
+
+Kebutuhannya: PHP 8.2+, MySQL 8, dan **satu proses supervisor** yang menjaga
+tiga hal yang hari ini dijalankan tangan (`npm run serve:all`):
+
+```ini
+[program:brin-octane]
+command=php artisan octane:start --server=roadrunner --host=127.0.0.1 --port=8000
+autorestart=true
+
+[program:brin-queue]
+command=php artisan queue:work --tries=1 --timeout=7200
+autorestart=true
+
+[program:brin-schedule]
+command=php artisan schedule:work
+autorestart=true
+```
+
+nginx di depannya sebagai reverse proxy + TLS (Let's Encrypt). Perlu diingat:
+di belakang nginx, **batas `php.ini` mulai berlaku lagi** — hal yang sekarang
+tidak berlaku karena RoadRunner mem-parsing multipart sendiri (§4). Naikkan
+`client_max_body_size` di nginx dan `upload_max_filesize`/`post_max_size` di
+`php.ini`, atau unggahan besar akan tertolak di produksi padahal lolos di
+pengembangan.
+
+RAM 1 GB cukup: 4 worker Octane + queue worker + MySQL muat, karena kerja berat
+tidak pernah ada di sini — ia di GPU Kaggle.
+
+### Alternatif tanpa VPS: tetap di mesin lab
+
+Backend tetap di mesin ini, tapi ganti ngrok gratis dengan **Cloudflare
+Tunnel**: hostname tetap, tanpa halaman interstitial, dan bisa langsung
+dipetakan ke `api.brin.fajrianhost.my.id`. Header
+`ngrok-skip-browser-warning` yang ditaburkan di klien jadi tidak perlu lagi.
+
+Konsekuensinya jujur saja: kalau mesin lab mati, platform mati. Itu wajar untuk
+demo dan skripsi, tidak untuk layanan yang dipakai orang lain.
+
+### Yang harus disiapkan sebelum deploy
+
+1. **CORS.** `config/cors.php` harus mengizinkan `https://brin.fajrianhost.my.id`.
+   Sanctum di sini memakai bearer token, bukan cookie, jadi tidak ada urusan
+   `SANCTUM_STATEFUL_DOMAINS` maupun domain cookie.
+2. **`APP_DEBUG=false`** dan `APP_ENV=production`. Sekarang debug menyala, dan
+   stack trace Laravel membocorkan path serta konfigurasi.
+3. **Ganti semua kredensial contoh.** `admin123` dan `user123` ada di dokumen
+   yang ikut ter-push.
+4. **`TRAINING_WORKER_TOKEN` baru** untuk produksi — token pengembangan sudah
+   pernah lewat terminal dan log.
+5. **`script-deepct.py` jangan di-commit.** Berkas itu memuat token otentikasi
+   ngrok dalam teks polos. Saat ini belum ter-track; biarkan begitu, atau
+   pindahkan tokennya ke variabel lingkungan lebih dulu.
+6. **Backup database.** Belum ada satu pun sekarang.

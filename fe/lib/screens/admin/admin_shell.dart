@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/avatar_editor_sheet.dart';
+import '../../widgets/change_password_dialog.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/user_avatar.dart';
 import '../../theme/app_theme.dart';
@@ -12,6 +14,7 @@ import 'activity_logs_screen.dart';
 import 'dashboard_home_screen.dart';
 import 'model_management_screen.dart';
 import 'news_management_screen.dart';
+import 'training_screen.dart';
 import 'user_management_screen.dart';
 
 /// Navigation destinations available to an administrator.
@@ -21,6 +24,7 @@ enum AdminSection {
   accessRequests('Access Requests', Icons.how_to_reg_outlined),
   messages('Messages', Icons.forum_outlined),
   news('Research News', Icons.article_outlined),
+  training('Model Training', Icons.model_training_outlined),
   models('Model Management', Icons.memory_outlined),
   activities('Activity Logs', Icons.history);
 
@@ -108,6 +112,8 @@ class _AdminShellState extends State<AdminShell> {
         );
       case AdminSection.news:
         return const NewsManagementScreen();
+      case AdminSection.training:
+        return const TrainingScreen();
       case AdminSection.models:
         return const ModelManagementScreen();
       case AdminSection.activities:
@@ -133,26 +139,32 @@ class _AdminShellState extends State<AdminShell> {
     if (result != null && result.changed) auth.setAvatarPath(result.path);
   }
 
+  Future<void> _changePassword() async {
+    final message = await showChangePasswordDialog(context);
+    if (message == null || !mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _confirmLogout() async {
     final authProvider = context.read<AuthProvider>();
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppAlertDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Sign out'),
-        content: const Text('Are you sure you want to end this session?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('SIGN OUT'),
-          ),
-        ],
-      ),
+      title: 'Sign out',
+      content: const Text('Are you sure you want to end this session?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('SIGN OUT'),
+        ),
+      ],
     );
 
     if (confirmed != true) return;
@@ -186,19 +198,10 @@ class _AdminShellState extends State<AdminShell> {
             ),
             child: Row(
               children: [
-                Container(
+                Image.asset(
+                  'assets/branding/brin_logo.png',
                   width: 36,
                   height: 36,
-                  color: AppTheme.primary,
-                  alignment: Alignment.center,
-                  child: const Text(
-                    'B',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 18,
-                    ),
-                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -268,6 +271,11 @@ class _AdminShellState extends State<AdminShell> {
                       ),
                     ],
                   ),
+                ),
+                IconButton(
+                  tooltip: 'Change password',
+                  onPressed: _changePassword,
+                  icon: const Icon(Icons.lock_outline, size: 18),
                 ),
                 IconButton(
                   tooltip: 'Sign out',

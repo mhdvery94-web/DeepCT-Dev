@@ -44,3 +44,9 @@ $RECYCLE.BIN/
 # --- Scratch -----------------------------------------------------------------
 *.tmp
 *.bak
+
+# Kaggle notebook exports. `script-deepct.py` carries an ngrok auth token in
+# plain text; it is a credential for the tunnel account, not source code, and
+# it must not travel with the repository.
+script-deepct.py
+scripts/*-secret.py

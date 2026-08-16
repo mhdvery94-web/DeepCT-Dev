@@ -25,6 +25,7 @@ class User extends Authenticatable
         'username',
         'email',
         'password',
+        'must_change_password',
         'role',
         'avatar_path',
         'avatar_mime',
@@ -62,6 +63,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
             'is_active' => 'boolean',
             'last_login_at' => 'datetime',
         ];
@@ -132,6 +134,10 @@ class User extends Authenticatable
             'role' => $this->role,
             'is_active' => $this->is_active,
             'avatar_url' => $this->avatarUrl(),
+            // The client blocks the console behind a password change while
+            // this is true, so it has to travel with every user payload the
+            // app authenticates from -- login and `/user` both.
+            'must_change_password' => (bool) $this->must_change_password,
         ];
     }
 }

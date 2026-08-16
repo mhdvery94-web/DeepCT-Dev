@@ -47,9 +47,13 @@ class Notifier
     /**
      * Someone who could not sign in wrote from the sign-in page.
      *
-     * Called out separately from [messageFromUser] because the administrator
-     * has to answer it by email — there is no account to show a reply in, and
-     * the notification is the only prompt they will get.
+     * Called out separately from [messageFromUser] because there is no
+     * account behind this thread to put an in-app notice on, and this
+     * platform sends no email — the notification pushed here is the only
+     * prompt an administrator gets. They can still reply in-app the normal
+     * way; the reply just sits in the thread, unseen, until the sender gets
+     * an account and signs in with the address they gave, at which point
+     * `Conversation::adoptGuestThreadsFor()` merges the thread into theirs.
      */
     public static function messageFromGuest(Conversation $conversation, Message $message): void
     {
@@ -57,7 +61,8 @@ class Notifier
             self::admins(),
             type: 'message.guest',
             title: "Message from {$conversation->guest_name} (no account)",
-            body: self::preview($message->body) . ' — reply by email to '
+            body: self::preview($message->body) . ' — no account yet; a reply '
+                . 'here is only seen once they sign in as '
                 . $conversation->guest_email,
             link: 'messages',
             meta: ['conversation_id' => $conversation->id],
@@ -68,7 +73,11 @@ class Notifier
     public static function messageFromAdmin(Conversation $conversation, Message $message): void
     {
         if (!$conversation->user) {
-            // A guest has no account to notify; the reply goes out by email.
+            // A guest thread has nobody signed in to notify, and there is no
+            // email fallback — this is a deliberate silent no-op, not a gap.
+            // The reply itself is still saved on the thread and reaches them
+            // once they get an account and sign in with the address they
+            // gave (see adoptGuestThreadsFor()).
             return;
         }
 

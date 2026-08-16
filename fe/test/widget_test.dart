@@ -121,6 +121,12 @@ void main() {
       expect(find.byIcon(Icons.menu), findsNothing);
     });
 
+    testWidgets('shows one login button beside the tabs', (tester) async {
+      await _pumpAppAt(tester, const Size(900, 800));
+
+      expect(find.text('LOGIN'), findsOneWidget);
+    });
+
     testWidgets('collapses to a hamburger on a phone', (tester) async {
       await _pumpAppAt(tester, const Size(390, 844));
 
@@ -129,7 +135,18 @@ void main() {
       expect(find.text('RESEARCH'), findsNothing);
     });
 
-    testWidgets('hamburger opens a drawer holding the sections', (
+    testWidgets('the phone header carries no login button of its own', (
+      tester,
+    ) async {
+      // Sign-in belongs in the drawer on a phone. Having it in both places
+      // gave two LOGIN buttons a few hundred pixels apart and cost the header
+      // room it does not have.
+      await _pumpAppAt(tester, const Size(390, 844));
+
+      expect(find.text('LOGIN'), findsNothing);
+    });
+
+    testWidgets('hamburger opens a drawer holding the sections and login', (
       tester,
     ) async {
       await _pumpAppAt(tester, const Size(390, 844));
@@ -139,7 +156,7 @@ void main() {
 
       expect(find.text('HOME'), findsOneWidget);
       expect(find.text('RESEARCH'), findsOneWidget);
-      expect(find.text('LOGIN'), findsWidgets);
+      expect(find.text('LOGIN'), findsOneWidget);
     });
   });
 }
