@@ -33,6 +33,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.7] - 2026-08-17
+
+### Publishing failed, and its error message pointed at the wrong thing twice
+
+The three clients built, the web deployment went out, and then `publish` died in
+16 seconds:
+
+```
+⚠️ Unexpected error fetching GitHub release for tag refs/heads/main
+Error: Resource not accessible by integration
+```
+
+Both halves of that mislead.
+
+**"for tag refs/heads/main"** reads as though `tag_name: latest` had been
+ignored. It was not — the action prints `GITHUB_REF` in that sentence whatever
+tag it actually queried. The workflow was checked rather than believed: the step
+does pass `tag_name: latest`, and the same step published successfully forty
+minutes earlier.
+
+**"Resource not accessible by integration"** is a 403 from the releases API, and
+it reads as a configuration fault. But `publish` declares
+`permissions: contents: write`, and the two commits since the last successful
+publish touched the `preflight` and `vercel` jobs only — `publish` is
+byte-identical to the version that worked. During the same period GitHub was
+returning 429 and 503 for action downloads, "No server is currently available"
+on the releases page, and "Cannot retrieve latest commit" on the repository
+front page. The most probable cause is the platform, not the workflow.
+
+So the change here is not a fix — nothing was proven broken — but three things
+that make the next occurrence cheaper to read:
+
+- Both release steps now pass their token explicitly as
+  `secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN`. If the 403 turns out to be
+  the repository's Workflow permissions setting rather than weather, a
+  fine-grained PAT in `RELEASE_TOKEN` takes over without this file changing.
+- `permissions: contents: read` at workflow level, with `publish` keeping
+  `write`. What the workflow can touch is now one line instead of a search.
+- `fail_on_unmatched_files: true` on both. A release missing the APK is worse
+  than a run that failed loudly.
+
+The consequence of the failure is worth stating plainly: `latest` still holds
+the files from `58e7449`, not from the commits after it. Nothing was
+overwritten, and nothing was corrupted — the release simply was not updated.
+
+---
+
 ## [1.19.6] - 2026-08-17
 
 ### The first release shipped three clients that cannot reach the backend
