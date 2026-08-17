@@ -201,7 +201,55 @@ avatarnya.
 
 ## Berikutnya
 
-Kosong. Sembilan item terakhir sudah selesai; lihat "Sudah selesai" di bawah.
+### 10. Training dijalankan peneliti, bukan admin — BELUM DIKERJAKAN
+
+**Permintaan pemilik produk:** "alurnya mirip dengan prediksi. Admin hanya
+on/off dan menyetel endpoint training lewat URL, persis seperti model.
+Kemudian user mengunggah dataset untuk dilatih sesuai model yang ada, persis
+seperti ketika user melakukan prediksi. Jadi yang melatih itu user, bukan
+admin. Pembedanya di output: prediksi menghasilkan gambar, training
+menghasilkan data untuk melihat kepintaran sebuah model."
+
+Bentuk sekarang **kebalikannya**: training seluruhnya milik admin. Dataset
+didaftarkan admin (`POST /admin/training/datasets`), job diantrekan admin, dan
+tidak ada satu pun route training di bawah `me/`. Peneliti tidak bisa
+menyentuhnya.
+
+Yang perlu berubah, dan besarnya jujur saja setara satu fase:
+
+- [ ] **Registry trainer, kembaran registry model.** Tabel sendiri dengan
+      `endpoint_url`, `is_active`, `status`, health check — supaya admin cukup
+      on/off dan menempel URL, sama seperti model. Hari ini URL trainer hidup
+      sebagai kolom di `training_jobs` plus satu variabel env.
+- [ ] **`training_jobs.user_id`** dan seluruh query di-scope ke pemiliknya,
+      sebagaimana `analysis_records` sudah begitu.
+- [ ] **Unggah dataset lewat jalur peneliti**, memakai kembali chunked upload
+      yang sudah ada — bukan pendaftaran URL oleh admin.
+- [ ] **Layar peneliti**: pilih model, unggah dataset, antre, pantau, lihat
+      hasil. Cerminan `upload_screen` + `prediction_history_screen`.
+- [ ] **Hasil sebagai angka, bukan berkas.** Prediksi mengembalikan TIFF;
+      training mengembalikan metrik per epoch. Perlu tabel metrik dan layar
+      yang membacanya sebagai kurva, bukan sekadar `.h5` untuk diunduh.
+- [ ] Admin tetap memegang: menyetujui/menolak, membatalkan, dan mendaftarkan
+      bobot hasil jadi versi model baru.
+
+**Tiga hal yang harus diputuskan sebelum satu baris ditulis**, karena
+jawabannya mengubah skemanya, bukan cuma tampilannya:
+
+1. **Apa isi "data kepintaran" itu?** Loss + PSNR + SSIM per epoch sudah bisa
+   dihasilkan `script-api-train-deepct.py` hari ini. Kalau yang dimaksud
+   perbandingan antar model atau contoh gambar sebelum/sesudah, itu tabel dan
+   layar yang berbeda.
+2. **Hasil training jadi model baru, atau catatan eksperimen?** Kalau tiap
+   peneliti bisa menerbitkan versi model, registry model butuh kepemilikan dan
+   persetujuan. Kalau hanya catatan, bobotnya tidak pernah meninggalkan job-nya.
+3. **Sistem admin yang sekarang dibuang atau ditumpuk?** Delapan route admin,
+   dua tabel, dan enam route worker sudah jalan dan tertutup test. Membuangnya
+   membuang yang berfungsi; menumpuk membuat dua jalur ke hal yang sama.
+
+Sampai ketiganya dijawab, ini **belum dimulai** — dan itu disengaja. Menulis
+skema atas tebakan pada fitur sebesar ini persis kesalahan yang membuat
+dokumen "COMPLETE & PRODUCTION READY" itu ada.
 
 ---
 

@@ -305,15 +305,63 @@ jobs:
           name: android
           path: brin-neutron-ct.apk
 
-  ios:
-    name: iOS
+  linux:
+    name: Linux desktop
+    needs: preflight
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('fe/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      # Flutter's Linux target compiles against GTK; the runner image does not
+      # carry the headers. Without these the build fails at CMake configure
+      # time with a missing gtk/gtk.h, which reads like a Flutter problem and
+      # is not one.
+      - name: Desktop build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - name: Build
+        working-directory: fe
+        run: |
+          flutter pub get
+          flutter build linux --release --dart-define=API_BASE_URL=$API_BASE_URL
+
+      - name: Package
+        working-directory: fe/build/linux/x64/release/bundle
+        run: tar -czf "$GITHUB_WORKSPACE/brin-neutron-ct-linux-x64.tar.gz" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: brin-neutron-ct-linux-x64.tar.gz
+
+  apple:
+    name: iOS and macOS
     needs: preflight
     # macOS runners bill at ten times the ubuntu rate, so this stays off feature
-    # branches. On main it runs, because a release is expected to carry all
-    # three clients.
+    # branches. On main it runs, because a release is expected to carry every
+    # client.
+    #
+    # Both Apple targets share one runner deliberately. They need the same
+    # toolchain and the same warm pub cache, and a second macOS job would double
+    # the most expensive line on the bill to save a few minutes.
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     # iOS can only be built on macOS, and this is the whole point of the job:
-    # it produces an iOS build without anyone owning a Mac.
+    # it produces Apple builds without anyone owning a Mac.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -349,24 +397,47 @@ jobs:
           flutter build ios --release --no-codesign \
             --dart-define=API_BASE_URL=$API_BASE_URL
 
-      - name: Package
+      - name: Package iOS
         working-directory: fe/build/ios/iphoneos
         run: |
           mkdir -p Payload
           cp -R Runner.app Payload/
           zip -qr "$GITHUB_WORKSPACE/brin-neutron-ct-ios-unsigned.ipa" Payload
 
+      # Unsigned as well, and for the same reason. macOS will refuse to open it
+      # until it is either signed or cleared by hand in System Settings, which
+      # is acceptable for a research tool distributed to a known group.
+      - name: Build macOS
+        working-directory: fe
+        run: flutter build macos --release --dart-define=API_BASE_URL=$API_BASE_URL
+
+      - name: Package macOS
+        working-directory: fe/build/macos/Build/Products/Release
+        run: |
+          APP="$(ls -d *.app | head -1)"
+          echo "Packaging $APP"
+          # `ditto` rather than `zip`: it preserves the resource forks and
+          # symlinks inside a bundle, which a plain zip flattens into something
+          # macOS will not launch.
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$APP" "$GITHUB_WORKSPACE/brin-neutron-ct-macos.zip"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ios
           path: brin-neutron-ct-ios-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: brin-neutron-ct-macos.zip
 
   publish:
     name: Publish
     # `test` is here rather than in front of the builds. Nothing is published
     # from a tree that does not pass its own tests; the builds simply no longer
     # queue behind the suite to find that out.
-    needs: [test, web, android, ios]
+    needs: [test, web, android, linux, apple]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -386,6 +457,10 @@ jobs:
         with: { name: android, path: dist }
       - uses: actions/download-artifact@v4
         with: { name: ios, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: macos, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: linux, path: dist }
 
       - name: List what was built
         run: ls -lh dist
@@ -411,13 +486,23 @@ jobs:
             **Web** — unzip and serve as static files.
             **Android** — `brin-neutron-ct.apk`, universal build.
             **iOS** — unsigned; signing needs an Apple Developer account.
+            **macOS** — unsigned; macOS will ask before opening it the first time.
+            **Linux** — x64 bundle; needs GTK 3 present on the machine.
 
-            All three were compiled against `${{ env.API_BASE_URL }}`.
+            All five were compiled against `${{ env.API_BASE_URL }}`.
 
-      # A push to main refreshes one long-lived pre-release instead of creating
-      # a new one each time, so the download links never change. Note that the
-      # `latest` tag itself stays where it was first created — the files are
-      # replaced, and the body below is what says which commit they came from.
+      # The release API cannot move a tag, so the previous one is removed first.
+      # Without this the page shows `latest` pinned to whatever commit created
+      # it while the body names a newer one — which is exactly what it did:
+      # tag 58e7449, body b8ddc25, files from b8ddc25.
+      - name: Retire the previous rolling release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: gh release delete latest --yes --cleanup-tag || true
+
+      # A push to main refreshes one long-lived release instead of creating a
+      # new one each time, so the download links never change.
       #
       # If this step fails, read its error twice. It reports
       # "fetching GitHub release for tag refs/heads/main", which looks like the
@@ -430,20 +515,31 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           tag_name: latest
+          target_commitish: ${{ github.sha }}
           name: Latest build from main
-          prerelease: true
+          # Not a pre-release. It was, on the reasoning that an untagged build
+          # is not a version — but "pre-release" in GitHub's vocabulary means
+          # "not ready to use", and these builds are the ones people are meant
+          # to install today.
+          prerelease: false
+          # It does not take the "Latest" badge either. That belongs to a
+          # version tag, so `v1.19.1` stays the newest *version* while this
+          # stays the newest *build*.
+          make_latest: false
           files: dist/*
           fail_on_unmatched_files: true
           body: |
             Automatic build of `${{ github.sha }}`, compiled against
             `${{ env.API_BASE_URL }}`.
 
-            This pre-release is replaced on every push to `main`. For a build
-            that stays put, push a version tag.
+            Replaced on every push to `main`. For a build that stays put, push
+            a version tag.
 
             **Web** — unzip and serve as static files.
             **Android** — `brin-neutron-ct.apk`, universal build.
             **iOS** — unsigned; signing needs an Apple Developer account.
+            **macOS** — unsigned; macOS will ask before opening it the first time.
+            **Linux** — x64 bundle; needs GTK 3 present on the machine.
 
       # rclone with an OAuth token for a *personal* Google account, not a
       # service account. That choice matters: a service account has no Drive

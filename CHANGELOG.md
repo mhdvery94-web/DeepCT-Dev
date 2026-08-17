@@ -33,6 +33,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.8] - 2026-08-17
+
+### Five platforms, and a release that stops calling itself unfinished
+
+**Linux and macOS desktop builds** join the pipeline. Both Apple targets share
+one runner on purpose: they need the same toolchain and the same warm pub cache,
+and a second macOS job would double the most expensive line on the bill to save
+a few minutes. The Linux job installs GTK headers first — without them the build
+fails at CMake configure with a missing `gtk/gtk.h`, which reads like a Flutter
+problem and is not one. macOS is packaged with `ditto` rather than `zip`, which
+preserves the symlinks inside an `.app` that a plain zip flattens into something
+that will not launch.
+
+**The rolling build is no longer a pre-release.** It was, on the reasoning that
+an untagged build is not a version. But "pre-release" in GitHub's vocabulary
+means *not ready to use*, and these are the builds people are meant to install
+today. It does not take the "Latest" badge either: `make_latest: false` leaves
+that to a version tag, so `v1.19.1` stays the newest *version* while `latest`
+is the newest *build*.
+
+**The `latest` tag now moves with the build.** It could not before — the release
+API has no way to move a tag — so the page showed `58e7449` while the body named
+`b8ddc25` and the files came from `b8ddc25`. The previous release and tag are
+deleted before the new one is written, which is the only way to keep all three
+telling the same story.
+
+For the record, the publish failure in 1.19.7 was the platform after all: the
+next run went through untouched and replaced every asset. No change was needed;
+the hardening added there stands on its own.
+
+### Training as the researcher's job — designed, not built
+
+The request is that training mirror prediction: an administrator turns a trainer
+endpoint on or off exactly as they do a model, and the *researcher* uploads a
+dataset and starts a run, exactly as they upload frames for a prediction. The
+difference being the output — a prediction returns an image, a training run
+returns numbers about how good the model got.
+
+The system today is the opposite: training is entirely administrative. Datasets
+are registered by an admin, jobs are queued by an admin, and there is no
+training route under `me/` at all.
+
+This is recorded in ROADMAP as item 10, with the six pieces it needs and the
+**three questions that have to be answered before any of it is written** —
+what "intelligence data" means concretely, whether a finished run may become a
+published model version, and whether the existing administrative system is
+replaced or kept alongside. Each answer changes the schema rather than the
+screen.
+
+**No code was written for it.** On a change this size, guessing the schema is
+how the document titled "COMPLETE & PRODUCTION READY" came to exist.
+
+---
+
 ## [1.19.7] - 2026-08-17
 
 ### Publishing failed, and its error message pointed at the wrong thing twice
