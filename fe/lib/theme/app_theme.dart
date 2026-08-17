@@ -16,6 +16,15 @@ class AppTheme {
   static const Color border = Color(0xFFE2E8F0);
   static const Color borderDark = Color(0xFFCBD5E1);
 
+  /// The strip the device's own status bar sits on.
+  ///
+  /// Deliberately a step darker than [surface] so the clock and battery read
+  /// as the system's, not as part of the app's header. An app targeting SDK 36
+  /// has no way to stop drawing there, so the only lever left is the colour —
+  /// see `_SystemBarStrip` in `main.dart`. Dark status-bar icons stay legible
+  /// against it.
+  static const Color systemBar = Color(0xFFE2E8F0);
+
   // Semantic Colors
   static const Color success = Color(0xFF059669);
   static const Color successLight = Color(0xFFD1FAE5);

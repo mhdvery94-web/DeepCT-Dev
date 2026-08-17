@@ -33,6 +33,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.1] - 2026-08-17
+
+### The app pointed at a hostname that did not exist
+
+Every request failed, on web and Android alike, with *"Cannot reach the
+server. Make sure the backend is running."* The backend was running the whole
+time.
+
+v1.19.0 pointed `ApiConfig.baseUrl` at the intended production address,
+`https://api.brin.fajrianhost.my.id/api`. That subdomain has **no DNS record**
+— the parent domain resolves through Cloudflare, `api.brin` returns NXDOMAIN.
+Since both the web and APK builds fall back to that default whenever
+`--dart-define=API_BASE_URL` is not passed, both failed identically, and the
+error text sent everyone to check a server that was answering `200` on
+`/api/health` throughout.
+
+The default is back on the reserved ngrok domain until the record exists and
+the backend is actually deployed behind it. `ARCHITECTURE.md` still describes
+the production topology and is unchanged — it was always a plan, not a
+description of something live.
+
+The error message now names the address it failed to reach. One message covers
+a downed backend, a closed tunnel, and a hostname that does not resolve; only
+the first is about the backend, and saying "make sure the backend is running"
+and nothing else actively misdirects for the other two.
+
+### Two mobile layout faults
+
+**The hamburger floated in the middle of the header**, ~73px shy of the
+top-right corner. `Flexible` around the brand text and `Spacer` both default
+to `flex: 1`, so they *split* the free space rather than the text taking what
+it needs and the spacer absorbing the rest. "BRIN" is short and `Flexible` is
+a loose fit, so it claimed ~55px of its 137px share — and the 73px it declined
+was handed to the row's trailing edge, pushing the hamburger inward. One
+`Expanded` with no `Spacer` is a tight fit that takes every remaining pixel,
+left-aligning the brand and pinning the hamburger to the edge. A test measures
+the gap so it cannot drift back.
+
+**The status bar had no strip of its own.** The app's white surface ran
+unbroken from the clock down into the page, so the app looked like it had
+swallowed the status bar. Worth recording why it is not simply switched off:
+Android 15 (API 35) made edge-to-edge **mandatory**, Android 16 (API 36)
+**removed the opt-out entirely**, and `setStatusBarColor` is a no-op at those
+levels. This app targets 36, so declining to draw behind the status bar is not
+available — and dropping to targetSdk 34 to get it back would make the app
+ineligible for Google Play, which since August 2025 requires 35 or higher.
+
+What is still available is the colour. `_SystemBarStrip` in `main.dart` paints
+that inset itself in `AppTheme.systemBar`, a step darker than the surface, so
+the strip reads as the system's territory. It sits in `MaterialApp.builder`
+rather than on individual screens, so no screen can be added that runs up
+under the clock. `MediaQuery.removePadding` is the other half: without it every
+descendant `SafeArea` would reserve the same inset a second time and leave a
+double gap — a test pins the header flush to the bottom of the strip to catch
+exactly that.
+
+---
+
 ## [1.19.0] - 2026-08-17
 
 ### 🚢 Release pipeline, iOS, and training you can start with a button

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:fe/main.dart';
 import 'package:fe/screens/landing/landing_page.dart';
+import 'package:fe/theme/app_theme.dart';
 import 'package:fe/widgets/news_carousel.dart';
 
 /// Renders the whole app at [size] and returns once it has settled.
@@ -112,6 +113,37 @@ void main() {
     );
   });
 
+  // Targeting SDK 36 means the app cannot decline to draw behind the status
+  // bar, so it paints that strip itself in a distinct colour. The header must
+  // begin exactly at the bottom of that strip: any more and a SafeArea is
+  // reserving the same inset a second time, leaving a double gap.
+  testWidgets('the status bar strip is drawn and reserved exactly once', (
+    tester,
+  ) async {
+    const statusBarHeight = 44.0;
+    await _pumpAppAt(
+      tester,
+      const Size(390, 844),
+      statusBarHeight: statusBarHeight,
+    );
+
+    final strip = find.byWidgetPredicate(
+      (w) =>
+          w is Container &&
+          w.color == AppTheme.systemBar &&
+          w.constraints?.maxHeight == statusBarHeight,
+    );
+    expect(strip, findsOneWidget, reason: 'status bar strip must be painted');
+
+    final headerTop = tester.getTopLeft(find.byKey(LandingPage.headerKey)).dy;
+
+    expect(
+      headerTop,
+      statusBarHeight,
+      reason: 'header must sit flush under the strip, not one inset lower',
+    );
+  });
+
   group('landing header navigation', () {
     testWidgets('shows inline tabs on a laptop-width window', (tester) async {
       await _pumpAppAt(tester, const Size(900, 800));
@@ -144,6 +176,29 @@ void main() {
       await _pumpAppAt(tester, const Size(390, 844));
 
       expect(find.text('LOGIN'), findsNothing);
+    });
+
+    testWidgets('the hamburger sits in the top-right corner', (tester) async {
+      const width = 390.0;
+      await _pumpAppAt(tester, const Size(width, 844));
+
+      final button = find.ancestor(
+        of: find.byIcon(Icons.menu),
+        matching: find.byType(IconButton),
+      );
+
+      final gap = width - tester.getTopRight(button).dx;
+
+      // 16 is the header's own horizontal padding on a phone, so that is all
+      // the gap there should ever be. `Flexible` around the brand text and
+      // `Spacer` both defaulted to flex: 1 and therefore split the free space
+      // between them; the half the short word "BRIN" did not use was left
+      // stranded *after* the hamburger, parking it ~80px shy of the corner.
+      expect(
+        gap,
+        lessThanOrEqualTo(17.0),
+        reason: 'hamburger must sit at the right edge, not float mid-header',
+      );
     });
 
     testWidgets('hamburger opens a drawer holding the sections and login', (

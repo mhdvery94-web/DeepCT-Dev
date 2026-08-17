@@ -248,16 +248,23 @@ class _LandingPageState extends State<LandingPage> {
           // Logo
           Image.asset('assets/branding/brin_logo.png', width: 24, height: 24),
           const SizedBox(width: 12),
-          // Flexible so a long brand block can never push the row past the edge.
-          Flexible(
+          // `Expanded` and no `Spacer`, rather than `Flexible` plus one.
+          //
+          // Both `Flexible` and `Spacer` default to flex: 1, so they *split*
+          // the free space down the middle. "BRIN" is short and `Flexible` is
+          // a loose fit, so the text claimed only ~55px of its 137px share --
+          // and the 73px it declined was handed to the row's trailing edge,
+          // parking the hamburger well short of the corner instead of against
+          // it. `Expanded` is a tight fit that takes every remaining pixel,
+          // left-aligning the brand and pinning whatever follows to the right
+          // edge. It keeps the overflow guard the `Flexible` was there for.
+          Expanded(
             child: Text(
               'BRIN',
               style: Theme.of(context).textTheme.headlineMedium,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-
-          const Spacer(),
 
           // Navigation: inline tabs down to _navBreakpoint, a hamburger that
           // opens the drawer below that. Four tabs plus the login button do
