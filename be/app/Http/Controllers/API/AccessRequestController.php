@@ -20,7 +20,7 @@ use Illuminate\Validation\Rule;
 class AccessRequestController extends Controller
 {
     /** Handed to accounts created from an approved request. */
-    private const DEFAULT_PASSWORD = 'BrinResearch2026';
+    private const DEFAULT_PASSWORD = 'user12345678';
 
     /**
      * POST /api/access-requests  (public)

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * Accounts are created by an administrator — or by approving a request from
  * the landing page — and every one of them starts on the same published
- * default, `BrinResearch2026`. An account left on it is effectively public,
+ * default, `user12345678`. An account left on it is effectively public,
  * and the platform is the only thing that can insist otherwise.
  *
  * Set when a default password is issued (creation, approval, admin reset),

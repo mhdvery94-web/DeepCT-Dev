@@ -741,7 +741,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                     controller: _password,
                     decoration: const InputDecoration(
                       labelText: 'PASSWORD (OPTIONAL)',
-                      helperText: 'Leave blank to use BrinResearch2026',
+                      helperText: 'Leave blank to use user12345678',
                     ),
                     obscureText: true,
                     validator: (v) {

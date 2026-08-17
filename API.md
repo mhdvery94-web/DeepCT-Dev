@@ -354,7 +354,7 @@ Peneliti yang memanggil salah satunya mendapat **403**.
 | `PATCH` | `/admin/users/{id}/toggle` |
 | `POST` | `/admin/users/{id}/reset-password` |
 
-Password default `BrinResearch2026` dikembalikan sebagai `default_password`.
+Password default `user12345678` dikembalikan sebagai `default_password`.
 Admin tidak bisa menghapus atau menonaktifkan akunnya sendiri (403).
 
 Ditambah dua route foto: `POST` dan `DELETE /admin/users/{id}/avatar`.

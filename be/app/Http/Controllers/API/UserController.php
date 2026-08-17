@@ -15,7 +15,7 @@ class UserController extends Controller
     /**
      * Default password for new users
      */
-    const DEFAULT_PASSWORD = 'BrinResearch2026';
+    const DEFAULT_PASSWORD = 'user12345678';
 
     /**
      * Display a listing of users with pagination

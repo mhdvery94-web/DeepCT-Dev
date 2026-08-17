@@ -45,7 +45,7 @@ class AdminUserService {
   /// POST /admin/users
   ///
   /// Omitting [password] makes the backend assign the shared default
-  /// (`BrinResearch2026`), which it returns as `default_password`.
+  /// (`user12345678`), which it returns as `default_password`.
   Future<({UserModel user, String? defaultPassword})> create({
     required String name,
     required String username,
@@ -111,6 +111,6 @@ class AdminUserService {
   /// POST /admin/users/{id}/reset-password — returns the new default password.
   Future<String> resetPassword(int id) async {
     final body = await _api.post('${ApiConfig.adminUsers}/$id/reset-password');
-    return body['default_password']?.toString() ?? 'BrinResearch2026';
+    return body['default_password']?.toString() ?? 'user12345678';
   }
 }
