@@ -7,6 +7,7 @@ use App\Models\Model;
 use App\Models\TrainingDataset;
 use App\Models\TrainingJob;
 use App\Models\UserActivity;
+use App\Services\TrainerDispatcher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -244,105 +245,18 @@ class TrainingController extends Controller
 
         $job = TrainingJob::with('dataset')->findOrFail($id);
 
-        if ($job->status !== 'queued') {
+        // The dispatch itself lives in a service: a researcher starting their
+        // own run needs exactly the same thing to happen, and two copies of
+        // this would drift the moment either was touched.
+        $result = app(TrainerDispatcher::class)
+            ->dispatch($job, $validated['trainer_url'] ?? null);
+
+        if (! $result['ok']) {
             return response()->json([
                 'success' => false,
-                'message' => "This job is {$job->status}; only a queued job can be dispatched.",
-            ], 409);
+                'message' => $result['message'],
+            ], $result['status']);
         }
-
-        $trainerUrl = $validated['trainer_url']
-            ?? $job->trainer_url
-            ?? config('training.trainer_url');
-
-        if (empty($trainerUrl)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No trainer URL is configured. Set TRAINING_TRAINER_URL, '
-                    . 'or give one with this request.',
-            ], 422);
-        }
-
-        $token = config('training.worker_token');
-
-        if (empty($token)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No worker token is configured, so the trainer '
-                    . 'would have no way to report back.',
-            ], 422);
-        }
-
-        $callback = rtrim((string) config('training.callback_url'), '/');
-
-        // A GPU host on the other side of the internet cannot reach
-        // `http://localhost`, and `APP_URL` is left at that default on almost
-        // every development machine. Without this check the dispatch succeeds,
-        // the trainer accepts, and then every callback it makes fails silently
-        // — the job sits at `queued` forever and nothing says why.
-        if ($this->isUnreachableFromOutside($callback)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'The callback address is ' . ($callback ?: 'empty')
-                    . ', which the GPU host cannot reach. Set TRAINING_CALLBACK_URL '
-                    . '(or APP_URL) to an address reachable from outside this machine.',
-            ], 422);
-        }
-
-        $dataset = $job->dataset;
-
-        try {
-            $response = Http::timeout((int) config('training.dispatch_timeout', 30))
-                ->withoutVerifying() // tunnel certificates
-                ->withHeaders(['ngrok-skip-browser-warning' => 'true'])
-                ->post($trainerUrl, [
-                    'job_id' => $job->id,
-                    'name' => $job->name,
-                    'total_epochs' => $job->total_epochs,
-                    'resume_from_epoch' => $job->current_epoch,
-                    'hyperparameters' => $job->hyperparameters ?? [],
-                    'dataset' => [
-                        'id' => $dataset?->id,
-                        'name' => $dataset?->name,
-                        'source_type' => $dataset?->source_type,
-                        'source_url' => $dataset?->source_url,
-                        'download_url' => $dataset && $dataset->isHosted()
-                            ? "{$callback}/api/training/worker/jobs/{$job->id}/dataset"
-                            : null,
-                        'checksum' => $dataset?->checksum,
-                    ],
-                    // Everything the trainer needs to report back with. Without
-                    // these it could train perfectly and still have nowhere to
-                    // put the result.
-                    'callback' => [
-                        'base_url' => "{$callback}/api",
-                        'worker_token' => $token,
-                        'heartbeat_seconds' => 60,
-                    ],
-                ]);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Could not reach the trainer: ' . $this->trim($e->getMessage()),
-            ], 502);
-        }
-
-        if (!$response->successful()) {
-            return response()->json([
-                'success' => false,
-                'message' => "The trainer refused the job (HTTP {$response->status()}).",
-            ], 502);
-        }
-
-        // Deliberately still `queued`, not `running`. The trainer says it
-        // *accepted* the job; only its first heartbeat proves it started. A
-        // job marked running by us and never actually begun would sit there
-        // looking healthy forever.
-        $job->update([
-            'trainer_url' => $trainerUrl,
-            'dispatched_at' => now(),
-            'error_message' => null,
-        ]);
 
         $this->record($request, 'training_job_dispatched',
             "Dispatched training job #{$job->id} to a trainer", [
@@ -351,7 +265,7 @@ class TrainingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'The trainer accepted the job. It reports back as it trains.',
+            'message' => $result['message'],
             'data' => $this->serialiseJob($job->fresh()->load('dataset')),
         ]);
     }

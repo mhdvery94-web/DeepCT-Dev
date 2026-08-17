@@ -201,7 +201,43 @@ avatarnya.
 
 ## Berikutnya
 
-### 10. Training dijalankan peneliti, bukan admin — BELUM DIKERJAKAN
+### 10. Training dijalankan peneliti, bukan admin — BACKEND SELESAI, KLIEN BELUM
+
+**Ketiga pertanyaan sudah dijawab pemilik produk:**
+
+1. Yang ditampilkan adalah **hasil dari model yang sudah dilatih** — angka per
+   epoch (loss, PSNR, SSIM), bukan perbandingan antar model.
+2. Hasil training **tetap di server** dan **tidak** menjadi model baru. Kalau
+   suatu model sudah siap melayani, admin mendaftarkan URL endpoint-nya sendiri,
+   persis seperti model biasa.
+3. Sistem training khusus admin **diganti** oleh alur peneliti.
+
+Sisi backend sudah dibangun dan lulus test:
+
+- [x] `models.kind` — trainer didaftarkan di registry yang sama dengan model
+      inferensi, dengan sakelar on/off dan health check yang sama
+- [x] `training_metrics` — riwayat per epoch, karena satu angka menjawab
+      "sedang bagaimana" dan tidak bisa menjawab "jadi lebih pintar atau tidak"
+- [x] `POST /me/training/jobs` — peneliti mengunggah ZIP dan menjalankan sendiri
+- [x] `GET /me/training/jobs`, `GET /me/training/jobs/{id}` (dengan riwayat),
+      `POST /me/training/jobs/{id}/cancel` — semuanya di-scope ke pemiliknya
+- [x] `TrainerDispatcher` — dipakai bersama oleh admin dan peneliti
+- [x] Test: 7 baru, 36 lama tetap hijau
+
+Yang **belum**:
+
+- [ ] **Layar Flutter untuk peneliti.** Belum ada satu pun. Endpoint-nya hidup
+      tapi tidak ada pintu masuk di aplikasi — cerminan `upload_screen` dan
+      `prediction_history_screen`, plus layar hasil yang menggambar kurva dari
+      `data.history`.
+- [ ] **Menyalakan `kind` di layar admin.** Backend menerima `kind` saat
+      mendaftarkan model; form admin belum menawarkannya, jadi trainer baru
+      bisa didaftarkan lewat API.
+- [ ] **Membersihkan route admin lama.** `POST /admin/training/datasets` dan
+      `POST /admin/training/jobs` masih ada dan masih berfungsi. Dibiarkan
+      sengaja sampai layar peneliti terbukti bekerja — mencabut jalan satu-satunya
+      yang ada sekarang sebelum penggantinya terpasang akan meninggalkan
+      platform tanpa cara apa pun untuk melatih.
 
 **Permintaan pemilik produk:** "alurnya mirip dengan prediksi. Admin hanya
 on/off dan menyetel endpoint training lewat URL, persis seperti model.

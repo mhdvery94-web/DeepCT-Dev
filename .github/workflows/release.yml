@@ -324,15 +324,27 @@ jobs:
           key: pub-${{ runner.os }}-${{ hashFiles('fe/pubspec.lock') }}
           restore-keys: pub-${{ runner.os }}-
 
-      # Flutter's Linux target compiles against GTK; the runner image does not
-      # carry the headers. Without these the build fails at CMake configure
-      # time with a missing gtk/gtk.h, which reads like a Flutter problem and
-      # is not one.
+      # Flutter's Linux target compiles against GTK, and the runner image does
+      # not carry the headers. Without them the build fails at CMake configure
+      # time with a missing gtk/gtk.h, which reads like a Flutter problem and is
+      # not one.
+      #
+      # libsecret and jsoncpp are not Flutter's — they are
+      # `flutter_secure_storage_linux`, which stores the auth token in the
+      # system keyring and whose CMakeLists checks for both. The failure names
+      # only the first:
+      #
+      #   The following required packages were not found:
+      #    - libsecret-1>=0.18.4
+      #
+      # A plugin's native dependency is invisible in pubspec.yaml, so the list
+      # below is the only place it is written down.
       - name: Desktop build dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
+            libsecret-1-dev libjsoncpp-dev
 
       - name: Build
         working-directory: fe

@@ -7,6 +7,7 @@ use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\AvatarController;
 use App\Http\Controllers\API\MeController;
+use App\Http\Controllers\API\MeTrainingController;
 use App\Http\Controllers\API\MessageController;
 use App\Http\Controllers\API\NewsController;
 use App\Http\Controllers\API\TrainingController;
@@ -97,6 +98,16 @@ Route::middleware('auth:sanctum')->group(function () {
         // Own password. Without this the only way to change one is an admin
         // reset to the shared default, which every admin then knows.
         Route::post('/password', [AuthController::class, 'changePassword'])->name('api.me.password');
+
+        // Training, from the researcher's side. The same shape as prediction:
+        // upload an archive, a job is queued, a remote GPU does the work. Only
+        // the result differs — numbers rather than frames.
+        Route::prefix('training')->group(function () {
+            Route::get('/jobs', [MeTrainingController::class, 'index'])->name('api.me.training.jobs');
+            Route::post('/jobs', [MeTrainingController::class, 'store'])->name('api.me.training.jobs.store');
+            Route::get('/jobs/{id}', [MeTrainingController::class, 'show'])->name('api.me.training.jobs.show');
+            Route::post('/jobs/{id}/cancel', [MeTrainingController::class, 'cancel'])->name('api.me.training.jobs.cancel');
+        });
     });
 
     // Serving a photo is authenticated rather than public: avatars appear

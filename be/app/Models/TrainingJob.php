@@ -18,6 +18,10 @@ class TrainingJob extends EloquentModel
         'name',
         'training_dataset_id',
         'base_model_id',
+        // Which registered trainer endpoint ran this. Kept separately from
+        // `trainer_url` so "which trainer produced these numbers" survives
+        // somebody editing the URL afterwards.
+        'trainer_model_id',
         'hyperparameters',
         'status',
         'total_epochs',
@@ -83,6 +87,18 @@ class TrainingJob extends EloquentModel
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** The registered trainer endpoint that ran this, when one was used. */
+    public function trainer(): BelongsTo
+    {
+        return $this->belongsTo(Model::class, 'trainer_model_id');
+    }
+
+    /** Per-epoch history, oldest first — the curve, not the latest figure. */
+    public function metricHistory()
+    {
+        return $this->hasMany(TrainingMetric::class)->orderBy('epoch');
     }
 
     public function isFinished(): bool

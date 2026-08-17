@@ -64,7 +64,8 @@ class MeController extends Controller
      */
     public function models()
     {
-        $models = Model::where('is_active', true)
+        $models = Model::inference()
+            ->where('is_active', true)
             ->orderByDesc('status') // online sorts before offline
             ->orderBy('name')
             ->get([

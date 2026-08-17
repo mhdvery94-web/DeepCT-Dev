@@ -56,6 +56,10 @@ class ModelController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'version' => 'required|string|max:50',
+            // 'inference' answers POST /predict, 'trainer' answers POST /train.
+            // One registry: registering a trainer is the same act, with the
+            // same on/off switch and the same health check behind it.
+            'kind' => 'nullable|in:inference,trainer',
             'endpoint_url' => 'required|url|max:500',
             'description' => 'nullable|string',
             'max_concurrent_jobs' => 'nullable|integer|min:1|max:10',
@@ -72,6 +76,7 @@ class ModelController extends Controller
         $model = Model::create([
             'name' => $request->name,
             'version' => $request->version,
+            'kind' => $request->input('kind', 'inference'),
             'endpoint_url' => $request->endpoint_url,
             'description' => $request->description,
             'max_concurrent_jobs' => $request->input('max_concurrent_jobs', 1),

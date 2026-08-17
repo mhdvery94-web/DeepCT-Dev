@@ -9,6 +9,11 @@ class Model extends EloquentModel
     protected $fillable = [
         'name',
         'version',
+        // 'inference' or 'trainer'. One registry, two purposes: a trainer
+        // endpoint is registered, switched on and health-checked exactly like
+        // an inference endpoint, so it would be a second table with the same
+        // columns and the same probe behind it.
+        'kind',
         'endpoint_url',
         'file_path',
         'status',
@@ -38,5 +43,28 @@ class Model extends EloquentModel
     public function analysisRecords()
     {
         return $this->hasMany(AnalysisRecord::class);
+    }
+
+    /**
+     * Endpoints that answer `POST /predict`.
+     *
+     * Every query that existed before this column did means this one. A trainer
+     * appearing in the model picker on the upload screen would offer a
+     * researcher an endpoint that cannot interpolate anything.
+     */
+    public function scopeInference($query)
+    {
+        return $query->where('kind', 'inference');
+    }
+
+    /** Endpoints that answer `POST /train`. */
+    public function scopeTrainers($query)
+    {
+        return $query->where('kind', 'trainer');
+    }
+
+    public function isTrainer(): bool
+    {
+        return $this->kind === 'trainer';
     }
 }

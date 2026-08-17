@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\TrainingJob;
+use App\Models\TrainingMetric;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -152,6 +153,15 @@ class TrainingWorkerController extends Controller
             'metrics' => $validated['metrics'] ?? null,
         ], fn($v) => $v !== null));
 
+        // The job row keeps only the latest numbers. Keeping the history is
+        // what lets the researcher be shown a curve rather than a single figure
+        // whose only context is "so far".
+        TrainingMetric::record(
+            $job->id,
+            (int) ($validated['current_epoch'] ?? 0),
+            $validated['metrics'] ?? null,
+        );
+
         return response()->json([
             'success' => true,
             'data' => ['continue' => true, 'status' => 'running'],
@@ -196,6 +206,12 @@ class TrainingWorkerController extends Controller
             'heartbeat_at' => now(),
         ]);
 
+        TrainingMetric::record(
+            $job->id,
+            (int) $validated['current_epoch'],
+            $validated['metrics'] ?? null,
+        );
+
         if ($previous && $previous !== $path && Storage::exists($previous)) {
             Storage::delete($previous);
         }
@@ -238,6 +254,12 @@ class TrainingWorkerController extends Controller
             'error_message' => null,
         ]);
 
+        TrainingMetric::record(
+            $job->id,
+            (int) $job->total_epochs,
+            $validated['metrics'] ?? null,
+        );
+
         // The checkpoint has served its purpose and is the larger of the two.
         if ($job->checkpoint_path && Storage::exists($job->checkpoint_path)) {
             Storage::delete($job->checkpoint_path);
@@ -246,8 +268,9 @@ class TrainingWorkerController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Training recorded. An administrator can now register '
-                . 'these weights as a model version.',
+            'message' => 'Training recorded. The weights stay on the platform; '
+                . 'an administrator registers an endpoint when a model is ready '
+                . 'to serve.',
         ]);
     }
 

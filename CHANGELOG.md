@@ -33,6 +33,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.9] - 2026-08-18
+
+### Training belongs to the researcher now — backend
+
+The three questions from 1.19.8 were answered: show the numbers a trained model
+produced, keep the weights on the platform rather than turning them into a
+model, and replace the administrator-only system rather than sitting beside it.
+
+**`models.kind` splits the registry in two.** A trainer endpoint is registered
+exactly like an inference endpoint — a URL, an on/off switch, the same health
+check — because that is what was asked for, and because the alternative was a
+second table with the same columns and the same probe behind it. `me/models`
+gained an `inference()` scope, so a trainer can never appear in the picker on
+the upload screen and offer a researcher something that cannot interpolate a
+frame.
+
+**`training_metrics` keeps the per-epoch history.** `training_jobs.metrics`
+holds the latest report only, which answers "how is it doing" and cannot answer
+"did it get better" — and the second question is the entire reason a researcher
+is shown the result. Reports are written per epoch and overwrite rather than
+append, because heartbeats repeat inside an epoch and would otherwise leave a
+flat step on the curve for every minute the epoch took.
+
+**Four routes under `me/`,** all scoped to the caller: start a run by uploading
+a ZIP, list your own, read one with its history, cancel one. Someone else's run
+answers **404 rather than 403** — confirming a run exists is itself a leak.
+
+A run with no trainer available is **queued, not refused**. The request
+succeeded, the archive is stored, and a worker can claim it later; what would be
+a failure is saying nothing, so the reason comes back in `dispatch_message`.
+
+**Ownership needed no new column.** `training_jobs.created_by` already existed
+and already meant "who started this".
+
+**`TrainerDispatcher`** carries the push logic that lived in
+`TrainingController::dispatchJob`. Two callers need it now — an administrator
+pressing "send to trainer" and a researcher starting a run — and two copies
+would have drifted the first time either was touched. The existing 36 training
+tests passed unchanged after the move, which is what made it safe to do.
+
+A finished run does **not** become a model. The weights stay put; when a model
+is genuinely ready to serve, an administrator registers its endpoint by hand.
+Publishing is a decision, not a consequence of a job finishing.
+
+`php artisan test` → **234 passed**.
+
+**Not done, and the client half is the larger half:** there is no Flutter screen
+for any of this. The endpoints work and have no door into the app. The admin
+model form does not offer `kind` yet either, so a trainer can currently only be
+registered through the API. And `POST /admin/training/datasets` and
+`POST /admin/training/jobs` are deliberately still in place — removing the only
+working path before its replacement is visible would leave the platform with no
+way to train at all.
+
+### Linux desktop needed more than GTK
+
+The build failed at CMake configure:
+
+```
+The following required packages were not found:
+ - libsecret-1>=0.18.4
+```
+
+Not Flutter's dependency — `flutter_secure_storage_linux`'s, which is where the
+auth token lives on that platform. A plugin's native dependencies are invisible
+in `pubspec.yaml`, so the apt list in the workflow is the only place they are
+written down. `libsecret-1-dev` and `libjsoncpp-dev` join it.
+
+---
+
 ## [1.19.8] - 2026-08-17
 
 ### Five platforms, and a release that stops calling itself unfinished

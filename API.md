@@ -97,6 +97,10 @@ belum diumumkan tidak bisa ditemukan dengan menebak id.
 | `GET` | `/me/activities` | Jejak audit milik sendiri, berpaginasi |
 | `GET` | `/me/models` | Model yang boleh dipakai |
 | `POST` | `/me/models/refresh` | Sama, tapi **memprobe endpoint-nya dulu**. Throttle 10/menit |
+| `GET` | `/me/training/jobs` | Training run milik sendiri |
+| `POST` | `/me/training/jobs` | Mulai training — multipart `archive` (ZIP), `name`, `total_epochs` |
+| `GET` | `/me/training/jobs/{id}` | Detail + **riwayat metrik per epoch** |
+| `POST` | `/me/training/jobs/{id}/cancel` | Batalkan run sendiri |
 | `POST` | `/me/avatar` | Pasang foto profil sendiri (multipart `avatar`) |
 | `DELETE` | `/me/avatar` | Hapus foto profil sendiri |
 | `GET` | `/users/{id}/avatar` | Foto profil siapa pun. **Butuh login.** |
