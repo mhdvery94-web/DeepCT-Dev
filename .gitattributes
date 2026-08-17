@@ -1,0 +1,4 @@
+# Shell scripts run on Linux (Vercel builders, CI, the VPS). Committed with CRLF
+# they fail with "bad interpreter: /usr/bin/env bash^M", which reads like a
+# missing interpreter rather than a line-ending problem.
+*.sh text eol=lf
