@@ -33,6 +33,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.6] - 2026-08-17
+
+### The first release shipped three clients that cannot reach the backend
+
+`latest` carried a working APK, a working web bundle and a working IPA, all
+built against `https://nucleus-drone-grueling.ngrok-free.dev` — **without the
+`/api` suffix**. `ApiConfig.baseUrl` is documented as "including the `/api`
+prefix" and the client appends paths straight onto it, so every request in
+those builds goes to `/login` rather than `/api/login` and 404s. Nothing in the
+pipeline noticed, because a compiled-in address is not exercised until somebody
+installs the result.
+
+This is 1.19.1 a second time, from a different direction: that one was a
+hostname that did not resolve, this one is a hostname missing a path. A
+`preflight` job now refuses to start any build when `API_BASE_URL` is empty or
+does not end in `/api`, and prints the exact value to set. It costs about ten
+seconds and it runs before the ten-minute builds rather than after them.
+
+### The Vercel deploy reported success while deploying nothing
+
+The step ended `npx vercel deploy ... | tee url.txt`, and a pipeline's exit
+status is its **last** command's. `vercel` failed, `tee` succeeded, the job went
+green. The log said what had happened all along:
+
+```
+Error: The provided path "/home/runner/work/deepCT-AI/deepCT-AI/fe" does not exist.
+```
+
+Two faults, then, and the second hid the first.
+
+The path error is the Vercel project's **Root Directory**, still set to `fe`
+from when Vercel built the app itself. The CLI resolves that setting against the
+working directory and refuses to deploy when the result is missing — and this
+job never checks the repository out, it only downloads the built web files, so
+there was no `fe/` for it to find. The build output now lands in
+`fe/.vercel/output` and the job carries a `VERCEL_ROOT_DIR` variable that has to
+match the dashboard, with the reason written next to it.
+
+The deploy step now runs under `set -euo pipefail` and additionally fails when
+the CLI exits 0 without printing a deployment URL. Both were needed: `pipefail`
+catches a non-zero exit, and the URL check catches a CLI that decides an error
+is a warning.
+
+`fe/vercel.json` and `fe/vercel-build.sh` are now unused — a prebuilt deployment
+takes its routing from `.vercel/output/config.json` and runs no build command.
+They are kept because they are what makes the project deployable again if the
+Git integration is ever reconnected, which is the fallback if token deploys stop
+being an option.
+
+---
+
 ## [1.19.5] - 2026-08-17
 
 ### The health check stops running six times a minute

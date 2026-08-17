@@ -60,6 +60,39 @@ env:
         || 'https://nucleus-drone-grueling.ngrok-free.dev/api' }}
 
 jobs:
+  # Ten seconds that stop a ten-minute build from producing clients nobody can
+  # use. The address is compiled in, so a wrong one is not discovered until
+  # somebody installs the APK and every request 404s — which is exactly how
+  # 1.19.1 happened, and how the first `latest` pre-release shipped three
+  # clients built against a URL with no `/api` on the end.
+  preflight:
+    name: Check the API address
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate API_BASE_URL
+        run: |
+          set -euo pipefail
+
+          if [ -z "${API_BASE_URL:-}" ]; then
+            echo "::error::API_BASE_URL is empty. Set the repository variable NGROK_BE."
+            exit 1
+          fi
+
+          # ApiConfig.baseUrl is documented as "including the /api prefix" and
+          # the client appends paths straight onto it: without the suffix every
+          # call goes to /login instead of /api/login.
+          case "$API_BASE_URL" in
+            */api|*/api/) ;;
+            *)
+              echo "::error::API_BASE_URL is '$API_BASE_URL', which does not end in /api."
+              echo "The client appends paths directly to it, so every request would 404."
+              echo "Set the repository variable NGROK_BE to '${API_BASE_URL%/}/api'."
+              exit 1
+              ;;
+          esac
+
+          echo "API_BASE_URL = $API_BASE_URL"
+
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -86,6 +119,7 @@ jobs:
 
   web:
     name: Web
+    needs: preflight
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -136,11 +170,21 @@ jobs:
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # Must match the project's **Root Directory** in Vercel → Settings →
+      # Build and Deployment. The CLI resolves that setting against the working
+      # directory and refuses to deploy when the result does not exist:
+      #
+      #   Error: The provided path ".../deepCT-AI/fe" does not exist.
+      #
+      # This job never checks the repository out — it only downloads the built
+      # web files — so `fe/` has to be created here for the setting to be
+      # satisfied. Set this to `.` if the Root Directory is ever cleared.
+      VERCEL_ROOT_DIR: fe
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: .vercel/output/static
+          path: fe/.vercel/output/static
 
       # A prebuilt deployment takes its routing from this file and ignores
       # vercel.json. The rewrite is what stops a deep link answering 404 on
@@ -148,7 +192,8 @@ jobs:
       # old build for ever.
       - name: Describe the output
         run: |
-          cat > .vercel/output/config.json <<'JSON'
+          set -euo pipefail
+          cat > "$VERCEL_ROOT_DIR/.vercel/output/config.json" <<'JSON'
           {
             "version": 3,
             "routes": [
@@ -169,21 +214,40 @@ jobs:
           JSON
 
       - name: Deploy
+        # `pipefail` is the whole reason this reads the way it does. Piping the
+        # CLI into `tee` hands the step `tee`'s exit status, so the first
+        # deployment reported **success** while its log said
+        # "Error: The provided path ... does not exist" and nothing shipped.
+        # A deploy that fails quietly is worse than one that fails.
         run: |
+          set -euo pipefail
+
+          PROD=""
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            npx --yes vercel@latest deploy --prebuilt --prod \
-              --token="${{ secrets.VERCEL_TOKEN }}" | tee url.txt
-          else
-            npx --yes vercel@latest deploy --prebuilt \
-              --token="${{ secrets.VERCEL_TOKEN }}" | tee url.txt
+            PROD="--prod"
           fi
+
+          npx --yes vercel@latest deploy --prebuilt $PROD \
+            --token="${{ secrets.VERCEL_TOKEN }}" | tee url.txt
+
+          URL="$(tail -1 url.txt)"
+
+          case "$URL" in
+            https://*) ;;
+            *)
+              echo "::error::The CLI exited 0 but printed no deployment URL."
+              exit 1
+              ;;
+          esac
+
           {
             echo "### Deployed"
-            tail -1 url.txt
+            echo "$URL"
           } >> "$GITHUB_STEP_SUMMARY"
 
   android:
     name: Android APK
+    needs: preflight
     # Feature branches get tests and a preview URL; an APK nobody asked for is
     # six minutes of runner time per push.
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
@@ -232,6 +296,7 @@ jobs:
 
   ios:
     name: iOS
+    needs: preflight
     # macOS runners bill at ten times the ubuntu rate, so this stays off feature
     # branches. On main it runs, because a release is expected to carry all
     # three clients.
