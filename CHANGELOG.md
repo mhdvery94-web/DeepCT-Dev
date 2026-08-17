@@ -33,6 +33,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.2] - 2026-08-17
+
+### The Vercel deployment was blocked before it ever built
+
+`deep-ct-ai.vercel.app` reported *"the commit author did not have contributing
+access to the project on Vercel"*. Nothing was wrong with the code — the build
+never started. Vercel matches the **commit author's email** against an account
+with access to the project, and on the Hobby plan with a private repository
+that has to be the owner. Three identities were in play: commits authored as
+`mhdvery94@gmail.com`, the repository owned by `basiadyanna54-commits`, and the
+Vercel project under `boroboro-paham`. Commits are now authored as the account
+that owns the project; the old commit stays blocked forever, since its author
+is part of the commit, so it takes a new one rather than a redeploy.
+
+Underneath that sat a second problem the block had hidden: **Vercel has no
+Flutter preset**, and would have failed on the first successful trigger.
+`fe/vercel.json` and `fe/vercel-build.sh` now fetch the Flutter SDK — the
+released tarball, which already contains the Dart SDK, rather than a clone of
+the repository — and build the web client. Three details in there are not
+decoration:
+
+- `API_BASE_URL` is read from the environment, because the client compiles the
+  address in. Setting it separately for Production and Preview is what makes
+  one deployment production and the other a test one.
+- A rewrite to `/index.html`, or any deep link answers 404 on reload.
+- `index.html`, `flutter_service_worker.js` and `version.json` are served
+  `must-revalidate`. Cached, they pin visitors to an old build indefinitely.
+
+`.gitattributes` forces LF on `*.sh`: committed from Windows with CRLF, the
+build script fails on Linux with `bad interpreter: /usr/bin/env bash^M`, which
+reads like a missing interpreter rather than a line-ending problem.
+
+### The release APK carries the product's name
+
+`flutter build apk --release` now also produces `app-deepCT-ai.apk`.
+
+It cannot be done with Gradle's `outputFileName`, which is the obvious answer
+and the wrong one: Flutter's own Gradle plugin copies the APK into
+`build/app/outputs/flutter-apk/` and renames it to `app-<build-mode>.apk` on the
+way, from the variant rather than from the output. Renaming the file instead of
+copying it does not work either — after Gradle returns, `flutter build apk`
+looks for `app-release.apk` under that exact name and exits with "Gradle build
+failed to produce an .apk file" if it is gone. So a task finalising
+`assembleRelease` places a named copy beside it, and both files exist.
+`finalizedBy` rather than `doLast`, because an action registered in
+`build.gradle.kts` can land ahead of the plugin's own and run before the file
+exists.
+
+Verified: `flutter build apk --release` exits 0 and writes both files, 56.1 MB
+each.
+
+### Training the model from the notebook, over the same kind of API
+
+`script-api-train-deepct.py` is the training twin of `script-api-deepct.py`:
+paste it into a Kaggle cell, register the printed URL in the admin console,
+press SEND TO TRAINER. It speaks the worker protocol already in the platform —
+heartbeats, checkpoints every five epochs, cancellation, resume — so a job
+survives its Kaggle session expiring.
+
+**What it trains is not the published method, and the file says so at the top.**
+The reference notebook `Evaluation_2_to_1_1kx1k_With_Logo.ipynb` is a Tkinter
+evaluation GUI: it has no training code, no loss and no discriminator, and the
+discriminator is not in this repository. What runs is a supervised fine-tune of
+the generator on an L1 pixel loss — the notebook's layers, normalisation and
+geometry, and a loss derivable from the data alone. Numbers from it must not be
+reported as the GAN's.
+
+The part that is worth running is the sampling. Training examples are frame
+triples taken from the dataset's own numbering: the model sees frames `i` and
+`i+gap`, is told `t = m/gap`, and must produce `i+m`. With `balanced_t` on — the
+default — t is spread across every spacing the dataset offers, which is exactly
+the imbalance the recursive interpolation exists to work around.
+
+The ngrok token is read from `NGROK_AUTHTOKEN`, never stored in the file. The
+inference script still carries its token in plain text and is now listed in
+`.gitignore` under both its old and new names.
+
+### Default password
+
+`BrinResearch2026` → `user12345678`, in both controllers, the migration note,
+the admin form's helper text and `API.md`. `PasswordGate` still stands in the
+way of any account still sitting on it.
+
+---
+
 ## [1.19.1] - 2026-08-17
 
 ### The app pointed at a hostname that did not exist
@@ -1535,7 +1620,7 @@ test suite**, and **no scheduler process is running**, so
 
 - `flutter analyze` → **No issues found!** (was 23 issues / 12 errors)
 - `flutter test` → **All tests passed!** (was failing)
-- `flutter build apk --release` → `app-release.apk`, 51.0 MB
+- `flutter build apk --release` → `app-deepCT-ai.apk`, 51.0 MB
 - `flutter build web --release` → `build/web`
 - `POST /api/login` through the ngrok tunnel → HTTP 200 in ~1.4s
 - `php artisan models:health-check` → model **online** (864ms)
@@ -1824,7 +1909,7 @@ unaffected.
 #### Changed
 
 **Backend**
-- Default password changed to "BrinResearch2026"
+- Default password changed to "user12345678"
 - Health check now uses GET probe (not POST)
 - Health check threshold: 3s → 5s, timeout: 10s → 15s
 - Model endpoint managed via UI (not `.env`)

@@ -45,10 +45,15 @@ $RECYCLE.BIN/
 *.tmp
 *.bak
 
-# Kaggle notebook exports. `script-deepct.py` carries an ngrok auth token in
-# plain text; it is a credential for the tunnel account, not source code, and
-# it must not travel with the repository.
+# Kaggle notebook exports that carry an ngrok auth token in plain text. It is a
+# credential for the tunnel account, not source code, and it must not travel
+# with the repository. `script-deepct.py` was renamed to `script-api-deepct.py`
+# and kept its token, so both names are listed.
+#
+# `script-api-train-deepct.py` is *not* here: it reads NGROK_AUTHTOKEN from the
+# environment and holds no credential, which is why it can be committed.
 script-deepct.py
+script-api-deepct.py
 scripts/*-secret.py
 
 # Personal connection helpers. `koneksi-vps.bat` carries a server address and
