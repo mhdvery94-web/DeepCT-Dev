@@ -1,8 +1,21 @@
 class ApiConfig {
   /// Backend base URL, including the `/api` prefix.
   ///
-  /// Defaults to the production API. Every other target is supplied at build
-  /// time, so no checkout carries anyone's private tunnel address:
+  /// **Points at the ngrok tunnel while the platform is still in testing.**
+  /// The intended production address is
+  /// `https://api.brin.fajrianhost.my.id/api`, and it was briefly the default
+  /// here — but that subdomain has no DNS record yet (the parent domain
+  /// resolves; `api.brin` returns NXDOMAIN), so every build made without an
+  /// override failed to connect, on web and Android alike. Switch back once
+  /// the record exists and the backend is actually deployed behind it, not
+  /// before: a default that does not resolve breaks the app for anyone who
+  /// forgets the flag.
+  ///
+  /// This is a *reserved* ngrok domain, so it survives tunnel restarts. It
+  /// only reaches a backend while someone is running `ngrok http 8000` on the
+  /// machine hosting Octane.
+  ///
+  /// Every other target is supplied at build time:
   ///
   /// ```
   /// # Android emulator talking to the host machine
@@ -19,7 +32,7 @@ class ApiConfig {
   /// `android:usesCleartextTraffic="true"`.
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://api.brin.fajrianhost.my.id/api',
+    defaultValue: 'https://nucleus-drone-grueling.ngrok-free.dev/api',
   );
 
   // Timeouts

@@ -234,8 +234,15 @@ class ApiClient {
     }
 
     if (error.type == DioExceptionType.connectionError) {
-      return const ApiException(
-        'Cannot reach the server. Make sure the backend is running.',
+      // Name the address. This one message covers a backend that is down, a
+      // closed tunnel, and a build pointing at a hostname that does not
+      // resolve — and only the first is about the backend. Saying "make sure
+      // the backend is running" and nothing else once sent someone checking a
+      // server that was answering fine, while the app was asking a subdomain
+      // that had never been created.
+      return ApiException(
+        'Cannot reach the server at ${ApiConfig.baseUrl} — check that this '
+        'address is correct and that the backend is running.',
       );
     }
 

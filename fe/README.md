@@ -157,17 +157,27 @@ flutter pub get
 
 2. **Configure API Endpoint**
 
-`lib/config/api_config.dart` defaults to the production API:
+`lib/config/api_config.dart` points at the ngrok tunnel while the platform is
+in testing:
 
 ```dart
 static const String baseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://api.brin.fajrianhost.my.id/api',
+  defaultValue: 'https://nucleus-drone-grueling.ngrok-free.dev/api',
 );
 ```
 
-Point it somewhere else per build — **no file edit needed**, and no checkout
-ever carries someone's private tunnel address:
+It is a *reserved* ngrok domain, so it survives tunnel restarts — but it only
+reaches anything while `ngrok http 8000` is running on the machine hosting
+Octane.
+
+The production address `https://api.brin.fajrianhost.my.id/api` was the
+default for a while and had to be reverted: the `api.brin` subdomain has no
+DNS record yet, so every build made without an override could not connect, on
+web and Android alike. Make it the default again once that record exists and
+the backend is deployed behind it.
+
+Point it somewhere else per build — **no file edit needed**:
 
 ```bash
 # Android emulator → host machine
