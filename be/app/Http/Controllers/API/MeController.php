@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
 use App\Models\UserActivity;
+use App\Services\ModelHealthChecker;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Self-service endpoints for the signed-in user.
@@ -92,6 +94,59 @@ class MeController extends Controller
                     : $m->health_check_error,
             ]),
         ]);
+    }
+
+    /**
+     * How fresh a status has to be for the refresh button to accept it as is.
+     *
+     * The scheduler probes every minute now, and a button pressed twice in a
+     * row should not probe twice: the second press is a person waiting, not new
+     * information.
+     */
+    private const FRESH_SECONDS = 10;
+
+    /**
+     * POST /api/me/models/refresh
+     *
+     * Probe the endpoints, then answer exactly as {@see models()} does.
+     *
+     * The scheduled check runs once a minute, which is right for a status light
+     * nobody is watching and wrong for the moment someone is about to spend
+     * twenty minutes uploading. This is the one place an ordinary user causes an
+     * outbound request, so it is fenced three ways: the route is throttled, a
+     * lock stops concurrent presses from fanning out into duplicate probes, and
+     * a status younger than [FRESH_SECONDS] is returned untouched.
+     *
+     * Worst case it holds a worker for one probe timeout — the probes themselves
+     * run as a pool, so several models cost the slowest one rather than all.
+     */
+    public function refreshModels(ModelHealthChecker $checker)
+    {
+        $models = Model::where('is_active', true)
+            ->whereNotNull('endpoint_url')
+            ->get();
+
+        $stale = $models->filter(
+            fn (Model $model) => $model->last_health_check === null
+                || $model->last_health_check->lt(now()->subSeconds(self::FRESH_SECONDS))
+        );
+
+        if ($stale->isNotEmpty()) {
+            // Non-blocking: a press that arrives while another probe is in
+            // flight reads that probe's result a moment later instead of
+            // starting a second one.
+            $lock = Cache::lock('models:probe', ModelHealthChecker::TIMEOUT_SECONDS + 2);
+
+            if ($lock->get()) {
+                try {
+                    $checker->checkMany($stale);
+                } finally {
+                    $lock->release();
+                }
+            }
+        }
+
+        return $this->models();
     }
 
     /**

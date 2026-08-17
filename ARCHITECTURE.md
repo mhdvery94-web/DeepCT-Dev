@@ -543,7 +543,7 @@ fitur yang baru saja dibangun:
 |---|---|
 | **Octane/RoadRunner** — server yang hidup terus | Fungsi serverless yang mati setelah tiap request |
 | **`queue:work`** — proses jaga untuk interpolasi | Tidak ada proses jaga sama sekali |
-| **Health check tiap 10 detik** | Vercel Cron minimum **1 menit** |
+| ~~Health check tiap 10 detik~~ | ~~Vercel Cron minimum **1 menit**~~ — tidak berlaku lagi sejak health check turun jadi sekali semenit |
 | **Job prediksi sampai 7200 detik** | Batas eksekusi fungsi jauh di bawah itu |
 | **Berkas hasil sampai ~1,5 GB per job** | Filesystem sementara, hanya `/tmp`, hilang tiap invocation |
 

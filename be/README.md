@@ -636,10 +636,15 @@ php artisan route:clear
 #### `serve:all` caches routes, and deliberately does not cache config
 
 `preserve:all` runs `route:cache` before the three processes start. The reason
-is the scheduler: `models:health-check` runs every ten seconds, each run is a
-fresh `php artisan` process, and without the cache every one of them recompiles
-the whole route table first. Measured on this machine, one run went from
+is the scheduler: `models:health-check` runs on a timer, each run is a fresh
+`php artisan` process, and without the cache every one of them recompiles the
+whole route table first. Measured on this machine, one run went from
 **~2400 ms to ~700 ms**.
+
+That measurement is also why the cadence is now once a minute rather than every
+ten seconds: six runs a minute at 600 ms each is about 6% of a core, for ever.
+Freshness at the moment it matters comes from `POST /api/me/models/refresh`
+instead, which the upload screen's refresh button calls.
 
 **`config:cache` is not in there, and adding it will eventually cost someone
 their development database.** With `bootstrap/cache/config.php` present, the

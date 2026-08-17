@@ -186,6 +186,59 @@ class AuthorizationTest extends TestCase
             ->assertJsonCount(0, 'data');
     }
 
+    /**
+     * The refresh button probes rather than re-reading.
+     *
+     * A status the scheduler wrote a minute ago is exactly what the person
+     * pressing refresh is trying to get past, so the endpoint has to reach the
+     * model itself and write the new verdict.
+     */
+    public function test_refreshing_models_probes_the_endpoint(): void
+    {
+        \Illuminate\Support\Facades\Http::fake([
+            '*' => \Illuminate\Support\Facades\Http::response('', 404),
+        ]);
+
+        $model = Model::create([
+            'name' => 'Test Model', 'version' => 'v1',
+            'endpoint_url' => 'https://worker.example/predict',
+            'status' => 'offline', 'is_active' => true, 'max_concurrent_jobs' => 1,
+            'last_health_check' => now()->subMinutes(5),
+        ]);
+
+        $token = $this->tokenAs($this->researcher);
+
+        // 404 on the tunnel root means FastAPI answered: only /predict exists.
+        $this->apiAs($token)->postJson('/api/me/models/refresh')
+            ->assertOk()
+            ->assertJsonPath('data.0.is_available', true);
+
+        $this->assertSame('online', $model->fresh()->status);
+        \Illuminate\Support\Facades\Http::assertSentCount(1);
+    }
+
+    /** A second press moments later reads the first press's answer. */
+    public function test_refreshing_twice_does_not_probe_twice(): void
+    {
+        \Illuminate\Support\Facades\Http::fake([
+            '*' => \Illuminate\Support\Facades\Http::response('', 404),
+        ]);
+
+        Model::create([
+            'name' => 'Test Model', 'version' => 'v1',
+            'endpoint_url' => 'https://worker.example/predict',
+            'status' => 'offline', 'is_active' => true, 'max_concurrent_jobs' => 1,
+            'last_health_check' => now()->subMinutes(5),
+        ]);
+
+        $token = $this->tokenAs($this->researcher);
+
+        $this->apiAs($token)->postJson('/api/me/models/refresh')->assertOk();
+        $this->apiAs($token)->postJson('/api/me/models/refresh')->assertOk();
+
+        \Illuminate\Support\Facades\Http::assertSentCount(1);
+    }
+
     public function test_an_admin_cannot_delete_their_own_account(): void
     {
         $token = $this->tokenAs($this->admin);

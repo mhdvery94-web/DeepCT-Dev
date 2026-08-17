@@ -1,32 +1,37 @@
 name: Release
 
-# Builds the client targets and publishes them.
+# Builds the clients, deploys the web one, and publishes the lot.
 #
-# Three ways in, and they do different amounts of work:
+#   any branch   tests, web, and a Vercel preview URL
+#   main         adds Android and iOS, deploys web to production, and refreshes
+#                the rolling `latest` pre-release with all three files
+#   tag v*       the same, published as a real versioned release, plus Drive
+#   manual run   the same as a tag, minus the release itself
 #
-#   push to main      tests, then web + Android. The APK is attached to the
-#                     run as an artifact, so every change on main has a build
-#                     you can install without waiting for a release.
-#   push a tag        all three targets, a GitHub Release, and Google Drive:
-#                         git tag v1.2.0 && git push origin v1.2.0
-#   Actions → Run     same as a tag, minus the Release itself.
+# WHY IT IS ONE WORKFLOW
 #
-# iOS is deliberately left out of the main-push path. It needs a macOS runner,
-# which bills at ten times the rate of ubuntu, and an unsigned build that nobody
-# can install is not worth that on every commit.
+# Deploying used to live in its own file, which meant every push to main ran
+# `flutter build web` twice — once to make the release zip, once to make the
+# thing that got deployed. The `web` job builds it once now and both consumers
+# take the artifact.
+#
+# WHAT MAKES IT FASTER
+#
+# - `web`, `android` and `ios` no longer wait for `test`. They run beside it,
+#   and `publish` is what waits for all four. A red test suite still cannot
+#   publish anything; it just no longer adds its own minutes to the wall clock
+#   before the first build starts.
+# - Gradle and pub caches. An uncached Android job spends several minutes
+#   re-downloading dependencies that never changed.
 #
 # There is no `paths:` filter. It would skip builds for backend-only pushes,
 # but GitHub does not apply path filters to tag pushes consistently, and a
 # release that silently does not run is a far worse failure than a few spent
 # minutes.
-#
-# Artifacts go to a GitHub Release, and — when the Drive secrets are present —
-# to Google Drive as well. The Drive step is skipped rather than failed when it
-# is not configured, so the release still happens.
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
     tags: ['v*']
   workflow_dispatch:
     inputs:
@@ -45,16 +50,16 @@ env:
   # Keep in step with fe/vercel-build.sh. This is the SDK the tree is actually
   # developed and verified against.
   FLUTTER_VERSION: '3.44.9'
-  # Where the built clients look for the backend. Set the repository variable
-  # API_BASE_URL to change it without touching this file.
+  # Where the built clients look for the backend. It is compiled in, so it has
+  # to be decided here rather than at run time. NGROK_BE is the repository
+  # variable in use; API_BASE_URL is honoured for anyone still setting it.
   API_BASE_URL: >-
     ${{ github.event.inputs.api_base_url
+        || vars.NGROK_BE
         || vars.API_BASE_URL
-        || 'https://api.brin.fajrianhost.my.id/api' }}
+        || 'https://nucleus-drone-grueling.ngrok-free.dev/api' }}
 
 jobs:
-  # Nothing is published from a tree that does not pass its own tests. Two
-  # minutes, and it has caught more than it has delayed.
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -66,6 +71,12 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('fe/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
       - name: Analyze and test
         working-directory: fe
         run: |
@@ -75,7 +86,6 @@ jobs:
 
   web:
     name: Web
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,12 +95,22 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('fe/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
       - name: Build
         working-directory: fe
         run: |
+          echo "Building against $API_BASE_URL"
           flutter pub get
           flutter build web --release --dart-define=API_BASE_URL=$API_BASE_URL
 
+      # Twice, deliberately: the zip is what a release ships, the directory is
+      # what the deploy job hands to Vercel. Unzipping to deploy would work too,
+      # and would cost a step on every deployment to save one here.
       - name: Package
         working-directory: fe/build/web
         run: zip -r "$GITHUB_WORKSPACE/brin-neutron-ct-web.zip" .
@@ -100,14 +120,78 @@ jobs:
           name: web
           path: brin-neutron-ct-web.zip
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: fe/build/web
+
+  vercel:
+    name: Deploy to Vercel
+    needs: web
+    runs-on: ubuntu-latest
+    # Vercel's own Git integration is not used: on the Hobby plan with a private
+    # repository it refuses any commit whose author is not the account owner,
+    # which blocked every deployment this project ever made. A deployment made
+    # with a token is attributed to the token's owner, so that check never runs.
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: .vercel/output/static
+
+      # A prebuilt deployment takes its routing from this file and ignores
+      # vercel.json. The rewrite is what stops a deep link answering 404 on
+      # reload; the cache headers are what stop a visitor being pinned to an
+      # old build for ever.
+      - name: Describe the output
+        run: |
+          cat > .vercel/output/config.json <<'JSON'
+          {
+            "version": 3,
+            "routes": [
+              {
+                "src": "^/assets/(.*)$",
+                "headers": { "cache-control": "public, max-age=31536000, immutable" },
+                "continue": true
+              },
+              {
+                "src": "^/(index\\.html|flutter_service_worker\\.js|version\\.json)$",
+                "headers": { "cache-control": "public, max-age=0, must-revalidate" },
+                "continue": true
+              },
+              { "handle": "filesystem" },
+              { "src": "/.*", "dest": "/index.html" }
+            ]
+          }
+          JSON
+
+      - name: Deploy
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            npx --yes vercel@latest deploy --prebuilt --prod \
+              --token="${{ secrets.VERCEL_TOKEN }}" | tee url.txt
+          else
+            npx --yes vercel@latest deploy --prebuilt \
+              --token="${{ secrets.VERCEL_TOKEN }}" | tee url.txt
+          fi
+          {
+            echo "### Deployed"
+            tail -1 url.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
   android:
     name: Android APK
-    needs: test
+    # Feature branches get tests and a preview URL; an APK nobody asked for is
+    # six minutes of runner time per push.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -116,6 +200,22 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('fe/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      # The single biggest saving in this file. Without it every run
+      # re-downloads the Android Gradle Plugin and its dependency tree.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('fe/android/**/*.gradle*', 'fe/android/**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
 
       - name: Build
         working-directory: fe
@@ -132,9 +232,10 @@ jobs:
 
   ios:
     name: iOS
-    needs: test
-    # Tags and manual runs only — see the note at the top about macOS billing.
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    # macOS runners bill at ten times the ubuntu rate, so this stays off feature
+    # branches. On main it runs, because a release is expected to carry all
+    # three clients.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     # iOS can only be built on macOS, and this is the whole point of the job:
     # it produces an iOS build without anyone owning a Mac.
     runs-on: macos-latest
@@ -145,6 +246,21 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('fe/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      # There is no Podfile in the repository — Flutter writes one during the
+      # build from the plugin list — so the CocoaPods spec repo is keyed on the
+      # thing that decides that list.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cocoapods
+          key: pods-${{ runner.os }}-${{ hashFiles('fe/pubspec.lock') }}
+          restore-keys: pods-${{ runner.os }}-
 
       - name: Build (unsigned)
         working-directory: fe
@@ -171,12 +287,11 @@ jobs:
 
   publish:
     name: Publish
-    needs: [web, android, ios]
-    # A push to main stops after the builds: the APK is on the run, and there
-    # is nothing to release. Without this the job would be skipped anyway —
-    # `needs` a job that did not run — but saying so is clearer than relying
-    # on that.
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    # `test` is here rather than in front of the builds. Nothing is published
+    # from a tree that does not pass its own tests; the builds simply no longer
+    # queue behind the suite to find that out.
+    needs: [test, web, android, ios]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -187,23 +302,23 @@ jobs:
       RCLONE_DRIVE_TOKEN: ${{ secrets.RCLONE_DRIVE_TOKEN }}
       GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
     steps:
+      # By name rather than `merge-multiple`, so the unpacked web directory does
+      # not land in the same folder as the three files being released.
       - uses: actions/download-artifact@v4
-        with:
-          merge-multiple: true
+        with: { name: web, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: android, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: ios, path: dist }
 
       - name: List what was built
-        run: ls -lh
+        run: ls -lh dist
 
       - name: GitHub Release
-        # Tags only. A manual run still leaves the artifacts on the run itself,
-        # without inventing a release for an untagged commit.
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            brin-neutron-ct-web.zip
-            brin-neutron-ct.apk
-            brin-neutron-ct-ios-unsigned.ipa
+          files: dist/*
           generate_release_notes: true
           body: |
             **Web** — unzip and serve as static files.
@@ -211,6 +326,29 @@ jobs:
             **iOS** — unsigned; signing needs an Apple Developer account.
 
             All three were compiled against `${{ env.API_BASE_URL }}`.
+
+      # A push to main refreshes one long-lived pre-release instead of creating
+      # a new one each time, so the download links never change. Note that the
+      # `latest` tag itself stays where it was first created — the files are
+      # replaced, and the body below is what says which commit they came from.
+      - name: Rolling build from main
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build from main
+          prerelease: true
+          files: dist/*
+          body: |
+            Automatic build of `${{ github.sha }}`, compiled against
+            `${{ env.API_BASE_URL }}`.
+
+            This pre-release is replaced on every push to `main`. For a build
+            that stays put, push a version tag.
+
+            **Web** — unzip and serve as static files.
+            **Android** — `brin-neutron-ct.apk`, universal build.
+            **iOS** — unsigned; signing needs an Apple Developer account.
 
       # rclone with an OAuth token for a *personal* Google account, not a
       # service account. That choice matters: a service account has no Drive
@@ -227,7 +365,9 @@ jobs:
       # RCLONE_DRIVE_TOKEN, and the destination folder id — the last segment of
       # the folder's URL — into GDRIVE_FOLDER_ID.
       - name: Upload to Google Drive
-        if: env.RCLONE_DRIVE_TOKEN != '' && env.GDRIVE_FOLDER_ID != ''
+        if: >-
+          env.RCLONE_DRIVE_TOKEN != '' && env.GDRIVE_FOLDER_ID != ''
+          && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch')
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -241,9 +381,7 @@ jobs:
           RELEASE_DIR="${GITHUB_REF_NAME:-manual-$(date +%Y%m%d-%H%M)}"
 
           rclone mkdir "gdrive:$RELEASE_DIR"
-          rclone copy brin-neutron-ct-web.zip          "gdrive:$RELEASE_DIR" -P
-          rclone copy brin-neutron-ct.apk              "gdrive:$RELEASE_DIR" -P
-          rclone copy brin-neutron-ct-ios-unsigned.ipa "gdrive:$RELEASE_DIR" -P
+          rclone copy dist "gdrive:$RELEASE_DIR" -P
 
           echo "Uploaded to Drive folder: $RELEASE_DIR"
 

@@ -96,6 +96,7 @@ belum diumumkan tidak bisa ditemukan dengan menebak id.
 | `GET` | `/me/stats` | Penghitung untuk dashboard peneliti |
 | `GET` | `/me/activities` | Jejak audit milik sendiri, berpaginasi |
 | `GET` | `/me/models` | Model yang boleh dipakai |
+| `POST` | `/me/models/refresh` | Sama, tapi **memprobe endpoint-nya dulu**. Throttle 10/menit |
 | `POST` | `/me/avatar` | Pasang foto profil sendiri (multipart `avatar`) |
 | `DELETE` | `/me/avatar` | Hapus foto profil sendiri |
 | `GET` | `/users/{id}/avatar` | Foto profil siapa pun. **Butuh login.** |
@@ -115,6 +116,14 @@ tidak ada jalan membaca data akun lain.
 **`GET /me/models`** mengembalikan `id`, `name`, `version`, `status`,
 `description`, `accuracy`, `is_available`. **Tidak pernah `endpoint_url`** —
 lihat ARCHITECTURE.md §3.
+
+**`POST /me/models/refresh`** mengembalikan payload yang sama persis, tapi
+memprobe endpoint-nya lebih dulu alih-alih membaca hasil terakhir scheduler.
+Ini satu-satunya route di mana pengguna biasa memicu request keluar, jadi ada
+tiga pagar: throttle 10/menit, kunci `models:probe` supaya dua penekanan
+bersamaan tidak jadi dua probe, dan status yang lebih muda dari **10 detik**
+dikembalikan apa adanya. Karena ia menunggu jaringan, responsnya bisa memakan
+beberapa detik saat tunnel mati — itu jawaban jujur, bukan endpoint yang lambat.
 
 ### Foto profil
 

@@ -33,6 +33,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.5] - 2026-08-17
+
+### The health check stops running six times a minute
+
+`models:health-check` ran every ten seconds. Each run is a fresh `php artisan`
+process — about 600 ms of CPU even with the route cache — so it cost roughly
+**6% of a core, continuously**, landing on top of Octane, MySQL and the queue
+worker. A login that should take 500 ms was measured at 5.7 s when it collided
+with one.
+
+It now runs **once a minute**. Sixty seconds of staleness is not worse than ten
+for what this actually drives: a status light answering "is it worth starting an
+upload?". Nobody can tell the difference by looking.
+
+What *does* need to be immediate is the moment someone is about to upload — and
+that is now a button rather than a cadence. **`POST /me/models/refresh` probes
+the endpoints** and answers exactly as `GET /me/models` does. The refresh
+control in the upload screen already existed; it re-read what the scheduler had
+last written, which is precisely the stale answer the person pressing it was
+trying to get past.
+
+It is the only route where an ordinary user causes an outbound request, so it is
+fenced three ways: `throttle:10,1`, a `models:probe` lock so two presses do not
+become two probes, and a status younger than ten seconds returned untouched.
+Probes run as a pool, so several models cost the slowest rather than all of them.
+
+Verified after the Octane restart, on the same machine as the numbers in 1.19.4:
+
+| | before | after |
+|---|---|---|
+| `GET /api/me/models` | 1668 / 2631 ms | **22–50 ms** |
+| `GET /api/notifications/unread-count` | 2592 ms | **45–97 ms** |
+| `GET /api/predictions` | reported 16 s | **33–58 ms** |
+| `POST /api/login` | reported 25–40 s | **526–804 ms**, two spikes |
+
+Login's floor is `Hash::check` at `BCRYPT_ROUNDS=12`, measured at **433 ms** on
+this CPU. That cost is the point of bcrypt and is left alone.
+
+One consequence worth recording: ARCHITECTURE §8 listed "health check every ten
+seconds" as one of five reasons the backend cannot run on Vercel. That reason no
+longer holds. The other four — Octane, `queue:work`, 7200-second jobs, 1.5 GB of
+results — are untouched, and each is sufficient on its own.
+
+### One workflow instead of two, and iOS on every push to main
+
+Deploying lived in its own file, which meant **every push to main ran
+`flutter build web` twice** — once for the release zip, once for the thing that
+got deployed. The `web` job builds it once now and both consumers take the
+artifact.
+
+`ios` and `android` now run on pushes to `main`, not only on tags, and a push to
+main refreshes a rolling `latest` pre-release carrying all three files. A tag
+still produces a real versioned release. Feature branches get tests, a web build
+and a Vercel preview URL — an APK and a macOS runner per feature push is not
+worth it.
+
+The macOS runner bills at ten times the ubuntu rate. On main that is a deliberate
+purchase; it is why feature branches are excluded rather than the job being
+unconditional.
+
+Three changes for build time:
+
+- **`web`, `android` and `ios` no longer wait for `test`.** They run beside it
+  and `publish` waits for all four, so a red suite still cannot publish
+  anything — it just no longer adds its minutes to the wall clock before the
+  first build starts.
+- **Gradle cache** on `~/.gradle/caches` and `~/.gradle/wrapper`. An uncached
+  Android job spends minutes re-downloading a dependency tree that never
+  changed. This is the single biggest saving.
+- **pub and CocoaPods caches**, keyed on `pubspec.lock`.
+
+`setup-java` moves to v5, which GitHub's own deprecation notice names. The other
+actions stay on v4: the Node 20 warning is not fatal, and a version tag that does
+not exist fails the run outright.
+
+`php artisan test` → **227 passed (919 assertions)**.
+
+---
+
 ## [1.19.4] - 2026-08-17
 
 ### The API was slow because two schedulers were running

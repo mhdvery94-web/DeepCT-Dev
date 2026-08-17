@@ -82,6 +82,26 @@ class MeService {
   Future<List<AvailableModel>> models() async {
     final body = await _api.get(ApiConfig.meModels);
 
+    return _parseModels(body);
+  }
+
+  /// POST /me/models/refresh — probe the endpoints, then answer as [models].
+  ///
+  /// The difference matters at the one moment it is used. [models] reports what
+  /// the scheduler last wrote, and the scheduler runs once a minute; this asks
+  /// the endpoints directly. Someone about to spend twenty minutes uploading
+  /// should not be told a minute-old "online" about a tunnel that has since
+  /// expired.
+  ///
+  /// It can take a few seconds when an endpoint is unreachable — that is the
+  /// probe timing out, and it is the honest answer rather than a slow one.
+  Future<List<AvailableModel>> refreshModels() async {
+    final body = await _api.post(ApiConfig.meModelsRefresh);
+
+    return _parseModels(body);
+  }
+
+  List<AvailableModel> _parseModels(Map<String, dynamic> body) {
     return (body['data'] as List? ?? [])
         .map(
           (e) => AvailableModel.fromJson(Map<String, dynamic>.from(e as Map)),

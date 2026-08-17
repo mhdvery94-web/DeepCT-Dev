@@ -99,11 +99,15 @@ class _UploadScreenState extends State<UploadScreen> {
   /// [_loadModels] shows on first entry -- a model reported offline is the
   /// whole reason to press this, and losing the file already picked in step 2
   /// while checking would defeat the point.
+  ///
+  /// This probes the endpoints rather than re-reading the scheduler's last
+  /// answer, which is a minute old at worst. Pressing refresh and being told
+  /// the same stale thing is not a refresh.
   Future<void> _refreshModels() async {
     setState(() => _refreshingModels = true);
 
     try {
-      final models = await _meService.models();
+      final models = await _meService.refreshModels();
       if (!mounted) return;
 
       final currentId = _selectedModel?.id;

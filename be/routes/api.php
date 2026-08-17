@@ -81,6 +81,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/stats', [MeController::class, 'stats'])->name('api.me.stats');
         Route::get('/models', [MeController::class, 'models'])->name('api.me.models');
 
+        // The refresh button in the upload screen. It probes the endpoints
+        // rather than re-reading what the scheduler last wrote, because the
+        // person pressing it is about to upload and wants to know *now*.
+        // Throttled: it is the one route where an ordinary user causes an
+        // outbound request, and a held button should not become a fan-out.
+        Route::post('/models/refresh', [MeController::class, 'refreshModels'])
+            ->middleware('throttle:10,1')
+            ->name('api.me.models.refresh');
+
         // Own profile photo.
         Route::post('/avatar', [AvatarController::class, 'updateOwn'])->name('api.me.avatar.update');
         Route::delete('/avatar', [AvatarController::class, 'destroyOwn'])->name('api.me.avatar.destroy');

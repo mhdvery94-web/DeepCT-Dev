@@ -49,7 +49,7 @@ Full component and schema documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 | **Resumable upload** | Chunked, resumable on both sides; server-computed chunk size; an interrupted upload is offered back on the device |
 | **Frame preview** | 16-bit TIFF rendered to PNG server-side, in pure PHP — no imaging extension required |
 | **Retention** | Results deleted 24 hours after generation; the record and its audit trail remain |
-| **Model registry** | Multiple inference endpoints, health-checked every 10 seconds, with live availability in both consoles |
+| **Model registry** | Multiple inference endpoints, health-checked every minute and on demand from the upload screen, with live availability in both consoles |
 | **Managed training** | Datasets, a job queue, and a GPU worker protocol that survives the worker dying mid-run |
 | **Access control** | Admin-created accounts, no self-registration, forced replacement of issued passwords |
 | **Messaging** | In-app conversations with administrators, plus a public channel for people who cannot sign in |
