@@ -492,6 +492,14 @@ Kalau dorongannya gagal — trainer menolak atau tidak terjangkau — job tetap
 `queued`. Push yang gagal tidak boleh membuat job terlantar; worker yang
 mem-polling masih bisa mengambilnya.
 
+**Alamat callback divalidasi sebelum dikirim.** `APP_URL` di hampir semua mesin
+pengembangan masih `http://localhost`, dan GPU di internet jelas tidak bisa
+menjangkaunya. Tanpa pemeriksaan itu dispatch-nya sukses, trainer menerima, lalu
+setiap laporan baliknya gagal diam-diam — job duduk di `queued` selamanya tanpa
+ada yang menjelaskan kenapa. Sekarang ditolak **422** dengan pesan yang
+menyebutkan variabel mana yang harus diisi. Ini ketahuan dari uji langsung,
+bukan dari membaca kode.
+
 ### Ukurannya
 
 Setara seluruh FASE 3 — tabel, endpoint, worker protocol, layar admin, dan

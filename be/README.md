@@ -529,7 +529,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**224 tests, 907 assertions, ~70s.** They run against MySQL, not sqlite: three
+**225 tests, 910 assertions, ~70s.** They run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:
@@ -571,6 +571,11 @@ application:
   when a transaction rolls back, so ids keep climbing across tests and
   `/access-requests/1/approve` starts 404ing part-way through a suite. Read the
   id back from the model.
+- **Never run two suites at once.** They share `db_aict_test`, and
+  `RefreshDatabase` starts each run with `migrate:fresh` — two runs racing that
+  produce `SQLSTATE[42S01]: Table 'cache_locks' already exists` and dozens of
+  unrelated-looking failures. The code is fine; the second run is the bug. This
+  is easy to do by accident when one run has been backgrounded.
 - **Uploading a file? `post()` with an explicit `Accept: application/json`.**
   `postJson` cannot carry a file, and a plain `post` makes Laravel answer a
   failed validation with a 302 redirect, so the failure reads as "expected 422,

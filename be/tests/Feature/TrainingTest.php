@@ -439,7 +439,10 @@ class TrainingTest extends TestCase
         // The same shape as a prediction: the platform posts to a URL on the
         // GPU host, which starts the work and reports back.
         Http::fake(['https://gpu.example.org/*' => Http::response(['accepted' => true])]);
-        config(['training.trainer_url' => 'https://gpu.example.org/train']);
+        config([
+            'training.trainer_url' => 'https://gpu.example.org/train',
+            'training.callback_url' => 'https://platform.example.org',
+        ]);
 
         $job = $this->makeJob();
 
@@ -469,7 +472,10 @@ class TrainingTest extends TestCase
         // proves it started. Marking it running here would leave a job that
         // never began looking healthy forever.
         Http::fake(['*' => Http::response(['accepted' => true])]);
-        config(['training.trainer_url' => 'https://gpu.example.org/train']);
+        config([
+            'training.trainer_url' => 'https://gpu.example.org/train',
+            'training.callback_url' => 'https://platform.example.org',
+        ]);
 
         $job = $this->makeJob();
 
@@ -483,7 +489,10 @@ class TrainingTest extends TestCase
     public function test_a_trainer_url_can_be_given_per_dispatch(): void
     {
         Http::fake(['*' => Http::response(['accepted' => true])]);
-        config(['training.trainer_url' => null]);
+        config([
+            'training.trainer_url' => null,
+            'training.callback_url' => 'https://platform.example.org',
+        ]);
 
         $job = $this->makeJob();
 
@@ -503,7 +512,10 @@ class TrainingTest extends TestCase
 
     public function test_dispatch_without_a_trainer_url_says_so(): void
     {
-        config(['training.trainer_url' => null]);
+        config([
+            'training.trainer_url' => null,
+            'training.callback_url' => 'https://platform.example.org',
+        ]);
         $job = $this->makeJob();
 
         $this->apiAs($this->adminToken())
@@ -530,7 +542,10 @@ class TrainingTest extends TestCase
     public function test_a_trainer_that_refuses_is_reported_as_such(): void
     {
         Http::fake(['*' => Http::response(['error' => 'busy'], 503)]);
-        config(['training.trainer_url' => 'https://gpu.example.org/train']);
+        config([
+            'training.trainer_url' => 'https://gpu.example.org/train',
+            'training.callback_url' => 'https://platform.example.org',
+        ]);
 
         $job = $this->makeJob();
 
@@ -543,10 +558,34 @@ class TrainingTest extends TestCase
         $this->assertSame('queued', $job->fresh()->status);
     }
 
+    public function test_a_callback_the_gpu_cannot_reach_is_refused(): void
+    {
+        // APP_URL is left at http://localhost on almost every development
+        // machine. Without this check the dispatch succeeds, the trainer
+        // accepts, and then every callback it makes fails silently -- the job
+        // sits at `queued` forever and nothing says why.
+        Http::fake();
+        config([
+            'training.trainer_url' => 'https://gpu.example.org/train',
+            'training.callback_url' => 'http://localhost',
+        ]);
+
+        $job = $this->makeJob();
+
+        $this->apiAs($this->adminToken())
+            ->postJson("/api/admin/training/jobs/{$job->id}/dispatch")
+            ->assertStatus(422);
+
+        Http::assertNothingSent();
+    }
+
     public function test_only_a_queued_job_can_be_dispatched(): void
     {
         Http::fake();
-        config(['training.trainer_url' => 'https://gpu.example.org/train']);
+        config([
+            'training.trainer_url' => 'https://gpu.example.org/train',
+            'training.callback_url' => 'https://platform.example.org',
+        ]);
 
         $job = $this->makeJob(['status' => 'running']);
 

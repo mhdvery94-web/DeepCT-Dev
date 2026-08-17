@@ -62,7 +62,14 @@ Three things make it work where a naive version would not:
   session expiring.
 
 A failed push leaves the job queued, so a polling worker can still take it.
-Polling remains the safety net; this is the button. 8 tests.
+Polling remains the safety net; this is the button.
+
+Live testing caught one more: the callback address handed to the trainer came
+from `APP_URL`, still `http://localhost` on every development machine, which a
+GPU host on the internet can never reach. The dispatch would succeed, the
+trainer would accept, and every report back would fail silently — a job stuck at
+`queued` with nothing saying why. That is now refused with a 422 naming the
+variable to set. 9 tests.
 
 #### iOS
 

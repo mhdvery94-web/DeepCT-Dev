@@ -474,6 +474,7 @@ trainer bisa melatih dengan sempurna lalu tidak punya tempat menaruh hasilnya.
 |---|---|
 | Job bukan `queued` | **409** |
 | Tidak ada trainer URL / worker token | **422** |
+| `callback` menunjuk ke `localhost` | **422** — GPU di internet tidak bisa menjangkaunya |
 | Trainer menolak atau tidak terjangkau | **502**, job **tetap `queued`** |
 
 Job **tetap `queued`** setelah berhasil dikirim. Trainer bilang ia *menerima*;

@@ -119,7 +119,7 @@ the status code alone never confirms success.
 ## Testing
 
 ```bash
-cd be && php artisan test        # 224 tests
+cd be && php artisan test        # 225 tests
 cd fe && flutter analyze         # must be clean
 cd fe && flutter test            # 120 tests
 ```

@@ -274,6 +274,21 @@ class TrainingController extends Controller
         }
 
         $callback = rtrim((string) config('training.callback_url'), '/');
+
+        // A GPU host on the other side of the internet cannot reach
+        // `http://localhost`, and `APP_URL` is left at that default on almost
+        // every development machine. Without this check the dispatch succeeds,
+        // the trainer accepts, and then every callback it makes fails silently
+        // — the job sits at `queued` forever and nothing says why.
+        if ($this->isUnreachableFromOutside($callback)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The callback address is ' . ($callback ?: 'empty')
+                    . ', which the GPU host cannot reach. Set TRAINING_CALLBACK_URL '
+                    . '(or APP_URL) to an address reachable from outside this machine.',
+            ], 422);
+        }
+
         $dataset = $job->dataset;
 
         try {
@@ -549,6 +564,22 @@ class TrainingController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * True when a remote worker could not possibly call this address back.
+     *
+     * Only the cases that are certainly wrong: an empty value, and the loopback
+     * names. A LAN address may be perfectly correct when the GPU is on the same
+     * network, so it is not refused.
+     */
+    private function isUnreachableFromOutside(string $callback): bool
+    {
+        if ($callback === '') return true;
+
+        $host = parse_url($callback, PHP_URL_HOST);
+
+        return in_array($host, ['localhost', '127.0.0.1', '::1', '0.0.0.0'], true);
     }
 
     /** Guzzle messages carry the whole URL and stack noise; trim them. */
