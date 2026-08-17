@@ -224,12 +224,27 @@ Sisi backend sudah dibangun dan lulus test:
 - [x] `TrainerDispatcher` — dipakai bersama oleh admin dan peneliti
 - [x] Test: 7 baru, 36 lama tetap hijau
 
+- [x] Unggah dataset **chunked** — `POST /predictions/uploads` menerima
+      `purpose: training`, memakai ulang sesi resumable yang sudah ada
+- [x] Kolom upload dicabut dari `POST /admin/training/datasets`; admin
+      mendaftarkan URL saja
+
 Yang **belum**:
 
-- [ ] **Layar Flutter untuk peneliti.** Belum ada satu pun. Endpoint-nya hidup
-      tapi tidak ada pintu masuk di aplikasi — cerminan `upload_screen` dan
-      `prediction_history_screen`, plus layar hasil yang menggambar kurva dari
+- [ ] **Layar Flutter untuk peneliti.** Belum ada satu pun, dan ini bagian
+      terbesar yang tersisa. Endpoint-nya hidup dan teruji tapi tidak ada pintu
+      masuk di aplikasi. Yang dibutuhkan: entri `UserSection.training` di
+      `user_shell.dart`, satu layar mulai-run (unggah chunked + nama + jumlah
+      epoch), daftar run, dan layar hasil yang menggambar kurva dari
       `data.history`.
+
+      Tiga hal kecil yang belum ada dan dibutuhkan layar itu: `ApiConfig`
+      belum punya entri `meTrainingJobs`, `ApiClient` belum punya pembantu
+      untuk mengirim satu chunk, dan berkas layanannya harus bernama sendiri —
+      `training_service.dart` sudah dipakai konsol admin.
+- [ ] **Kolom upload di layar admin Flutter** masih ada padahal backend sudah
+      menolaknya. Harus dicabut bersamaan, atau admin akan menekan tombol yang
+      dijawab 422.
 - [ ] **Menyalakan `kind` di layar admin.** Backend menerima `kind` saat
       mendaftarkan model; form admin belum menawarkannya, jadi trainer baru
       bisa didaftarkan lewat API.

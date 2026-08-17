@@ -129,25 +129,26 @@ class TrainingTest extends TestCase
             ->assertJsonValidationErrors(['source_url']);
     }
 
-    public function test_an_uploaded_dataset_is_checksummed(): void
+    /**
+     * An administrator registers where data already lives; they do not carry
+     * it. Pushing 20 GB up a home tunnel so the GPU host can pull it back down
+     * is absurd when the worker can fetch it directly, and uploading is the
+     * researcher's path anyway — chunked, resumable, and theirs.
+     */
+    public function test_an_admin_cannot_upload_a_dataset(): void
     {
-        // So a worker can prove it fetched the archive intact before spending
-        // hours training on a truncated one.
         $path = tempnam(sys_get_temp_dir(), 'ds') . '.zip';
         file_put_contents($path, "PK\x03\x04" . str_repeat('D', 512));
 
         $this->apiAs($this->adminToken())
             ->postForm('/api/admin/training/datasets', [
                 'name' => 'Small set',
-                'source_type' => 'upload',
                 'archive' => new UploadedFile($path, 'set.zip', 'application/zip', null, true),
             ])
-            ->assertCreated();
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['source_url']);
 
-        $dataset = TrainingDataset::firstOrFail();
-        $this->assertNotNull($dataset->archive_path);
-        $this->assertNotNull($dataset->checksum);
-        Storage::assertExists($dataset->archive_path);
+        $this->assertSame(0, TrainingDataset::count());
     }
 
     public function test_a_dataset_in_use_cannot_be_deleted(): void

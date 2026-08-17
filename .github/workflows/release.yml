@@ -477,81 +477,79 @@ jobs:
       - name: List what was built
         run: ls -lh dist
 
-      # Both release steps take the token explicitly. It defaults to
-      # GITHUB_TOKEN, which is what should be used — but when that token is the
-      # problem there is nowhere to intervene. `Resource not accessible by
-      # integration` is a 403 from the releases API, and it has two causes:
-      # Settings → Actions → General → Workflow permissions set to read-only,
-      # or GitHub being unwell. If the first turns out to be unfixable, a
-      # fine-grained PAT with `contents: write` in the repository secret
-      # RELEASE_TOKEN takes over without this file changing again.
-      - name: GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          files: dist/*
-          # A release missing the APK is worse than a run that failed loudly.
-          fail_on_unmatched_files: true
-          generate_release_notes: true
-          body: |
-            **Web** — unzip and serve as static files.
-            **Android** — `brin-neutron-ct.apk`, universal build.
-            **iOS** — unsigned; signing needs an Apple Developer account.
-            **macOS** — unsigned; macOS will ask before opening it the first time.
-            **Linux** — x64 bundle; needs GTK 3 present on the machine.
+      # The release notes both steps below use.
+      - name: Write the release notes
+        run: |
+          cat > notes.md <<'MARKDOWN'
+          **Web** — unzip and serve as static files.
+          **Android** — `brin-neutron-ct.apk`, universal build.
+          **iOS** — unsigned; signing needs an Apple Developer account.
+          **macOS** — unsigned; macOS will ask before opening it the first time.
+          **Linux** — x64 bundle; needs GTK 3 present on the machine.
+          MARKDOWN
+          {
+            echo
+            echo "All five were compiled against \`${API_BASE_URL}\`."
+            echo
+            echo "Built from \`${GITHUB_SHA}\`."
+          } >> notes.md
 
-            All five were compiled against `${{ env.API_BASE_URL }}`.
-
-      # The release API cannot move a tag, so the previous one is removed first.
-      # Without this the page shows `latest` pinned to whatever commit created
-      # it while the body names a newer one — which is exactly what it did:
-      # tag 58e7449, body b8ddc25, files from b8ddc25.
-      - name: Retire the previous rolling release
-        if: github.ref == 'refs/heads/main'
+      # Publishing is done with the `gh` CLI behind a retry, and that is the
+      # entire point of it not being an action any more.
+      #
+      # Three separate runs failed here on GitHub's own side — "Resource not
+      # accessible by integration", then twice "No server is currently
+      # available to service your request" — while every build beneath them
+      # succeeded. Nothing was wrong with the artifacts; the releases API was
+      # simply unavailable for a few seconds. An action that gives up on the
+      # first 5xx turns a hiccup into a red run and a release that silently
+      # holds yesterday's files.
+      #
+      # RELEASE_TOKEN is honoured if it exists, so a fine-grained PAT can take
+      # over should the 403 ever turn out to be the repository's Workflow
+      # permissions rather than weather.
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-        run: gh release delete latest --yes --cleanup-tag || true
+        run: |
+          set -euo pipefail
 
-      # A push to main refreshes one long-lived release instead of creating a
-      # new one each time, so the download links never change.
-      #
-      # If this step fails, read its error twice. It reports
-      # "fetching GitHub release for tag refs/heads/main", which looks like the
-      # tag below was ignored. It was not: the action prints GITHUB_REF in that
-      # message regardless of the tag it actually looked up. The part that
-      # matters is whatever follows the colon.
-      - name: Rolling build from main
-        if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          tag_name: latest
-          target_commitish: ${{ github.sha }}
-          name: Latest build from main
-          # Not a pre-release. It was, on the reasoning that an untagged build
-          # is not a version — but "pre-release" in GitHub's vocabulary means
-          # "not ready to use", and these builds are the ones people are meant
-          # to install today.
-          prerelease: false
-          # It does not take the "Latest" badge either. That belongs to a
-          # version tag, so `v1.19.1` stays the newest *version* while this
-          # stays the newest *build*.
-          make_latest: false
-          files: dist/*
-          fail_on_unmatched_files: true
-          body: |
-            Automatic build of `${{ github.sha }}`, compiled against
-            `${{ env.API_BASE_URL }}`.
+          # Five attempts, backing off 10s, 20s, 30s, 40s. The outages seen so
+          # far lasted seconds; this covers a couple of minutes of them.
+          retry() {
+            local n=1
+            until "$@"; do
+              if [ "$n" -ge 5 ]; then
+                echo "::error::Giving up after $n attempts: $*"
+                return 1
+              fi
+              echo "Attempt $n failed. Retrying in $((n * 10))s..."
+              sleep $((n * 10))
+              n=$((n + 1))
+            done
+          }
 
-            Replaced on every push to `main`. For a build that stays put, push
-            a version tag.
+          if [ -n "${GITHUB_REF_NAME:-}" ] && [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
+            TITLE="$TAG"
+            EXTRA="--generate-notes"
+          else
+            # One long-lived release for main, so the download links never
+            # change. The tag has to be recreated rather than edited: the
+            # release API cannot move a tag, and a tag pointing at one commit
+            # while the notes name another is worse than no tag.
+            TAG="latest"
+            TITLE="Latest build from main"
+            EXTRA="--latest=false"
+            retry gh release delete "$TAG" --yes --cleanup-tag || true
+          fi
 
-            **Web** — unzip and serve as static files.
-            **Android** — `brin-neutron-ct.apk`, universal build.
-            **iOS** — unsigned; signing needs an Apple Developer account.
-            **macOS** — unsigned; macOS will ask before opening it the first time.
-            **Linux** — x64 bundle; needs GTK 3 present on the machine.
+          retry gh release create "$TAG" dist/* \
+            --title "$TITLE" \
+            --notes-file notes.md \
+            --target "$GITHUB_SHA" \
+            $EXTRA
 
       # rclone with an OAuth token for a *personal* Google account, not a
       # service account. That choice matters: a service account has no Drive

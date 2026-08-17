@@ -43,46 +43,35 @@ class TrainingController extends Controller
     /**
      * POST /api/admin/training/datasets
      *
-     * Multipart when an archive comes with it, plain JSON when the dataset is
-     * a URL the worker will fetch for itself.
+     * A URL the worker fetches for itself. **Not an upload.**
+     *
+     * The upload path was removed from this endpoint on purpose. An
+     * administrator registering a dataset is recording where data already
+     * lives — Kaggle, Drive, an institutional share — and pushing 20 GB up a
+     * home tunnel only for the GPU host to pull it back down again is absurd
+     * when the worker has a fast link and can fetch it directly.
+     *
+     * Researchers upload; that is [MeTrainingController], and it goes through
+     * the resumable chunked path because a laptop on hotel wifi is exactly the
+     * case a single multipart POST cannot survive.
      */
     public function storeDataset(Request $request)
     {
-        $maxBytes = (int) config('training.max_dataset_bytes');
-
         $validated = $request->validate([
             'name' => 'required|string|max:200',
             'description' => 'nullable|string|max:2000',
-            'source_type' => ['required', Rule::in(['upload', 'url'])],
-            'source_url' => 'required_if:source_type,url|nullable|url|max:2048',
+            'source_url' => 'required|url|max:2048',
             'frame_count' => 'nullable|integer|min:0',
-            'archive' => [
-                'required_if:source_type,upload',
-                'nullable',
-                'file',
-                'max:' . intdiv($maxBytes, 1024),
-                'mimetypes:application/zip,application/x-zip-compressed,application/octet-stream',
-            ],
         ]);
 
         $dataset = new TrainingDataset([
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
-            'source_type' => $validated['source_type'],
+            'source_type' => 'url',
+            'source_url' => $validated['source_url'],
             'frame_count' => $validated['frame_count'] ?? null,
             'uploaded_by' => $request->user()->id,
         ]);
-
-        if ($validated['source_type'] === 'upload') {
-            $file = $request->file('archive');
-            $dataset->archive_path = $file->store(self::DATASET_DIR);
-            $dataset->size_bytes = $file->getSize();
-            // Lets a worker prove it fetched the archive intact before
-            // spending hours training on a truncated one.
-            $dataset->checksum = md5_file(Storage::path($dataset->archive_path));
-        } else {
-            $dataset->source_url = $validated['source_url'];
-        }
 
         $dataset->save();
 

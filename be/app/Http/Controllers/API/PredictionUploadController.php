@@ -5,8 +5,12 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
+use App\Models\TrainingDataset;
+use App\Models\TrainingJob;
+use App\Models\UserActivity;
 use App\Services\IntakeException;
 use App\Services\PredictionIntake;
+use App\Services\TrainerDispatcher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -52,22 +56,36 @@ class PredictionUploadController extends Controller
     public function start(Request $request)
     {
         $validated = $request->validate([
-            'model_id' => 'required|exists:models,id',
+            // What the archive is for. Both kinds are a ZIP arriving in pieces
+            // over an unreliable link, which is the entire problem this
+            // controller solves — a second copy of it for training datasets
+            // would drift from this one the first time either was touched.
+            'purpose' => 'nullable|in:prediction,training',
+            'model_id' => 'required_without:purpose|exclude_if:purpose,training|exists:models,id',
             'total_size' => 'required|integer|min:1|max:' . self::MAX_TOTAL_BYTES,
             'filename' => 'nullable|string|max:255',
+            // Training only.
+            'name' => 'required_if:purpose,training|nullable|string|max:200',
+            'total_epochs' => 'required_if:purpose,training|nullable|integer|min:1|max:10000',
+            'base_model_id' => 'nullable|exists:models,id',
         ]);
 
-        $model = Model::findOrFail($validated['model_id']);
+        $purpose = $validated['purpose'] ?? 'prediction';
+        $model = null;
 
-        // Fail before the user spends minutes uploading into a dead endpoint.
-        if (!$model->is_active) {
-            return $this->error('The selected model is not active.', 400);
-        }
-        if ($model->status === 'offline') {
-            return $this->error(
-                'The selected model is offline. Ask an administrator to check it.',
-                503
-            );
+        if ($purpose === 'prediction') {
+            $model = Model::findOrFail($validated['model_id']);
+
+            // Fail before the user spends minutes uploading into a dead endpoint.
+            if (!$model->is_active) {
+                return $this->error('The selected model is not active.', 400);
+            }
+            if ($model->status === 'offline') {
+                return $this->error(
+                    'The selected model is offline. Ask an administrator to check it.',
+                    503
+                );
+            }
         }
 
         $uploadId = (string) Str::uuid();
@@ -75,7 +93,14 @@ class PredictionUploadController extends Controller
         $this->writeMeta($request->user()->id, $uploadId, [
             'upload_id' => $uploadId,
             'user_id' => $request->user()->id,
-            'model_id' => $model->id,
+            'purpose' => $purpose,
+            'model_id' => $model?->id,
+            // A training run is not blocked by the trainer being offline the
+            // way a prediction is by its model: the job queues and a worker
+            // claims it whenever one appears.
+            'name' => $validated['name'] ?? null,
+            'total_epochs' => $validated['total_epochs'] ?? null,
+            'base_model_id' => $validated['base_model_id'] ?? null,
             'filename' => $validated['filename'] ?? 'upload.zip',
             'total_size' => (int) $validated['total_size'],
             'received' => 0,
@@ -192,6 +217,10 @@ class PredictionUploadController extends Controller
                 "Upload is incomplete: {$actual} of {$meta['total_size']} bytes received.",
                 409
             );
+        }
+
+        if (($meta['purpose'] ?? 'prediction') === 'training') {
+            return $this->finalizeTraining($request, $uploadId, $meta, $partPath);
         }
 
         $model = Model::find($meta['model_id']);
@@ -323,6 +352,72 @@ class PredictionUploadController extends Controller
             $this->partPath($userId, $uploadId),
             $this->metaPath($userId, $uploadId),
         ]);
+    }
+
+    /**
+     * A finished training upload becomes a dataset and a queued run.
+     *
+     * The archive is *moved*, not copied and discarded: a training set is the
+     * largest thing this platform stores, and writing a second copy of it only
+     * to delete the first is an avoidable few gigabytes of disk churn.
+     */
+    private function finalizeTraining(Request $request, string $uploadId, array $meta, string $partPath)
+    {
+        $userId = $request->user()->id;
+        $target = 'training/datasets/' . $uploadId . '.zip';
+
+        Storage::move($partPath, $target);
+        Storage::delete($this->metaPath($userId, $uploadId));
+
+        $dataset = TrainingDataset::create([
+            'name' => $meta['name'],
+            'source_type' => 'upload',
+            'archive_path' => $target,
+            'size_bytes' => Storage::size($target),
+            // Lets a worker prove it fetched the archive intact before spending
+            // hours training on a truncated one.
+            'checksum' => md5_file(Storage::path($target)),
+            'uploaded_by' => $userId,
+        ]);
+
+        $job = TrainingJob::create([
+            'name' => $meta['name'],
+            'training_dataset_id' => $dataset->id,
+            'base_model_id' => $meta['base_model_id'] ?? null,
+            'total_epochs' => $meta['total_epochs'],
+            'hyperparameters' => [],
+            'status' => 'queued',
+            'created_by' => $userId,
+        ]);
+
+        UserActivity::create([
+            'user_id' => $userId,
+            'activity_type' => 'training_job_created',
+            'description' => "Started training run: {$job->name}",
+            'metadata' => ['job_id' => $job->id],
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        // Best effort. A run nobody can push yet is still a recorded run, and
+        // a worker can claim it later — but the reason travels back rather
+        // than leaving a job that sits at `queued` explaining nothing.
+        $dispatch = app(TrainerDispatcher::class)->dispatch($job->load('dataset'));
+
+        return response()->json([
+            'success' => true,
+            'message' => $dispatch['ok']
+                ? 'Training started. Progress appears here as it reports back.'
+                : 'Training run queued.',
+            'dispatch_message' => $dispatch['ok'] ? null : $dispatch['message'],
+            'data' => [
+                'id' => $job->id,
+                'name' => $job->name,
+                'status' => $job->status,
+                'total_epochs' => $job->total_epochs,
+                'current_epoch' => 0,
+            ],
+        ], 201);
     }
 
     private function queuePosition(AnalysisRecord $record): int

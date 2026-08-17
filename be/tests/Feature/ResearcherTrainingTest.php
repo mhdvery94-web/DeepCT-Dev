@@ -129,6 +129,55 @@ class ResearcherTrainingTest extends TestCase
         $this->assertNotNull($response->json('dispatch_message'));
     }
 
+    /**
+     * The large-dataset path: the same resumable session a prediction upload
+     * uses, told what the archive is for.
+     */
+    public function test_a_dataset_can_arrive_in_chunks(): void
+    {
+        $token = $this->token($this->researcher);
+        $body = str_repeat('D', 2048);
+
+        $start = $this->apiAs($token)->postJson('/api/predictions/uploads', [
+            'purpose' => 'training',
+            'name' => 'Chunked retrain',
+            'total_epochs' => 4,
+            'total_size' => strlen($body),
+            'filename' => 'frames.zip',
+        ])->assertCreated();
+
+        $uploadId = $start->json('data.upload_id');
+
+        // A chunk is a multipart part, not a raw body — `PATCH` with a file
+        // field, which Laravel's test client sends as a spoofed POST.
+        foreach ([0, 1024] as $offset) {
+            $part = tempnam(sys_get_temp_dir(), 'chunk');
+            file_put_contents($part, substr($body, $offset, 1024));
+
+            $this->apiAs($token)->post(
+                "/api/predictions/uploads/{$uploadId}",
+                [
+                    '_method' => 'PATCH',
+                    'offset' => $offset,
+                    'chunk' => new UploadedFile($part, 'chunk.bin', 'application/octet-stream', null, true),
+                ],
+                ['Accept' => 'application/json'],
+            )->assertOk();
+        }
+
+        $this->apiAs($token)
+            ->postJson("/api/predictions/uploads/{$uploadId}/finalize")
+            ->assertCreated()
+            ->assertJsonPath('data.name', 'Chunked retrain');
+
+        $job = TrainingJob::firstOrFail();
+        $this->assertSame($this->researcher->id, $job->created_by);
+        $this->assertSame(4, $job->total_epochs);
+        // Moved rather than copied: a training set is the largest thing here.
+        $this->assertNotNull($job->dataset->archive_path);
+        Storage::assertExists($job->dataset->archive_path);
+    }
+
     public function test_a_researcher_cannot_read_someone_elses_run(): void
     {
         $job = TrainingJob::create([

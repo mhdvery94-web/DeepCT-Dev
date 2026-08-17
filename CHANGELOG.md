@@ -33,6 +33,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.10] - 2026-08-18
+
+### Publishing retries instead of giving up
+
+Three runs failed at `publish` on GitHub's side while every build beneath them
+succeeded — "Resource not accessible by integration" once, "No server is
+currently available to service your request" twice. Nothing was wrong with the
+artifacts; the releases API was unavailable for a few seconds each time, and an
+action that gives up on the first 5xx turns a hiccup into a red run and a
+release quietly holding yesterday's files.
+
+`softprops/action-gh-release` is replaced by the `gh` CLI behind a retry —
+five attempts, backing off 10s, 20s, 30s, 40s, which covers a couple of minutes
+of the outages seen so far. `RELEASE_TOKEN` is still honoured if it exists, so a
+fine-grained PAT can take over should the 403 ever turn out to be the
+repository's Workflow permissions rather than weather.
+
+### An administrator registers a dataset; they do not carry it
+
+The upload field is gone from `POST /admin/training/datasets`. Registering a
+dataset as an administrator now means giving a URL, and nothing else.
+
+The reasoning is the same one the original migration comment gave for offering
+URLs at all: pushing 20 GB up a home tunnel so a GPU host can pull it back down
+is absurd when the worker has a fast link and can fetch it directly. What made
+the upload path defensible before was that there was no other way in. There is
+now — it belongs to the researcher, and it is chunked.
+
+### A dataset can arrive in pieces
+
+`POST /predictions/uploads` takes a `purpose`. With `training` it wants a name
+and an epoch count instead of a model, and on finalize it writes a dataset and a
+queued run rather than a prediction.
+
+Reusing the session rather than writing a second one is the point. A training
+archive is the largest thing this platform accepts and the least likely to
+survive a single request — the resumable machinery already existed, already had
+its offset handling tested, and a parallel copy would have drifted from it the
+first time either was touched.
+
+The assembled archive is **moved** into place, not copied and discarded. On a
+file this size, writing a second copy only to delete the first is gigabytes of
+avoidable churn.
+
+`php artisan test` → **235 passed (960 assertions)**.
+
+### Not done: the researcher still has no training screen
+
+The endpoints are finished and tested. The Flutter side is not started, so from
+inside the app training remains invisible to a researcher — which is the thing
+that was actually asked for, and it is the larger half of the work.
+
+One note against repeating a mistake: the first attempt at the client service
+was written straight over `fe/lib/services/training_service.dart`, which is the
+**administrator's** service and has nothing to do with it. It was restored from
+git before anything else touched it. The researcher's service needs its own
+file, and two `ApiConfig` entries and a chunk helper that do not exist yet.
+
+---
+
 ## [1.19.9] - 2026-08-18
 
 ### Training belongs to the researcher now — backend
