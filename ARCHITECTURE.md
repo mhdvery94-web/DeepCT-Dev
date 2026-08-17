@@ -621,20 +621,30 @@ demo dan skripsi, tidak untuk layanan yang dipakai orang lain.
 
 ## 9. Rilis dan distribusi klien
 
-`.github/workflows/release.yml` membangun ketiga target dan menerbitkannya.
-Pemicunya tag versi:
+`.github/workflows/release.yml` membangun target klien dan menerbitkannya. Ada
+tiga pintu masuk, dan pekerjaannya tidak sama:
 
-```bash
-git tag v1.2.0 && git push origin v1.2.0
-```
+| Pemicu | Yang dibangun | Hasilnya ke mana |
+|---|---|---|
+| **Push ke `main`** | test → web + Android | Artifact di run itu |
+| **Tag `v*`** (`git tag v1.2.0 && git push origin v1.2.0`) | ketiganya | GitHub Release + Google Drive |
+| **Actions → Run workflow** | ketiganya | Google Drive saja |
 
 | Job | Runner | Hasil |
 |---|---|---|
 | `test` | ubuntu | `flutter analyze` + `flutter test`; sisanya tidak jalan kalau ini merah |
 | `web` | ubuntu | `brin-neutron-ct-web.zip` |
 | `android` | ubuntu | `brin-neutron-ct.apk` |
-| `ios` | **macos** | `brin-neutron-ct-ios-unsigned.ipa` |
+| `ios` | **macos** | `brin-neutron-ct-ios-unsigned.ipa` — tag dan manual saja |
 | `publish` | ubuntu | GitHub Release + unggah ke Google Drive |
+
+**Kenapa iOS tidak ikut di push ke `main`.** Runner macOS ditagih sepuluh kali
+lipat menit ubuntu, dan build tak bertanda tangan yang tidak bisa dipasang siapa
+pun tidak sepadan dengan itu untuk tiap commit.
+
+Efek samping yang justru berharga: sebelumnya `flutter analyze` dan
+`flutter test` hanya berjalan saat ada tag, jadi `main` bisa rusak berminggu-
+minggu tanpa ketahuan. Sekarang tiap push mengujinya.
 
 Alamat API dikompilasi masuk, jadi CI membacanya dari repository variable
 `API_BASE_URL`.

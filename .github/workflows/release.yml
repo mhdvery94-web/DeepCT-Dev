@@ -1,10 +1,24 @@
 name: Release
 
-# Builds the three client targets and publishes them.
+# Builds the client targets and publishes them.
 #
-# Triggered by pushing a version tag, or by hand from the Actions tab:
+# Three ways in, and they do different amounts of work:
 #
-#     git tag v1.2.0 && git push origin v1.2.0
+#   push to main      tests, then web + Android. The APK is attached to the
+#                     run as an artifact, so every change on main has a build
+#                     you can install without waiting for a release.
+#   push a tag        all three targets, a GitHub Release, and Google Drive:
+#                         git tag v1.2.0 && git push origin v1.2.0
+#   Actions → Run     same as a tag, minus the Release itself.
+#
+# iOS is deliberately left out of the main-push path. It needs a macOS runner,
+# which bills at ten times the rate of ubuntu, and an unsigned build that nobody
+# can install is not worth that on every commit.
+#
+# There is no `paths:` filter. It would skip builds for backend-only pushes,
+# but GitHub does not apply path filters to tag pushes consistently, and a
+# release that silently does not run is a far worse failure than a few spent
+# minutes.
 #
 # Artifacts go to a GitHub Release, and — when the Drive secrets are present —
 # to Google Drive as well. The Drive step is skipped rather than failed when it
@@ -12,6 +26,7 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
     inputs:
@@ -20,8 +35,16 @@ on:
         required: false
         default: ''
 
+# Pushing twice in a minute should not leave two builds racing for the same
+# artifact names. The newer push wins; a tag build is never cancelled.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 env:
-  FLUTTER_VERSION: '3.44.0'
+  # Keep in step with fe/vercel-build.sh. This is the SDK the tree is actually
+  # developed and verified against.
+  FLUTTER_VERSION: '3.44.9'
   # Where the built clients look for the backend. Set the repository variable
   # API_BASE_URL to change it without touching this file.
   API_BASE_URL: >-
@@ -110,6 +133,8 @@ jobs:
   ios:
     name: iOS
     needs: test
+    # Tags and manual runs only — see the note at the top about macOS billing.
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     # iOS can only be built on macOS, and this is the whole point of the job:
     # it produces an iOS build without anyone owning a Mac.
     runs-on: macos-latest
@@ -147,6 +172,11 @@ jobs:
   publish:
     name: Publish
     needs: [web, android, ios]
+    # A push to main stops after the builds: the APK is on the run, and there
+    # is nothing to release. Without this the job would be skipped anyway —
+    # `needs` a job that did not run — but saying so is clearer than relying
+    # on that.
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write

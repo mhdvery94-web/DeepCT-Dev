@@ -33,6 +33,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.3] - 2026-08-17
+
+### Every push to `main` now produces an APK
+
+The release pipeline only woke up for a version tag. A change could sit on
+`main` for weeks with no installable build behind it — and, less obviously,
+with **no tests having run**: `flutter analyze` and `flutter test` lived
+entirely inside that tag-only workflow, so `main` could break and stay broken
+without anyone being told.
+
+A push to `main` now runs the tests, then builds web and Android, and attaches
+the APK to the run. Tags keep doing what they did: all three targets, a GitHub
+Release, and Google Drive.
+
+**iOS stays out of the push path.** It needs a macOS runner, which bills at ten
+times the ubuntu rate, and an unsigned build nobody can install does not earn
+that on every commit. It still builds on a tag or a manual run.
+
+There is deliberately **no `paths:` filter**, so a backend-only push spends a
+few minutes building a client that did not change. The alternative is worse:
+GitHub does not apply path filters to tag pushes the same way it does to branch
+pushes, and a release that silently declines to run costs far more than the
+minutes do.
+
+`concurrency` cancels a superseded run on a branch, never on a tag. And
+`FLUTTER_VERSION` moves from 3.44.0 to **3.44.9** — the SDK this tree is
+actually developed and verified against, and the one `fe/vercel-build.sh`
+defaults to, so CI and Vercel now compile the same client.
+
+---
+
 ## [1.19.2] - 2026-08-17
 
 ### The Vercel deployment was blocked before it ever built
