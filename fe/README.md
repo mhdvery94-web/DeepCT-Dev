@@ -512,7 +512,7 @@ flutter build web --release
 # Generate APK
 flutter build apk --release
 
-# Output: build/app/outputs/flutter-apk/app-release.apk
+# Output: build/app/outputs/flutter-apk/app-deepCT-ai.apk
 
 # Generate App Bundle (for Play Store)
 flutter build appbundle --release

@@ -99,7 +99,7 @@ jobs:
         run: |
           flutter pub get
           flutter build apk --release --dart-define=API_BASE_URL=$API_BASE_URL
-          mv build/app/outputs/flutter-apk/app-release.apk \
+          mv build/app/outputs/flutter-apk/app-deepCT-ai.apk \
              "$GITHUB_WORKSPACE/brin-neutron-ct.apk"
 
       - uses: actions/upload-artifact@v4
