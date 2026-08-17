@@ -63,13 +63,16 @@ Error: The provided path "/home/runner/work/deepCT-AI/deepCT-AI/fe" does not exi
 
 Two faults, then, and the second hid the first.
 
-The path error is the Vercel project's **Root Directory**, still set to `fe`
-from when Vercel built the app itself. The CLI resolves that setting against the
-working directory and refuses to deploy when the result is missing — and this
-job never checks the repository out, it only downloads the built web files, so
-there was no `fe/` for it to find. The build output now lands in
-`fe/.vercel/output` and the job carries a `VERCEL_ROOT_DIR` variable that has to
-match the dashboard, with the reason written next to it.
+The path error is the Vercel project's **Root Directory**, set to `fe` from when
+Vercel built the app itself. The CLI resolves that setting against the working
+directory and refuses to deploy when the result is missing — and this job never
+checks the repository out, it only downloads the built web files, so there was
+no `fe/` for it to find.
+
+The setting is now `./`, which is the right answer for a prebuilt deployment:
+nothing is built on Vercel, so there is no subdirectory for it to build *in*.
+The job carries a `VERCEL_ROOT_DIR` variable that has to match the dashboard,
+with the reason written next to it, and the output paths follow it.
 
 The deploy step now runs under `set -euo pipefail` and additionally fails when
 the CLI exits 0 without printing a deployment URL. Both were needed: `pipefail`

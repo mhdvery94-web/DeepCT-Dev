@@ -171,20 +171,25 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       # Must match the project's **Root Directory** in Vercel → Settings →
-      # Build and Deployment. The CLI resolves that setting against the working
-      # directory and refuses to deploy when the result does not exist:
+      # Build and Deployment, because the CLI resolves that setting against the
+      # working directory and refuses to deploy when the result does not exist:
       #
       #   Error: The provided path ".../deepCT-AI/fe" does not exist.
       #
-      # This job never checks the repository out — it only downloads the built
-      # web files — so `fe/` has to be created here for the setting to be
-      # satisfied. Set this to `.` if the Root Directory is ever cleared.
-      VERCEL_ROOT_DIR: fe
+      # That is what the setting `fe` produced here: this job never checks the
+      # repository out — it only downloads the built web files — so there was no
+      # `fe/` to find. The Root Directory is `./` now, which is the right answer
+      # for a prebuilt deployment: nothing is built here, so there is no
+      # subdirectory for Vercel to build *in*.
+      #
+      # If it is ever pointed back at a subdirectory, change this to match and
+      # the output moves with it.
+      VERCEL_ROOT_DIR: .
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: fe/.vercel/output/static
+          path: ${{ env.VERCEL_ROOT_DIR }}/.vercel/output/static
 
       # A prebuilt deployment takes its routing from this file and ignores
       # vercel.json. The rewrite is what stops a deep link answering 404 on
