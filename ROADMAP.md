@@ -254,8 +254,15 @@ yang hanya bisa dihilangkan lewat retrain. Lihat
 
 Sisanya satu fungsi, bukan satu sistem.
 
-**Notifikasi email.** Notifikasi in-app sudah ada (no. 9), tapi aplikasi belum
-mengirim satu email pun — balasan untuk pengirim tamu masih harus dikirim admin
-dari email-nya sendiri. Justru karena notifikasinya memakai sistem bawaan
-Laravel, ini tinggal menambah `'mail'` di `via()` plus konfigurasi SMTP. Paling
-masuk akal dikerjakan berikutnya, dan paling murah.
+**Notifikasi email — diputuskan tidak dikerjakan.** Aplikasi tidak mengirim satu
+email pun, dan itu sekarang pilihan, bukan pekerjaan yang tertunda: pesan
+in-app (no. 8) dan lonceng notifikasi (no. 9) sudah menjadi kanalnya, dan
+menambah kanal kedua berarti menambah SMTP, deliverability, dan satu sistem
+lagi yang bisa diam-diam berhenti bekerja.
+
+Satu hal yang tetap tidak tercakup, dan sengaja dibiarkan: **pengirim tamu**
+dari halaman login tidak punya akun, jadi tidak ada layar tempat balasan admin
+bisa muncul. Balasan untuk mereka masih dikirim admin dari emailnya sendiri —
+layar percakapan memberitahu admin hal ini alih-alih membiarkannya membalas ke
+ruang kosong. Kalau jalur tamu nanti ramai, ini alasan pertama untuk meninjau
+ulang keputusan di atas.
