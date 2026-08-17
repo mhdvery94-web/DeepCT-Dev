@@ -54,10 +54,18 @@ class QueueHealth
         ];
     }
 
-    /** What to tell someone staring at a job that is not moving. */
-    public function message(): ?string
+    /**
+     * What to tell someone staring at a job that is not moving.
+     *
+     * Pass the state in when you already have it. Called bare, this repeats
+     * [inspect()] — two more queries against `jobs` for an answer the caller
+     * is usually holding already.
+     *
+     * @param  array{stalled: bool, waiting: int, oldest_wait_seconds: int}|null  $state
+     */
+    public function message(?array $state = null): ?string
     {
-        $state = $this->inspect();
+        $state ??= $this->inspect();
 
         if (!$state['stalled']) {
             return null;

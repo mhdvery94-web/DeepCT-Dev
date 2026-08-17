@@ -633,6 +633,31 @@ php artisan cache:clear
 php artisan route:clear
 ```
 
+#### `serve:all` caches routes, and deliberately does not cache config
+
+`preserve:all` runs `route:cache` before the three processes start. The reason
+is the scheduler: `models:health-check` runs every ten seconds, each run is a
+fresh `php artisan` process, and without the cache every one of them recompiles
+the whole route table first. Measured on this machine, one run went from
+**~2400 ms to ~700 ms**.
+
+**`config:cache` is not in there, and adding it will eventually cost someone
+their development database.** With `bootstrap/cache/config.php` present, the
+`<env>` entries in `phpunit.xml` no longer reach the config — including
+`DB_DATABASE=db_aict_test`. `php artisan test` then runs `RefreshDatabase`
+against `db_aict`, the database you actually work in, and wipes it.
+
+It is worth about 100 ms more per run. That is not worth the trap on a
+development machine. **On the VPS it belongs in the deploy step**, where the
+test suite never runs:
+
+```bash
+php artisan config:cache && php artisan route:cache
+```
+
+Either cache goes stale on its own: re-run the command after editing `.env`,
+`config/*` or `routes/*`, or clear it.
+
 ### Queue
 ```bash
 # List jobs

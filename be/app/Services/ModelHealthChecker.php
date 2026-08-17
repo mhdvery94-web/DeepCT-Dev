@@ -4,6 +4,9 @@ namespace App\Services;
 
 use App\Models\Model;
 use App\Services\Notifier;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -51,57 +54,153 @@ class ModelHealthChecker
             return $this->persist($model, 'offline', null, 'Endpoint URL is not set');
         }
 
-        $probeUrl = $this->probeUrl($model->endpoint_url);
-
         try {
             $startTime = microtime(true);
 
             $response = Http::timeout(self::TIMEOUT_SECONDS)
                 ->withoutVerifying() // ngrok/Colab certificates
                 ->withHeaders(['ngrok-skip-browser-warning' => 'true'])
-                ->get($probeUrl);
+                ->get($this->probeUrl($model->endpoint_url));
 
-            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
-
-            $status = $response->status();
-
-            // The ngrok edge answers even when nothing is listening behind it.
-            // ERR_NGROK_3200 = tunnel offline / agent disconnected.
-            $ngrokError = $response->header('ngrok-error-code');
-            if (! empty($ngrokError)) {
-                return $this->persist(
-                    $model,
-                    'offline',
-                    $responseTime,
-                    "Tunnel is not running ({$ngrokError})"
-                );
-            }
-
-            // Any HTTP status served by the app itself means the process is up.
-            // 404 on the root path is expected: FastAPI only defines /predict.
-            if (! $this->isServedByApp($status)) {
-                return $this->persist(
-                    $model,
-                    'offline',
-                    $responseTime,
-                    "Endpoint unreachable (HTTP {$status})"
-                );
-            }
-
-            if ($responseTime > self::SLOW_THRESHOLD_MS) {
-                return $this->persist(
-                    $model,
-                    'trouble',
-                    $responseTime,
-                    "Slow response: {$responseTime}ms"
-                );
-            }
-
-            return $this->persist($model, 'online', $responseTime, null);
+            return $this->interpret(
+                $model,
+                $response,
+                round((microtime(true) - $startTime) * 1000, 2)
+            );
         } catch (\Throwable $e) {
             // Connection refused, DNS failure or timeout: nothing is listening.
             return $this->persist($model, 'offline', null, $this->cleanMessage($e->getMessage()));
         }
+    }
+
+    /**
+     * Probe every model at once.
+     *
+     * Sequentially, the cost of a round is the *sum* of the timeouts. The note
+     * on [TIMEOUT_SECONDS] — that eight seconds stays under the ten-second
+     * schedule interval — is only true for a single model: five dead endpoints
+     * would take forty seconds, and the schedule would never catch up. Pooling
+     * makes a round cost the slowest probe rather than all of them, so the
+     * registry can grow without the cadence having to change.
+     *
+     * @param  Collection<int, Model>  $models
+     * @return array<int, array{status:string, response_time_ms?:float, error?:string}>
+     *         keyed by model id
+     */
+    public function checkMany(Collection $models): array
+    {
+        $results = [];
+        $probeable = [];
+
+        foreach ($models as $model) {
+            if (empty($model->endpoint_url)) {
+                $results[$model->id] = $this->persist(
+                    $model, 'offline', null, 'Endpoint URL is not set'
+                );
+
+                continue;
+            }
+
+            $probeable[] = $model;
+        }
+
+        if ($probeable === []) {
+            return $results;
+        }
+
+        $startTime = microtime(true);
+
+        $responses = Http::pool(fn (Pool $pool) => array_map(
+            fn (Model $model) => $pool
+                ->timeout(self::TIMEOUT_SECONDS)
+                ->withoutVerifying()
+                ->withHeaders(['ngrok-skip-browser-warning' => 'true'])
+                ->get($this->probeUrl($model->endpoint_url)),
+            $probeable
+        ));
+
+        // Fallback only. A pooled request carries its own transfer time; the
+        // wall clock covers the whole pool, so using it for every model would
+        // let one slow endpoint report all the others as `trouble`.
+        $wallClockMs = round((microtime(true) - $startTime) * 1000, 2);
+
+        foreach ($probeable as $index => $model) {
+            $response = $responses[$index] ?? null;
+
+            if ($response instanceof \Throwable) {
+                $results[$model->id] = $this->persist(
+                    $model, 'offline', null, $this->cleanMessage($response->getMessage())
+                );
+
+                continue;
+            }
+
+            if (! $response instanceof Response) {
+                $results[$model->id] = $this->persist(
+                    $model, 'offline', null, 'No response from the probe'
+                );
+
+                continue;
+            }
+
+            $results[$model->id] = $this->interpret(
+                $model, $response, $this->elapsedMs($response, $wallClockMs)
+            );
+        }
+
+        return $results;
+    }
+
+    /** Per-request timing when Guzzle reported it, wall clock otherwise. */
+    private function elapsedMs(Response $response, float $fallback): float
+    {
+        $stats = $response->transferStats;
+
+        return $stats && $stats->getTransferTime() !== null
+            ? round($stats->getTransferTime() * 1000, 2)
+            : $fallback;
+    }
+
+    /**
+     * Turn one answered probe into a status, and persist it.
+     *
+     * @return array{status:string, response_time_ms?:float, error?:string}
+     */
+    private function interpret(Model $model, Response $response, float $responseTime): array
+    {
+        // The ngrok edge answers even when nothing is listening behind it.
+        // ERR_NGROK_3200 = tunnel offline / agent disconnected.
+        $ngrokError = $response->header('ngrok-error-code');
+        if (! empty($ngrokError)) {
+            return $this->persist(
+                $model,
+                'offline',
+                $responseTime,
+                "Tunnel is not running ({$ngrokError})"
+            );
+        }
+
+        // Any HTTP status served by the app itself means the process is up.
+        // 404 on the root path is expected: FastAPI only defines /predict.
+        if (! $this->isServedByApp($response->status())) {
+            return $this->persist(
+                $model,
+                'offline',
+                $responseTime,
+                "Endpoint unreachable (HTTP {$response->status()})"
+            );
+        }
+
+        if ($responseTime > self::SLOW_THRESHOLD_MS) {
+            return $this->persist(
+                $model,
+                'trouble',
+                $responseTime,
+                "Slow response: {$responseTime}ms"
+            );
+        }
+
+        return $this->persist($model, 'online', $responseTime, null);
     }
 
     /**

@@ -113,6 +113,11 @@ class AnalysisController extends Controller
 
         $predictions = $query->paginate($perPage);
 
+        // Inspected once. `message()` used to re-inspect, so this endpoint ran
+        // four queries against `jobs` for two questions.
+        $queueHealth = app(QueueHealth::class);
+        $queueState = $queueHealth->inspect();
+
         return response()->json([
             'success' => true,
             'data' => $predictions->items(),
@@ -126,8 +131,8 @@ class AnalysisController extends Controller
             // at `pending` for ever with no error anywhere is the most
             // confusing state this application has, and it is invisible unless
             // we say so — see App\Services\QueueHealth.
-            'meta' => app(QueueHealth::class)->inspect() + [
-                'queue_message' => app(QueueHealth::class)->message(),
+            'meta' => $queueState + [
+                'queue_message' => $queueHealth->message($queueState),
             ],
         ]);
     }

@@ -48,10 +48,15 @@ class CheckModelsHealth extends Command
             'trouble' => 0,
         ];
 
+        // One pooled round rather than one blocking probe per model: with a
+        // dead endpoint each probe costs the full timeout, and sequentially
+        // that adds up past the ten-second schedule interval.
+        $checked = $checker->checkMany($models);
+
         foreach ($models as $model) {
             $this->line("Checking: {$model->name} ({$model->version})...");
 
-            $result = $checker->check($model);
+            $result = $checked[$model->id] ?? ['status' => 'offline', 'error' => 'Not probed'];
             $status = $result['status'];
             $results[$status]++;
 

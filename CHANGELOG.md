@@ -33,6 +33,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.4] - 2026-08-17
+
+### The API was slow because two schedulers were running
+
+The symptom looked like Octane worker starvation: preflight `OPTIONS` requests
+taking 3.7 s, `GET /api/me/models` — a single indexed `SELECT` over a handful of
+rows — taking 2.6 s, and `models:health-check` growing from 800 ms to over a
+minute. The suspects were the usual ones: N+1 queries, blocking I/O in a request
+path, a memory leak under Octane.
+
+It was none of them. `Get-CimInstance Win32_Process` showed **two
+`php artisan schedule:work` daemons**: one started by today's `serve:all`, and
+one from **the previous night at 23:43** that had never stopped. Both were
+dispatching every scheduled task, so `models:health-check` fired twice every ten
+seconds, and both raced for the same `withoutOverlapping` lock file — which on
+Windows produces
+
+```
+fopen(...storage/framework/cache/data/4f/d1/...): Failed to open stream: Permission denied
+```
+
+44 times in the last 20,000 log lines. The orphan is the same class of problem
+`CLAUDE.md` already documents for Octane: on Windows nothing reliably kills
+these processes, so they accumulate silently across days.
+
+Measured on the same machine, one `models:health-check` run:
+
+| | before | after |
+|---|---|---|
+| run 1 | 2153 ms | 759 ms |
+| run 2 | **7042 ms** | 755 ms |
+| run 3 | 2376 ms | 575 ms |
+
+`GET /api/health` over the same window went from 1096/463/305/279/91 ms to
+310/57/74/41/76 ms.
+
+### What was actually wrong in the code, and what was not
+
+Reviewed on the way, since these were the stated suspects:
+
+- **No N+1.** `MeController::models()` is one `SELECT` with no relations.
+  `AuthController::login()` is one select, one insert, one update.
+  `AnalysisController::index()` already eager-loads `model:id,name,version`.
+- **No memory leak.** `--max-requests=250` recycles workers, `flush` is empty
+  and the default warm list is in use. Nothing accumulates in a static.
+- **One genuine redundancy**, now fixed: `index()` called
+  `QueueHealth::inspect()` *and* `message()`, and `message()` re-inspected —
+  four queries against `jobs` to answer two questions. `message()` now takes the
+  state it was going to recompute.
+- **One place a request really can block on the network**, left as it is:
+  `ModelController::checkHealth` probes the tunnel synchronously with an 8 s
+  timeout. It is a manual admin button, and the polled console reads status from
+  the database, so it is not on any hot path.
+
+### Four changes that make the cheap requests cheap again
+
+**Routes are cached before `serve:all` starts.** The scheduler spawns a fresh
+`php artisan` process six times a minute, and each one recompiled the entire
+route table first. `route:cache` is most of the improvement above.
+
+`config:cache` is deliberately **not** included, and `be/README.md` now explains
+why at length: with `bootstrap/cache/config.php` present, the `<env>` entries in
+`phpunit.xml` stop reaching the config — including `DB_DATABASE=db_aict_test` —
+so `php artisan test` runs `RefreshDatabase` against the development database
+and wipes it. It buys about 100 ms more per run. It belongs in the VPS deploy
+step, not on a machine where tests run.
+
+Caching routes meant the two closures in `routes/web.php` had to go:
+`route:cache` refuses to serialise a closure. `/` is now `Route::view`, and
+`/api/health` is `HealthController`. Same URLs.
+
+**`CACHE_STORE` moves from `file` to `database`**, which is what `.env.example`
+already said. The file driver is what the lock contention above was fighting
+over, and the `cache` table already exists.
+
+**Unauthenticated API requests answer 401 instead of throwing.** Laravel's
+default redirects them to a route named `login`, which an API-only application
+does not define, so each one built a `RouteNotFoundException` and wrote a full
+stack trace — 381 of them in the last 20,000 log lines.
+
+**`LOG_STACK` moves from `single` to `daily`.** `laravel.log` had reached 19 MB
+as one file. Note that the level stays at `debug`: the volume was ERROR-level
+stack traces from the two faults above, so lowering the level would have hidden
+the evidence rather than fixed the cause.
+
+**`ModelHealthChecker::checkMany()`** probes with `Http::pool`. With one model
+this changes nothing, and it was not the cause of anything. But the note on
+`TIMEOUT_SECONDS` — eight seconds stays under the ten-second interval — is only
+true for a single model: five dead endpoints probed in sequence would take forty
+seconds and the schedule would never catch up. A round now costs the slowest
+probe rather than the sum. Per-model timings come from Guzzle's transfer stats
+so one slow endpoint cannot report the others as `trouble`.
+
+`php artisan test` → **225 passed (910 assertions)**.
+
+---
+
 ## [1.19.3] - 2026-08-17
 
 ### Every push to `main` now produces an APK

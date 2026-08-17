@@ -1,18 +1,14 @@
 <?php
 
+use App\Http\Controllers\HealthController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\API\AuthController;
-use App\Http\Controllers\API\AnalysisController;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// Neither of these is a closure, and that is deliberate: `route:cache` cannot
+// serialise a closure, and without the cache every artisan command rebuilds the
+// route table on boot — six times a minute, for the scheduled health check.
+// `Route::view` is the cacheable form of "render this template".
+Route::view('/', 'welcome');
 
-// Health check
-Route::get('/api/health', function () {
-    return response()->json([
-        'success' => true,
-        'message' => 'API is running',
-        'timestamp' => now(),
-    ]);
-});
+// Health check. Unauthenticated on purpose: it is what you probe when nothing
+// else works.
+Route::get('/api/health', HealthController::class);
