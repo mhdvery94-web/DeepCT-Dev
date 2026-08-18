@@ -296,6 +296,14 @@ sebelum ini.
 ## Sudah selesai
 
 - [x] Pipeline prediksi FASE 3 (upload, interpolasi rekursif, unduh, retensi)
+- [x] **Pipeline prediksi diuji ujung-ke-ujung di VPS terhadap GPU sungguhan**
+      (18 Agustus 2026). Dua frame batas dengan celah 4 — jadi rekursinya
+      betul-betul dipakai — menghasilkan 3 frame dalam 27 detik, dan MAE tiap
+      hasil terhadap kedua batas naik monoton (002 dekat awal, 003 di tengah,
+      004 dekat akhir), jadi urutannya benar dan tidak ada yang disalin.
+      **Mutu gambarnya tidak diuji**: masukannya sintetis, di luar distribusi
+      latih model. Lihat CHANGELOG 1.19.19, termasuk artefak tepi yang terlihat
+      pada frame hasil.
 - [x] Chunked upload resumable di sisi server
 - [x] Konsol peneliti (dashboard, unggah, hasil, riwayat, aktivitas)
 - [x] Pratinjau frame — TIFF 16-bit dirender jadi PNG di server

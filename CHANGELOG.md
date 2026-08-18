@@ -33,6 +33,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.19] - 2026-08-18
+
+### Pipeline prediksi dijalankan ujung-ke-ujung di VPS, terhadap GPU sungguhan
+
+Aturan pertama CLAUDE.md: build yang lulus tidak mengatakan apa pun tentang
+apakah interpolasinya bekerja. Sampai hari ini deployment VPS belum pernah
+dibuktikan begitu. Sekarang sudah.
+
+Dua frame batas 16-bit 1024x1024 dibuat sintetis dengan sebuah cakram yang
+**berpindah** dari x=282 ke x=743, dinamai `frame_001.tif` dan `frame_005.tif`
+— contoh yang sama persis dengan yang ada di README, dipilih karena celah 4
+memaksa rekursi sungguhan: midpoint 3 dulu, lalu 3 menjadi batas untuk 2 dan 4.
+
+Hasilnya, lewat tunnel ngrok ke backend VPS:
+
+| | |
+|---|---|
+| Antrean | `pending` -> `processing` -> `completed` |
+| Waktu | **27 detik**, tiga round-trip GPU |
+| Keluaran | **3 frame** dari 2 masukan, persis n-1 |
+| Arsip | `input/`, `output/`, `metadata.json` |
+| Format | `I;16`, 1024x1024 — kedalaman bit dan dimensi terjaga |
+
+**Bukti interpolasinya benar, bukan sekadar ada berkasnya.** MAE tiap frame
+hasil terhadap kedua batas, skala 0-65535:
+
+| frame | MAE vs 001 | MAE vs 005 | seharusnya |
+|---|---|---|---|
+| 002 | **1242** | 2194 | dekat 001 |
+| 003 | 1581 | 1470 | di tengah |
+| 004 | 2301 | **1135** | dekat 005 |
+
+Monoton dan berurutan — 002 condong ke awal, 003 di tengah, 004 condong ke
+akhir. Kelima SHA-256 berbeda, jadi tidak ada frame yang disalin dari
+batasnya.
+
+**Satu pengukuran sempat menyesatkan, dan itu layak dicatat.** Metrik pertama
+yang dipakai — posisi kolom paling terang — melaporkan ketiga frame hasil ada
+di kolom 0, yang terbaca seperti platform menyalin frame batas. Yang salah
+metriknya: model tidak *memindahkan* cakram sintetis seperti fitur fisik
+berpindah, ia memadukan keduanya, dan artefak tepi mendominasi jumlah kolom.
+MAE terhadap kedua batas adalah ukuran yang tepat di sini.
+
+**Yang TIDAK dibuktikan uji ini, dan tidak boleh diklaim:** mutu gambarnya.
+Masukannya sintetis dan jauh di luar distribusi latih model — neutron CT
+sungguhan. Uji ini membuktikan orkestrasinya: unggah, antre, tiga panggilan GPU
+rekursif, TIFF kembali, arsip tersusun benar, unduhan utuh. Ia tidak
+membuktikan hasilnya berguna secara ilmiah.
+
+**Satu pengamatan untuk peneliti:** frame hasil punya artefak tepi yang kuat di
+kedua sisi. Kolom 0 rata-rata 52.602 pada frame hasil, dibanding 13.407 pada
+frame masukan — hampir empat kali lipat. Kemungkinan besar itu akibat masukan
+sintetis, tapi kalau muncul juga pada data sungguhan, ia layak diperiksa
+sebelum hasil dipakai.
+
+Yang masih belum pernah dijalani: **training** ujung-ke-ujung. Itu endpoint dan
+notebook yang berbeda.
+
+---
+
 ## [1.19.18] - 2026-08-18
 
 ### Menyerahkan password ke seeder tidak berpengaruh apa-apa
