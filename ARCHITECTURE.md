@@ -601,9 +601,23 @@ demo dan skripsi, tidak untuk layanan yang dipakai orang lain.
 
 ### Yang harus disiapkan sebelum deploy
 
-1. **CORS.** `config/cors.php` harus mengizinkan `https://brin.fajrianhost.my.id`.
-   Sanctum di sini memakai bearer token, bukan cookie, jadi tidak ada urusan
-   `SANCTUM_STATEFUL_DOMAINS` maupun domain cookie.
+1. **CORS — dan `config/cors.php` itu tidak ada.** Berkas itu belum pernah
+   di-publish, jadi yang berlaku adalah bawaan framework: `allowed_origins`
+   bernilai `*`, dan itulah yang benar-benar dijawab VPS hari ini
+   (`Access-Control-Allow-Origin: *`, terverifikasi 18 Agustus 2026).
+
+   Ini **bukan** lubang yang terdengar, dan alasannya penting: Sanctum di sini
+   memakai bearer token, bukan cookie. `*` yang berbahaya adalah `*` di samping
+   `Access-Control-Allow-Credentials: true`, karena browser lalu mengirimkan
+   cookie sesi ke asal mana pun. Di sini tidak ada cookie yang dikirim; token
+   ada di secure storage dan dipasang klien sendiri, jadi asal lain tetap tidak
+   punya apa-apa untuk dipakai. Tidak ada urusan `SANCTUM_STATEFUL_DOMAINS`
+   maupun domain cookie.
+
+   Kalau tetap ingin dipersempit, publish dulu berkasnya —
+   `php artisan config:publish cors` — lalu isi `allowed_origins` dengan asal
+   klien web. Menyempitkannya sebelum ada satu asal yang tetap justru akan
+   memutus preview Vercel, yang hostname-nya berubah tiap deployment.
 2. **`APP_DEBUG=false`** dan `APP_ENV=production`. Sekarang debug menyala, dan
    stack trace Laravel membocorkan path serta konfigurasi.
 3. **Isi `SEED_ADMIN_PASSWORD`** sebelum `db:seed`. Kalau kosong, seeder
