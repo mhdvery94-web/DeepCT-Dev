@@ -35,6 +35,16 @@ TLS_CERT="${TLS_CERT:-/etc/letsencrypt/live/$TLS_DOMAIN/fullchain.pem}"
 TLS_KEY="${TLS_KEY:-/etc/letsencrypt/live/$TLS_DOMAIN/privkey.pem}"
 BODY_LIMIT="${BODY_LIMIT:-100M}"
 
+# The ngrok tunnel. Empty means no tunnel program is installed at all.
+#
+# NGROK_UPSTREAM points at nginx rather than at Octane: nginx holds the upload
+# limit, the timeouts and the buffering settings, and a tunnel straight to 8000
+# would bypass all three without saying so.
+NGROK_DOMAIN="${NGROK_DOMAIN:-}"
+NGROK_UPSTREAM="${NGROK_UPSTREAM:-$HTTP_PORT}"
+NGROK_BIN="${NGROK_BIN:-$(command -v ngrok || true)}"
+RUN_HOME="${RUN_HOME:-$(getent passwd "$RUN_USER" | cut -d: -f6)}"
+
 say()  { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 warn() { printf '\033[33m    ! %s\033[0m\n' "$1"; }
 die()  { printf '\033[31m    x %s\033[0m\n' "$1" >&2; exit 1; }
@@ -55,6 +65,10 @@ fill() {
       -e "s|__TLS_CERT__|$TLS_CERT|g" \
       -e "s|__TLS_KEY__|$TLS_KEY|g" \
       -e "s|__BODY_LIMIT__|$BODY_LIMIT|g" \
+      -e "s|__NGROK_BIN__|$NGROK_BIN|g" \
+      -e "s|__NGROK_DOMAIN__|$NGROK_DOMAIN|g" \
+      -e "s|__NGROK_UPSTREAM__|$NGROK_UPSTREAM|g" \
+      -e "s|__RUN_HOME__|$RUN_HOME|g" \
       "$1"
 }
 
@@ -134,12 +148,26 @@ fi
 
 TMP="$(mktemp)"
 fill "$HERE/supervisor/deepct.conf.template" > "$TMP"
+
+if [ -n "$NGROK_DOMAIN" ]; then
+  [ -n "$NGROK_BIN" ] || die "NGROK_DOMAIN is set but no ngrok binary is on PATH."
+  [ -n "$RUN_HOME" ] && [ -d "$RUN_HOME" ] \
+    || die "No home directory for $RUN_USER; ngrok needs one to find its authtoken."
+  [ -f "$RUN_HOME/.config/ngrok/ngrok.yml" ] \
+    || warn "$RUN_HOME/.config/ngrok/ngrok.yml missing. Run: ngrok config add-authtoken <token>"
+  echo "" >> "$TMP"
+  fill "$HERE/supervisor/ngrok.conf.template" >> "$TMP"
+  echo "    tunnel: $NGROK_DOMAIN -> localhost:$NGROK_UPSTREAM, via $NGROK_BIN"
+fi
+
 sudo -n cp "$TMP" "$CONF"
 rm -f "$TMP"
 
 sudo -n supervisorctl reread
 sudo -n supervisorctl update
-for program in brin-octane brin-queue brin-schedule; do
+PROGRAMS="brin-octane brin-queue brin-schedule"
+[ -n "$NGROK_DOMAIN" ] && PROGRAMS="$PROGRAMS brin-ngrok"
+for program in $PROGRAMS; do
   sudo -n supervisorctl restart "$program" >/dev/null 2>&1 \
     || sudo -n supervisorctl start "$program" >/dev/null 2>&1 \
     || warn "could not start $program"
@@ -163,6 +191,24 @@ for attempt in $(seq 1 10); do
   sleep 3
   [ "$attempt" = "10" ] && die "The API never answered 200 on port $HTTP_PORT."
 done
+
+if [ -n "$NGROK_DOMAIN" ]; then
+  # The tunnel takes a moment to register with ngrok's edge after a restart, so
+  # the first attempt failing means nothing.
+  for attempt in $(seq 1 10); do
+    code="$(curl -s -o /dev/null -w '%{http_code}' \
+      -H 'ngrok-skip-browser-warning: true' \
+      "https://$NGROK_DOMAIN/api/news" --max-time 20 || true)"
+    [ "$code" = "200" ] && break
+    sleep 3
+  done
+  if [ "$code" = "200" ]; then
+    echo "    https://$NGROK_DOMAIN/api/news -> 200 through the tunnel."
+  else
+    warn "https://$NGROK_DOMAIN/api/news answered '$code'."
+    warn "Check: sudo supervisorctl status brin-ngrok; tail /var/log/brin-ngrok.err.log"
+  fi
+fi
 
 if [ -n "$TLS_DOMAIN" ]; then
   code="$(curl -s -o /dev/null -w '%{http_code}' "https://$TLS_DOMAIN:$TLS_PORT/api/news" --max-time 20 || true)"

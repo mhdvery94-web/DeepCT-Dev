@@ -644,9 +644,19 @@ Sejak VPS hidup, ada **dua** backend yang dua-duanya sah:
 | **VPS** | `/var/www/deepct-ai`, di balik nginx | Layanan yang hidup terus, tidak ikut mati kalau mesin lab dimatikan |
 
 Yang perlu diingat, dan gampang terlewat: **alamat API dikompilasi masuk ke
-klien.** Sebuah build hanya bisa menunjuk satu backend. Yang memilihkannya
-adalah repository variable **`NGROK_BE`**, dan ia berlaku untuk semua target
-sekaligus — web, APK, iOS, desktop.
+klien.** Sebuah build hanya bisa menunjuk satu backend, dan ia berlaku untuk
+semua target sekaligus — web, APK, iOS, desktop.
+
+Yang memilihkan, berurutan:
+
+| Variabel | Menunjuk ke |
+|---|---|
+| **`NGROK_BE_VPS`** | VPS. Terisi, dan semuanya menunjuk ke sana. |
+| `NGROK_BE` | Mesin lab. Dipakai kalau yang di atas kosong — jadi **mengosongkan satu variabel** mengembalikan semua klien tanpa menyentuh kode. |
+| `API_BASE_URL` | Nama lama, masih dihormati. |
+
+Keduanya alamat ngrok, dan di sisi VPS itu bukan tambal sulam. Lihat "TLS di
+VPS" di bawah.
 
 Jadi keduanya bisa hidup berdampingan, tapi klien yang di-deploy ke Vercel
 berbicara ke salah satu saja.
@@ -725,6 +735,22 @@ Sumbernya template di `be/deploy/`:
 | `nginx/deepct-http.conf.template` | Server block HTTP (`HTTP_PORT`, bawaan 8080) |
 | `nginx/deepct-tls.conf.template` | Server block TLS (`TLS_PORT`, bawaan 8443); dilewati kalau `TLS_DOMAIN` kosong |
 | `supervisor/deepct.conf.template` | Ketiga program, dengan `stopwaitsecs` |
+| `supervisor/ngrok.conf.template` | Program tunnel; dipasang hanya kalau `NGROK_DOMAIN` diisi |
+
+```bash
+cd /var/www/deepct-ai
+NGROK_DOMAIN=nama-anda.ngrok-free.dev bash deploy/apply.sh
+```
+
+**`environment=HOME=...` di program ngrok itu wajib, bukan kerapian.**
+supervisord tidak mewariskan `HOME`, dan tanpanya ngrok tidak menemukan
+`~/.config/ngrok/ngrok.yml` — ia tetap start, gagal otentikasi, lalu mengulang
+selamanya dengan pesan yang terbaca seperti token salah, bukan seperti home
+directory yang hilang.
+
+Itu juga yang menjaga token tidak muncul di command line. `--authtoken` di
+`command=` berarti kredensialnya terbaca lewat `ps` oleh setiap akun di mesin
+itu.
 
 **Ia mengganti, bukan menambah.** Ia mencari berkas yang *sudah* mem-proxy ke
 `127.0.0.1:8000` dan yang *sudah* mendefinisikan `[program:brin-octane]`, lalu
@@ -741,21 +767,42 @@ worker akan meng-SIGKILL prediksi yang sedang berjalan** — sampai dua jam wakt
 GPU dan satu job milik peneliti, hilang sepuluh detik setelah restart yang tak
 seorang pun mengira merusak. Template ini menyetelnya 7260.
 
-### TLS tanpa record DNS baru
+### TLS di VPS: kenapa ngrok, bukan certbot
 
-Sertifikat mengikat **hostname, bukan port**. Kalau mesin ini sudah memegang
-sertifikat untuk sebuah nama — bahkan untuk situs lain yang tidak berhubungan —
-server block TLS di port sendiri bisa memakainya apa adanya, dan klien yang
-menyambung ke `https://<nama itu>:8443/api` melihat hostname yang dicakup
-sertifikatnya. Sah, dan **tanpa satu pun record DNS baru**.
+Klien web butuh HTTPS — halamannya disajikan Vercel lewat HTTPS, dan browser
+menolak memanggil `http://` dari sana tanpa error jaringan apa pun. Jadi
+backend VPS harus punya alamat HTTPS. Dua jalan yang biasa ditempuh dua-duanya
+buntu di mesin ini, dan keduanya diverifikasi, bukan diduga:
 
-Itu penting karena record DNS-lah yang biasanya menghambat: `certbot` tidak
-bisa menerbitkan apa pun untuk nama yang belum menunjuk ke mesin ini, dan
-membuat record itu ada di penyedia DNS, bukan di sini.
+1. **`certbot` untuk hostname sendiri — buntu di DNS.** Diuji lewat resolver
+   publik: `api.brin.fajrianhost.my.id`, `api.palembangtaste.shop` dan
+   `deepct.palembangtaste.shop` semuanya menjawab **NXDOMAIN**. certbot tidak
+   bisa menerbitkan apa pun untuk nama yang belum menunjuk ke mesin ini, dan
+   record itu dibuat di penyedia DNS, bukan di sini.
 
-Begitu API punya hostname sendiri (satu A record plus
-`certbot --nginx -d api.contoh.org`), yang berubah cuma `server_name` dan jalur
-sertifikat di template TLS.
+   (Hati-hati saat memeriksa: resolver ISP kerap membajak NXDOMAIN dan
+   menjawab satu alamat yang sama untuk subdomain apa pun. Itu terlihat seperti
+   DNS yang sudah jadi. Tanya resolver publik.)
+
+2. **Sertifikat yang sudah ada, di port sendiri — buntu di firewall.**
+   Sertifikat mengikat *hostname, bukan port*, jadi server block TLS di port
+   8443 bisa memakai sertifikat yang mesin ini sudah pegang untuk situs lain,
+   dan klien yang menyambung ke `https://<nama itu>:8443/api` tetap melihat
+   hostname yang dicakup. Sah secara TLS — tapi **port 8443 tertutup di
+   security group Tencent**. Diuji: 8080 tersambung, 8443 timeout.
+
+**ngrok menembus keduanya.** Ia menerbitkan TLS-nya sendiri, jadi tidak butuh
+sertifikat maupun record DNS; dan ia menjangkau keluar dari dalam, jadi
+firewall masuk tidak punya suara. Itulah kenapa VPS memakai tunnel padahal ia
+punya IP publik.
+
+Tunnel-nya diarahkan ke **nginx**, bukan langsung ke Octane. Di nginx-lah batas
+unggah, timeout dan setelan buffering tinggal; tunnel yang menembak 8000
+langsung akan melewati ketiganya tanpa bilang-bilang.
+
+Template TLS (`nginx/deepct-tls.conf.template`) tetap ada dan tetap berfungsi.
+Begitu 8443 dibuka, atau API punya hostname sendiri, `TLS_DOMAIN` mengaktifkan
+kembali jalur yang tidak bergantung pada layanan pihak ketiga.
 
 **Tiga angka yang harus sejalan, dan ini yang paling sering salah.**
 `PredictionUploadController::chunkSize()` menurunkan ukuran potongan yang ia

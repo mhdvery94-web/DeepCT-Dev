@@ -33,6 +33,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.17] - 2026-08-18
+
+VPS mendapat alamat HTTPS-nya lewat ngrok, setelah dua jalur yang lebih rapi
+terbukti buntu.
+
+### Kenapa ngrok padahal VPS punya IP publik
+
+Klien web butuh HTTPS: halamannya disajikan Vercel lewat HTTPS, dan browser
+menolak memanggil `http://` dari sana — tanpa error jaringan, cuma request yang
+tidak pernah berangkat. Dua jalur biasa dicoba dan dua-duanya buntu, keduanya
+diverifikasi bukan diduga:
+
+- **certbot untuk hostname sendiri — buntu di DNS.** Diuji lewat resolver
+  publik: `api.brin.fajrianhost.my.id`, `api.palembangtaste.shop` dan
+  `deepct.palembangtaste.shop` semuanya **NXDOMAIN**. Resolver ISP sempat
+  menjawab satu alamat IPv6 yang sama untuk ketiganya, yang terlihat persis
+  seperti DNS yang sudah jadi — itu pembajakan NXDOMAIN, bukan record.
+
+- **Sertifikat yang sudah ada di port sendiri — buntu di firewall.** Sertifikat
+  mengikat hostname bukan port, jadi server block TLS di 8443 bisa memakai
+  sertifikat yang mesin ini sudah pegang untuk situs lain. Sah secara TLS, tapi
+  **8443 tertutup di security group Tencent**: 8080 tersambung, 8443 timeout.
+
+ngrok menembus keduanya — TLS-nya sendiri, dan menjangkau keluar dari dalam
+sehingga firewall masuk tidak punya suara.
+
+Template TLS tetap ada dan tetap berfungsi. Begitu 8443 dibuka atau API punya
+hostname sendiri, `TLS_DOMAIN` menghidupkan kembali jalur yang tidak bergantung
+pada layanan pihak ketiga.
+
+### Tunnel-nya sekarang program supervisor
+
+Ia dijalankan dari sesi terminal, artinya ia mati begitu sesi itu tertutup —
+dan backend kehilangan satu-satunya alamat HTTPS-nya tanpa ada yang berubah di
+backend itu sendiri. Sekarang `brin-ngrok`, dengan `autorestart`.
+
+**`environment=HOME=...` itu wajib, bukan kerapian.** supervisord tidak
+mewariskan `HOME`, dan tanpanya ngrok tidak menemukan
+`~/.config/ngrok/ngrok.yml`: ia tetap start, gagal otentikasi, lalu mengulang
+selamanya dengan pesan yang terbaca seperti token salah alih-alih home
+directory yang hilang.
+
+Itu juga yang menjaga token keluar dari command line. Perintah yang berjalan
+memakai `--authtoken=<token>`, yang berarti kredensialnya terbaca lewat `ps`
+oleh setiap akun di mesin itu; membacanya dari config file menghilangkan itu.
+
+Tunnel diarahkan ke **nginx**, bukan langsung ke Octane. Di nginx-lah batas
+unggah, timeout dan setelan buffering tinggal; tunnel yang menembak 8000
+langsung melewati ketiganya tanpa bilang-bilang.
+
+### `NGROK_BE_VPS` memilih backend mana yang dituju klien
+
+Urutannya sekarang `NGROK_BE_VPS` → `NGROK_BE` → `API_BASE_URL`. Terisi yang
+pertama, semua target menunjuk ke VPS; **dikosongkan, semuanya kembali ke mesin
+lab** tanpa menyentuh satu baris kode.
+
+Itu bentuk yang tepat untuk dua backend yang alamatnya dikompilasi masuk ke
+klien: satu build hanya bisa bicara ke satu backend, jadi peralihannya harus
+satu tempat, dan tempat itu bukan berkas sumber.
+
+---
+
 ## [1.19.16] - 2026-08-18
 
 Konfigurasi server jadi berkas terversi di `be/deploy/`, setelah melihat mesin

@@ -57,10 +57,26 @@ env:
   # developed and verified against.
   FLUTTER_VERSION: '3.44.9'
   # Where the built clients look for the backend. It is compiled in, so it has
-  # to be decided here rather than at run time. NGROK_BE is the repository
-  # variable in use; API_BASE_URL is honoured for anyone still setting it.
+  # to be decided here rather than at run time — and because it is one value for
+  # every target, web, Android, iOS and desktop all talk to whichever backend
+  # wins here.
+  #
+  # There are two backends and the order below is the switch between them:
+  #
+  #   NGROK_BE_VPS   the VPS. Set, and everything points at it.
+  #   NGROK_BE       the lab machine. Used when NGROK_BE_VPS is empty, so
+  #                  clearing the first variable moves every client back
+  #                  without touching this file.
+  #   API_BASE_URL   honoured for anyone still setting the original name.
+  #
+  # Both are ngrok addresses, and that is not a stopgap on the VPS side: port
+  # 8443 is closed in the cloud firewall and every candidate subdomain answers
+  # NXDOMAIN, so certbot cannot issue for one. A tunnel terminates TLS itself
+  # and reaches in from outside, which is what the web client needs — its page
+  # is HTTPS, and a browser will not call http:// from it.
   API_BASE_URL: >-
     ${{ github.event.inputs.api_base_url
+        || vars.NGROK_BE_VPS
         || vars.NGROK_BE
         || vars.API_BASE_URL
         || 'https://nucleus-drone-grueling.ngrok-free.dev/api' }}

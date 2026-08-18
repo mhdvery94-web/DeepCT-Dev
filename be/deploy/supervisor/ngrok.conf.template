@@ -1,0 +1,39 @@
+; The ngrok tunnel that gives this backend a public HTTPS address.
+;
+; Appended by be/deploy/apply.sh only when NGROK_DOMAIN is set. Without a
+; tunnel the backend is reachable on a plain-HTTP port, which the Android
+; client can use but the web client cannot: its page is served from Vercel over
+; HTTPS and a browser refuses to call http:// from https://.
+;
+; This exists because the alternatives were all blocked. Port 8443 is closed in
+; the cloud firewall, and every candidate subdomain answers NXDOMAIN so certbot
+; cannot issue for one. ngrok terminates TLS on its own certificate and reaches
+; in from outside, so neither the firewall nor DNS has a say.
+;
+; It forwards to nginx, not to Octane directly. nginx is where the upload limit,
+; the timeouts and the buffering settings live, and a tunnel straight to 8000
+; would quietly bypass all three.
+
+[program:brin-ngrok]
+command=__NGROK_BIN__ http --url=__NGROK_DOMAIN__ __NGROK_UPSTREAM__ --log=stdout
+directory=__APP_DIR__
+user=__RUN_USER__
+autostart=true
+autorestart=true
+
+; HOME, and it is not optional. supervisord does not pass one through, and
+; without it ngrok cannot find ~/.config/ngrok/ngrok.yml — so it starts, fails
+; to authenticate, and retries for ever with an error that reads like a bad
+; token rather than a missing home directory.
+;
+; Setting it here is also what keeps the token off the command line. Passing
+; --authtoken puts the credential in `ps` output for every account on the
+; machine to read.
+environment=HOME="__RUN_HOME__"
+
+; A tunnel dropping and reconnecting is normal on the free plan; a tunnel that
+; cannot start is not. Give up announcing failure rather than hammering.
+startretries=999
+stopwaitsecs=10
+stderr_logfile=/var/log/brin-ngrok.err.log
+stdout_logfile=/var/log/brin-ngrok.out.log
