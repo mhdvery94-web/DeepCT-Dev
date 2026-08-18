@@ -107,9 +107,14 @@ if [ -n "$TLS_DOMAIN" ]; then
   [ -f "$TLS_KEY" ]  || die "TLS_DOMAIN is set but $TLS_KEY does not exist."
   fill "$HERE/nginx/deepct-tls.conf.template" >> "$TMP"
   echo "    TLS: $TLS_DOMAIN on port $TLS_PORT, certificate $TLS_CERT"
+elif [ -n "$NGROK_DOMAIN" ]; then
+  # Not a warning. The tunnel terminates TLS itself, so the web client has an
+  # HTTPS address and this server block never needs to be reached from outside.
+  echo "    no TLS block: the tunnel provides HTTPS, and nginx is local to it."
 else
-  warn "TLS_DOMAIN not set. Writing the plain-HTTP door only."
-  warn "A browser will refuse to call http:// from the HTTPS web client."
+  warn "Neither TLS_DOMAIN nor NGROK_DOMAIN is set, so there is no HTTPS address."
+  warn "The Android client can use http://; the web client cannot — its page is"
+  warn "HTTPS and a browser will not call http:// from it, silently."
 fi
 
 sudo -n cp "$TMP" "$SITE"

@@ -33,6 +33,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.18] - 2026-08-18
+
+### Menyerahkan password ke seeder tidak berpengaruh apa-apa
+
+```
+SEED_ADMIN_PASSWORD='admin123' php artisan db:seed --force
+  No SEED_ADMIN_PASSWORD was set, so one was generated.  pBTcup3r09aUy7ygRAZE
+```
+
+Terjadi di VPS, dan jawabannya paling membingungkan yang mungkin: seeder bilang
+tidak ada password padahal baru saja diberi satu.
+
+Sebabnya deploy menjalankan `php artisan config:cache`. Sejak saat itu
+`config/*.php` adalah potret beku — apa pun yang `env()` kembalikan **saat
+deploy** yang tersimpan, dan berkas `.env` tidak dibaca lagi sama sekali. Waktu
+deploy itu `SEED_ADMIN_PASSWORD` memang belum ada, jadi `config(...)` bernilai
+`null` selamanya, dan variabel yang diketik di terminal tidak pernah ditanya.
+
+Direproduksi lokal sebelum diperbaiki, dengan mensimulasikan keadaan VPS —
+config di-cache tanpa variabel itu, lalu dijalankan dengan variabel di command
+line:
+
+```
+config(app.seed_admin_password) = NULL
+env(SEED_ADMIN_PASSWORD)        = 'admin123'
+```
+
+`env()` **tetap** membaca environment proses sungguhan walau config di-cache;
+yang berhenti dibaca hanya *berkas* `.env`. Jadi variabel yang baru diserahkan
+terlihat oleh `env()` dan tak terlihat oleh `config()`.
+
+`AdminUserSeeder` sekarang membaca `env(...) ?: config(...)` — urutan itu
+memperbaiki kegagalan nyata, bukan menyatakan selera: nilai yang diketik
+sekarang harus mengalahkan potret dari waktu deploy. Ini satu-satunya tempat di
+aplikasi yang memanggil `env()` di luar `config/`, dan alasannya ditulis di
+sana.
+
+Empat test mengunci keempat jalurnya, dan yang kedua sempat gagal dengan cara
+yang berguna: `unset($_SERVER[...])` saja tidak cukup, karena mesin
+pengembangan punya variabel itu di `.env` dan Dotenv juga menerbitkannya lewat
+`putenv` — `env()` terus menemukannya di sana. Helper testnya membersihkan
+ketiga tempat.
+
+Jebakannya masuk CLAUDE.md, termasuk akibat yang lebih luas: **setelah mengubah
+`.env` di mesin ter-deploy, `config:cache` harus dijalankan lagi** atau tidak
+ada yang berlaku.
+
+### Peringatan yang salah di `apply.sh`
+
+Tanpa `TLS_DOMAIN` ia memperingatkan bahwa browser akan menolak `http://` dari
+klien web — padahal dengan tunnel aktif klien web justru punya alamat HTTPS.
+Sekarang ia hanya memperingatkan kalau **tidak ada satupun** dari keduanya.
+
+### Catatan dari eksekusi pertama `apply.sh`
+
+Ia berjalan di server untuk pertama kalinya dan bekerja: mengganti site nginx
+yang sudah ada alih-alih menambah yang kedua, mengganti berkas supervisor yang
+sudah mendefinisikan ketiga program, mengambil alih program `ngrok` lama jadi
+`brin-ngrok`, dan kedua smoke check lolos — 200 di `127.0.0.1:8080` dan 200
+lewat tunnel.
+
+`php artisan test`: **242 passed**, 976 assertions.
+
+---
+
 ## [1.19.17] - 2026-08-18
 
 VPS mendapat alamat HTTPS-nya lewat ngrok, setelah dua jalur yang lebih rapi

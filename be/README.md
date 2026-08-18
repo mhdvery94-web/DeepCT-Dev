@@ -529,7 +529,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**238 tests, 969 assertions, 35-60s.** They run against MySQL, not sqlite: three
+**242 tests, 976 assertions, 35-60s.** They run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:

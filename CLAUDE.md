@@ -76,6 +76,35 @@ Confirm you are on a new process by comparing its start time to the file you
 edited. `php artisan route:list` runs in its own short-lived process and will
 happily show a route the running server has never loaded.
 
+### On a deployed machine, `config:cache` has already frozen `env()`
+
+Every deploy runs `php artisan config:cache`. From that moment `config/*.php` is
+a snapshot: whatever `env()` returned *at deploy time* is baked in, and the
+`.env` file is no longer read at all.
+
+The way this bites is not obvious. Run
+
+```bash
+SEED_ADMIN_PASSWORD='chosen' php artisan db:seed --force
+```
+
+and the seeder answers **"No SEED_ADMIN_PASSWORD was set, so one was
+generated"** — because it asked `config('app.seed_admin_password')`, and that
+was cached as `null` back when the deploy ran. The variable you just typed was
+never consulted. It happened on the VPS, and the generated password is the only
+one that works.
+
+`env()` itself still resolves against the real process environment when config
+is cached; it is only the *file* that stops being read. So a variable supplied
+on the command line is visible to `env()` and invisible to `config()`.
+
+`AdminUserSeeder` therefore reads `env(...) ?: config(...)`, and it is the one
+place in the application allowed to call `env()` outside `config/`. The reason
+is in a comment there and in `AdminSeederTest`.
+
+**After changing `.env` on a deployed machine, run `php artisan config:cache`
+again** or nothing you changed applies.
+
 ### Predictions need a queue worker
 
 ```bash
@@ -135,7 +164,7 @@ nginx + PHP-FPM.
 ## Verify your work
 
 ```bash
-cd be && php artisan test          # 238 tests, needs the db_aict_test database
+cd be && php artisan test          # 242 tests, needs the db_aict_test database
 cd fe && flutter analyze           # must be clean
 cd fe && flutter test              # 129 tests
 cd fe && flutter build apk --release

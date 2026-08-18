@@ -22,7 +22,22 @@ class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
-        $password = config('app.seed_admin_password');
+        // The live environment first, the config second, and that order fixes a
+        // real failure rather than expressing a preference.
+        //
+        // Deploys run `config:cache`, which freezes config/app.php as it stood
+        // at deploy time — when SEED_ADMIN_PASSWORD was not set, so the cached
+        // value is null for ever. Passing it on the command line at seed time
+        // then does nothing at all: the seeder generates a random password
+        // while reporting that none was given, which is the most confusing
+        // possible answer to `SEED_ADMIN_PASSWORD=... php artisan db:seed`.
+        //
+        // `env()` still resolves against the real process environment when
+        // config is cached; it is only the .env *file* that stops being read.
+        // So the variable the operator has just typed is visible there, and
+        // nowhere else. This is the one place in the application that reads
+        // env() outside config/, and this is why.
+        $password = env('SEED_ADMIN_PASSWORD') ?: config('app.seed_admin_password');
         $generated = false;
 
         if (empty($password)) {
@@ -33,7 +48,7 @@ class AdminUserSeeder extends Seeder
         // Keyed on the unique email so re-seeding is idempotent instead of
         // failing on the unique username/email constraints.
         $admin = User::updateOrCreate(
-            ['email' => config('app.seed_admin_email', 'admin@brin.go.id')],
+            ['email' => env('SEED_ADMIN_EMAIL') ?: config('app.seed_admin_email', 'admin@brin.go.id')],
             [
                 'username' => 'admin',
                 'name' => 'Administrator',
