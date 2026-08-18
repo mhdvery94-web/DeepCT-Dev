@@ -540,6 +540,15 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
   bool _isSaving = false;
   String? _error;
 
+  /// `inference` answers POST /predict; `trainer` answers POST /train. One
+  /// registry holds both, so a trainer is registered, switched on and
+  /// health-checked here exactly like a model — which is what makes training
+  /// something an administrator turns on rather than a second system.
+  ///
+  /// Creation only: changing an endpoint's kind afterwards would silently
+  /// repoint every job that referenced it.
+  String _kind = 'inference';
+
   bool get _isEdit => widget.existing != null;
 
   @override
@@ -585,6 +594,7 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
         await widget.service.create(
           name: _name.text.trim(),
           version: _version.text.trim(),
+          kind: _kind,
           endpointUrl: _endpoint.text.trim(),
           description: _description.text.trim(),
           maxConcurrentJobs: int.tryParse(_maxJobs.text.trim()) ?? 1,
@@ -658,13 +668,40 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
                       ? 'Version is required'
                       : null,
                 ),
+                // Only when creating. An endpoint that changed kind after jobs
+                // had referenced it would repoint them silently.
+                if (!_isEdit) ...[
+                  const SizedBox(height: 16),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'inference',
+                        label: Text('PREDICTION'),
+                      ),
+                      ButtonSegment(value: 'trainer', label: Text('TRAINING')),
+                    ],
+                    selected: {_kind},
+                    onSelectionChanged: (s) => setState(() => _kind = s.first),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _kind == 'trainer'
+                        ? 'Answers POST /train. Researchers can start training '
+                              'runs while at least one of these is active.'
+                        : 'Answers POST /predict. This is what a researcher '
+                              'picks when interpolating frames.',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _endpoint,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'ENDPOINT URL',
-                    helperText:
-                        'Kaggle / Colab inference URL, e.g. .../predict',
+                    helperText: _kind == 'trainer'
+                        ? 'Kaggle / Colab trainer URL, e.g. .../train'
+                        : 'Kaggle / Colab inference URL, e.g. .../predict',
                   ),
                   validator: (v) {
                     final value = v?.trim() ?? '';

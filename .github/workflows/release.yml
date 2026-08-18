@@ -512,8 +512,33 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          # `gh` works out which repository it is talking about from the git
+          # remote in the working directory. This job never checks the
+          # repository out — it only downloads the built artifacts — so there is
+          # no remote to read and every call failed with
+          #
+          #   failed to run git: fatal: not a git repository
+          #
+          # GH_REPO says it outright and skips the detection entirely, which is
+          # cheaper than cloning the repository to tell `gh` something the
+          # runner already knows.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+
+          echo "Publishing to $GH_REPO"
+
+          # One cheap call before the retries, because retrying is only right
+          # for weather. The last failure here was configuration — `gh` could
+          # not tell which repository it was for — and the loop patiently spent
+          # three minutes rediscovering that five times over, twice. If this
+          # call fails, nothing that follows would have worked either.
+          if ! gh repo view "$GH_REPO" --json name >/dev/null; then
+            echo "::error::Cannot reach $GH_REPO as the token provided. This is a"
+            echo "configuration problem, not a transient one — check GH_REPO and"
+            echo "the token's contents permission rather than re-running."
+            exit 1
+          fi
 
           # Five attempts, backing off 10s, 20s, 30s, 40s. The outages seen so
           # far lasted seconds; this covers a couple of minutes of them.

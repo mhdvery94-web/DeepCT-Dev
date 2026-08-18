@@ -172,38 +172,6 @@ class TrainingController extends Controller
         ]);
     }
 
-    /** POST /api/admin/training/jobs */
-    public function storeJob(Request $request)
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:200',
-            'training_dataset_id' => 'required|exists:training_datasets,id',
-            'base_model_id' => 'nullable|exists:models,id',
-            'total_epochs' => 'required|integer|min:1|max:10000',
-            'hyperparameters' => 'nullable|array',
-        ]);
-
-        $job = TrainingJob::create([
-            'name' => $validated['name'],
-            'training_dataset_id' => $validated['training_dataset_id'],
-            'base_model_id' => $validated['base_model_id'] ?? null,
-            'total_epochs' => $validated['total_epochs'],
-            'hyperparameters' => $validated['hyperparameters'] ?? [],
-            'status' => 'queued',
-            'created_by' => $request->user()->id,
-        ]);
-
-        $this->record($request, 'training_job_created', "Queued training job: {$job->name}", [
-            'job_id' => $job->id,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Job queued. It starts when a worker claims it.',
-            'data' => $this->serialiseJob($job->fresh()->load(['dataset', 'creator'])),
-        ], 201);
-    }
-
     /**
      * POST /api/admin/training/jobs/{id}/dispatch
      *

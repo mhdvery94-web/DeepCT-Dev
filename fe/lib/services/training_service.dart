@@ -107,30 +107,6 @@ class TrainingService {
     );
   }
 
-  /// POST /admin/training/jobs
-  Future<TrainingJob> queueJob({
-    required String name,
-    required int datasetId,
-    int? baseModelId,
-    required int totalEpochs,
-    Map<String, dynamic>? hyperparameters,
-  }) async {
-    final body = await _api.post(
-      ApiConfig.adminTrainingJobs,
-      data: {
-        'name': name,
-        'training_dataset_id': datasetId,
-        'base_model_id': ?baseModelId,
-        'total_epochs': totalEpochs,
-        'hyperparameters': hyperparameters ?? const {},
-      },
-    );
-
-    return TrainingJob.fromJson(
-      Map<String, dynamic>.from(body['data'] as Map),
-    );
-  }
-
   /// POST /admin/training/jobs/{id}/dispatch
   ///
   /// Push the job to a trainer URL on the GPU host, the same way a prediction

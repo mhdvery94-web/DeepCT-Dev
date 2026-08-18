@@ -98,7 +98,7 @@ belum diumumkan tidak bisa ditemukan dengan menebak id.
 | `GET` | `/me/models` | Model yang boleh dipakai |
 | `POST` | `/me/models/refresh` | Sama, tapi **memprobe endpoint-nya dulu**. Throttle 10/menit |
 | `GET` | `/me/training/jobs` | Training run milik sendiri |
-| `POST` | `/me/training/jobs` | Mulai training — multipart `archive` (ZIP), `name`, `total_epochs` |
+| `POST` | `/me/training/jobs` | Mulai training — multipart `archive` (ZIP), `name`, `total_epochs`. Untuk berkas besar pakai jalur chunked di bawah |
 | `GET` | `/me/training/jobs/{id}` | Detail + **riwayat metrik per epoch** |
 | `POST` | `/me/training/jobs/{id}/cancel` | Batalkan run sendiri |
 | `POST` | `/me/avatar` | Pasang foto profil sendiri (multipart `avatar`) |
@@ -120,6 +120,12 @@ tidak ada jalan membaca data akun lain.
 **`GET /me/models`** mengembalikan `id`, `name`, `version`, `status`,
 `description`, `accuracy`, `is_available`. **Tidak pernah `endpoint_url`** —
 lihat ARCHITECTURE.md §3.
+
+**Dataset besar naik lewat sesi chunked yang sama dengan unggahan prediksi**,
+bukan lewat `POST /me/training/jobs`: `POST /predictions/uploads` dengan
+`purpose: training`, `name`, dan `total_epochs`, lalu potongan-potongannya,
+lalu `finalize` — yang mengembalikan run yang sudah diantrekan alih-alih
+prediksi. Multipart sekali-kirim di atas hanya masuk akal untuk dataset kecil.
 
 **`POST /me/models/refresh`** mengembalikan payload yang sama persis, tapi
 memprobe endpoint-nya lebih dulu alih-alih membaca hasil terakhir scheduler.
@@ -454,10 +460,9 @@ inbox tapi tetap ada, dan pesan baru dari orangnya menariknya kembali.
 | Method | Path |
 |---|---|
 | `GET` | `/admin/training/datasets` |
-| `POST` | `/admin/training/datasets` — multipart kalau ada arsipnya |
+| `POST` | `/admin/training/datasets` — **URL saja**, bukan unggahan |
 | `DELETE` | `/admin/training/datasets/{id}` — **409** kalau masih dipakai job |
 | `GET` | `/admin/training/jobs` — filter `status` |
-| `POST` | `/admin/training/jobs` |
 | `GET` | `/admin/training/jobs/{id}` |
 | `POST` | `/admin/training/jobs/{id}/dispatch` — dorong ke trainer |
 | `POST` | `/admin/training/jobs/{id}/cancel` |

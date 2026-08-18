@@ -18,6 +18,15 @@ import '../../utils/file_extension.dart';
 class TrainingScreen extends StatefulWidget {
   const TrainingScreen({super.key});
 
+  /// Stands in for the list request under test.
+  ///
+  /// The same hook [ModelStatusStrip] uses, and for the same reason: the screen
+  /// asks the server for something the moment it is built, and a widget test
+  /// has no server.
+  @visibleForTesting
+  static Future<({List<TrainingRun> runs, bool trainerAvailable})> Function()?
+  debugLoader;
+
   @override
   State<TrainingScreen> createState() => _TrainingScreenState();
 }
@@ -66,7 +75,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
     if (!quiet) setState(() => _loading = true);
 
     try {
-      final result = await _service.list();
+      final result = await (TrainingScreen.debugLoader?.call() ??
+          _service.list());
       if (!mounted) return;
 
       setState(() {

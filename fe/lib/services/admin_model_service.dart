@@ -78,10 +78,16 @@ class AdminModelService {
 
   /// POST /admin/models — the backend runs a health check straight after
   /// creating the record, so the returned model already has a live status.
+  ///
+  /// [kind] is `inference` for an endpoint that answers `POST /predict`, and
+  /// `trainer` for one that answers `POST /train`. One registry serves both:
+  /// a trainer is switched on and health-checked exactly like a model, and a
+  /// second screen for it would have been the same screen twice.
   Future<ModelInfo> create({
     required String name,
     required String version,
     required String endpointUrl,
+    String kind = 'inference',
     String? description,
     int maxConcurrentJobs = 1,
   }) async {
@@ -90,6 +96,7 @@ class AdminModelService {
       data: {
         'name': name,
         'version': version,
+        'kind': kind,
         'endpoint_url': endpointUrl,
         if (description != null && description.isNotEmpty)
           'description': description,

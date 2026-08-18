@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../models/pagination.dart';
 import '../../models/training.dart';
 import '../../services/api_client.dart';
-import '../../services/me_service.dart';
 import '../../services/training_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_dialog.dart';
@@ -160,21 +159,6 @@ class _TrainingScreenState extends State<TrainingScreen> {
     }
   }
 
-  Future<void> _queueJob() async {
-    if (_datasets.isEmpty) {
-      _report('Register a dataset first.', isError: true);
-      return;
-    }
-
-    final queued = await showAppDialog<bool>(
-      context: context,
-      maxWidth: 520,
-      builder: (_) => _JobForm(datasets: _datasets),
-    );
-
-    if (queued == true) await _load();
-  }
-
   /// Push a queued job to the GPU host, the way a prediction is pushed to a
   /// model endpoint.
   Future<void> _dispatchJob(TrainingJob job) async {
@@ -306,11 +290,6 @@ class _TrainingScreenState extends State<TrainingScreen> {
           tooltip: 'Refresh',
           onPressed: _load,
           icon: const Icon(Icons.refresh, size: 20),
-        ),
-        ElevatedButton.icon(
-          onPressed: _queueJob,
-          icon: const Icon(Icons.play_arrow, size: 16),
-          label: const Text('NEW JOB'),
         ),
       ],
     );
@@ -914,229 +893,6 @@ class _DatasetFormState extends State<_DatasetForm> {
                             ),
                           )
                         : const Text('ADD'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _JobForm extends StatefulWidget {
-  final List<TrainingDataset> datasets;
-
-  const _JobForm({required this.datasets});
-
-  @override
-  State<_JobForm> createState() => _JobFormState();
-}
-
-class _JobFormState extends State<_JobForm> {
-  final TrainingService _service = TrainingService();
-  final MeService _meService = MeService();
-  final _formKey = GlobalKey<FormState>();
-
-  final _name = TextEditingController();
-  final _epochs = TextEditingController(text: '100');
-  final _learningRate = TextEditingController(text: '0.0002');
-  final _batchSize = TextEditingController(text: '4');
-
-  late int _datasetId = widget.datasets.first.id;
-  int? _baseModelId;
-  List<AvailableModel> _models = const [];
-
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadModels();
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _epochs.dispose();
-    _learningRate.dispose();
-    _batchSize.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadModels() async {
-    try {
-      final models = await _meService.models();
-      if (!mounted) return;
-      setState(() => _models = models);
-    } on ApiException {
-      // Fine-tuning is optional; training from scratch still works.
-    }
-  }
-
-  Future<void> _submit() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-
-    try {
-      await _service.queueJob(
-        name: _name.text.trim(),
-        datasetId: _datasetId,
-        baseModelId: _baseModelId,
-        totalEpochs: int.tryParse(_epochs.text.trim()) ?? 100,
-        hyperparameters: {
-          'learning_rate':
-              double.tryParse(_learningRate.text.trim()) ?? 0.0002,
-          'batch_size': int.tryParse(_batchSize.text.trim()) ?? 4,
-        },
-      );
-
-      if (!mounted) return;
-      Navigator.pop(context, true);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = e.message;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-      child: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('New training job',
-                  style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 4),
-              Text(
-                'The job waits in the queue until a GPU worker claims it. '
-                'Training runs on Kaggle, not here.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 20),
-
-              TextFormField(
-                controller: _name,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  hintText: 'Retrain on balanced t',
-                ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Name is required' : null,
-              ),
-              const SizedBox(height: 16),
-
-              DropdownButtonFormField<int>(
-                initialValue: _datasetId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Dataset'),
-                items: [
-                  for (final d in widget.datasets)
-                    DropdownMenuItem(value: d.id, child: Text(d.name)),
-                ],
-                onChanged: (v) => setState(() => _datasetId = v ?? _datasetId),
-              ),
-              const SizedBox(height: 16),
-
-              DropdownButtonFormField<int?>(
-                initialValue: _baseModelId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Start from (optional)',
-                  helperText: 'Fine-tune an existing version, or train fresh',
-                ),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('From scratch'),
-                  ),
-                  for (final m in _models)
-                    DropdownMenuItem<int?>(value: m.id, child: Text(m.label)),
-                ],
-                onChanged: (v) => setState(() => _baseModelId = v),
-              ),
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _epochs,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Epochs'),
-                      validator: (v) {
-                        final n = int.tryParse(v?.trim() ?? '');
-                        if (n == null || n < 1) return 'At least 1';
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _batchSize,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Batch size'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _learningRate,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(labelText: 'Learning rate'),
-              ),
-
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.errorLight,
-                    border: Border.all(color: AppTheme.error),
-                  ),
-                  child: Text(_error!,
-                      style: Theme.of(context).textTheme.bodySmall),
-                ),
-              ],
-
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: _busy ? null : () => Navigator.pop(context),
-                    child: const Text('CANCEL'),
-                  ),
-                  const Spacer(),
-                  ElevatedButton(
-                    onPressed: _busy ? null : _submit,
-                    child: _busy
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text('QUEUE JOB'),
                   ),
                 ],
               ),

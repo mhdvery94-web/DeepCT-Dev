@@ -33,6 +33,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.12] - 2026-08-18
+
+### Publishing could not tell which repository it was for
+
+```
+failed to run git: fatal: not a git repository
+```
+
+`gh` works out the repository from the git remote in the working directory, and
+the `publish` job never checks the repository out — it only downloads the built
+artifacts. So there was no remote, and every call failed. `GH_REPO` says it
+outright, which is cheaper than cloning the repository to tell the runner
+something it already knows.
+
+The retry loop made that worse rather than better: it spent three minutes
+rediscovering a deterministic failure, five times over, twice. A single
+`gh repo view` now runs first, and a failure there exits immediately saying so —
+retrying is for weather, not for configuration.
+
+### A trainer can be registered from the admin screen
+
+The model form offers **PREDICTION / TRAINING** when creating an endpoint. Until
+now `kind` existed only in the API, so registering a trainer meant a hand-written
+request, and the researcher's training screen would say "no trainer registered"
+for ever.
+
+Only on creation. An endpoint that changed kind after jobs had referenced it
+would repoint them silently.
+
+### Two ways to start a run became one
+
+`POST /admin/training/jobs` is gone, along with the NEW JOB button and its
+dialog. An administrator arranging runs on someone else's behalf is the shape
+this system was deliberately turned away from, and leaving the endpoint in place
+would have left two ways to do one thing, differing only in whose name the run
+carried.
+
+What an administrator keeps is oversight of every run: see them, push them to a
+trainer, cancel them, delete them. The route answers **405 rather than 404**,
+because `GET /training/jobs` still lives at that path — the route exists, the
+verb does not.
+
+### Seven tests for the researcher's screen
+
+Empty state, the warning shown before a dataset is uploaded rather than after,
+the per-epoch table taking its columns from the reported metrics, and the cancel
+button appearing only while a run can still be cancelled.
+
+They pump a 1200×3000 surface. The screen is one long column and on the default
+800×600 test viewport everything below the start card is laid out but off
+screen, where a finder reports nothing — a failure that reads as "it did not
+render" when it means "you cannot see it".
+
+`php artisan test` → **235 passed**. `flutter analyze` → clean.
+`flutter test` → **129 passed**.
+
+**Still not done, and one of them cannot be done from here:** no training run
+has executed on a GPU, which needs a live Kaggle session running
+`script-api-train-deepct.py`. And a dataset upload that drops still has to start
+again — prediction uploads remember an interrupted session and offer it back,
+training uploads do not yet.
+
+---
+
 ## [1.19.11] - 2026-08-18
 
 ### The researcher can see training now

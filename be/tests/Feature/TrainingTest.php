@@ -164,7 +164,15 @@ class TrainingTest extends TestCase
 
     // ---------------------------------------------------------------- jobs
 
-    public function test_an_admin_can_queue_a_job(): void
+    /**
+     * Queueing a run is the researcher's, and only the researcher's.
+     *
+     * An administrator arranging runs on someone's behalf was the whole shape
+     * this system was turned away from; leaving the endpoint in place would
+     * have left two ways to do one thing, differing only in who is recorded as
+     * having started it.
+     */
+    public function test_an_admin_can_no_longer_queue_a_job(): void
     {
         $dataset = $this->makeDataset();
 
@@ -173,11 +181,12 @@ class TrainingTest extends TestCase
                 'name' => 'Retrain on balanced t',
                 'training_dataset_id' => $dataset->id,
                 'total_epochs' => 200,
-                'hyperparameters' => ['learning_rate' => 0.0002, 'batch_size' => 4],
             ])
-            ->assertCreated()
-            ->assertJsonPath('data.status', 'queued')
-            ->assertJsonPath('data.total_epochs', 200);
+            // 405 rather than 404: `GET /training/jobs` still lives at this
+            // path, so the route exists and the verb does not.
+            ->assertStatus(405);
+
+        $this->assertSame(0, TrainingJob::count());
     }
 
     public function test_a_researcher_cannot_reach_training_at_all(): void

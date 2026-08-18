@@ -236,24 +236,29 @@ Sisi backend sudah dibangun dan lulus test:
 - [x] **Kolom upload dicabut dari layar admin Flutter**, sejalan dengan backend
       yang sudah menolaknya
 
+- [x] **`kind` di form model admin** — pilihan PREDICTION / TRAINING saat
+      mendaftarkan endpoint, hanya saat membuat (mengubahnya belakangan akan
+      diam-diam memindahkan job yang sudah merujuknya)
+- [x] **Widget test layar training** — 7 test: keadaan kosong, peringatan
+      trainer, tabel metrik per epoch, tombol batal yang hanya muncul saat
+      relevan
+- [x] **`POST /admin/training/jobs` dicabut** beserta tombol "NEW JOB" dan
+      dialognya. Dua cara memulai run yang bedanya cuma atas nama siapa
+      bukanlah pengawasan
+
 Yang **belum**:
 
 - [ ] **Uji end-to-end terhadap trainer sungguhan.** Belum ada satu run pun yang
-      benar-benar berjalan di GPU. Yang terbukti baru: unggah chunked (test
-      backend), dan layar yang menganalisis serta lulus suite Flutter. Sesuai
-      aturan CLAUDE.md, pipeline prediksi diuji ujung-ke-ujung terhadap worker
-      nyata — training belum.
-- [ ] **Widget test untuk layar training.** 122 test Flutter lulus, tapi tidak
-      satu pun menyentuh layar baru ini.
-- [ ] **`kind` di form model admin.** Trainer masih hanya bisa didaftarkan lewat
-      API, jadi tombol "start training" di layar peneliti akan selalu
-      memberitahu bahwa belum ada trainer sampai itu dikerjakan.
+      benar-benar berjalan di GPU, dan ini **tidak bisa dikerjakan dari sini** —
+      ia butuh sesi Kaggle yang hidup dengan `script-api-train-deepct.py`
+      berjalan. Sesuai aturan CLAUDE.md, pipeline prediksi diuji ujung-ke-ujung
+      terhadap worker nyata; training belum, jadi sampai itu terjadi ini
+      antarmuka jadi di atas jalur yang belum pernah dijalani.
 - [ ] **Resume untuk unggah dataset.** Unggah prediksi menyimpan sesi yang
-      terputus dan menawarkannya kembali; training belum. Saat itu ditambahkan,
-      loop chunk di dua layanan itu layak diangkat jadi satu.
-- [ ] **Route admin lama** (`POST /admin/training/datasets` untuk URL, dan
-      `POST /admin/training/jobs`) masih ada. Sekarang penggantinya sudah
-      terlihat, jadi mencabutnya sudah aman — tapi belum dilakukan.
+      terputus dan menawarkannya kembali di perangkat; training belum — sebuah
+      unggahan yang putus harus diulang dari nol. Saat ini dikerjakan, loop
+      chunk di `prediction_service.dart` dan `researcher_training_service.dart`
+      layak diangkat jadi satu.
 - [ ] **Menyalakan `kind` di layar admin.** Backend menerima `kind` saat
       mendaftarkan model; form admin belum menawarkannya, jadi trainer baru
       bisa didaftarkan lewat API.

@@ -165,8 +165,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/training/datasets', [TrainingController::class, 'storeDataset'])->name('api.admin.training.datasets.store');
         Route::delete('/training/datasets/{id}', [TrainingController::class, 'destroyDataset'])->name('api.admin.training.datasets.destroy');
 
+        // No `POST /training/jobs`. Starting a run belongs to the researcher
+        // who has the data — see `me/training/jobs`. An administrator keeps
+        // oversight of every run here: see them, push them, cancel them,
+        // delete them. Two ways to start one, differing only in whose name it
+        // carries, is not oversight.
         Route::get('/training/jobs', [TrainingController::class, 'jobs'])->name('api.admin.training.jobs');
-        Route::post('/training/jobs', [TrainingController::class, 'storeJob'])->name('api.admin.training.jobs.store');
         Route::get('/training/jobs/{id}', [TrainingController::class, 'showJob'])->name('api.admin.training.jobs.show');
         Route::post('/training/jobs/{id}/dispatch', [TrainingController::class, 'dispatchJob'])->name('api.admin.training.jobs.dispatch');
         Route::post('/training/jobs/{id}/cancel', [TrainingController::class, 'cancelJob'])->name('api.admin.training.jobs.cancel');
