@@ -33,6 +33,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.15] - 2026-08-18
+
+Deploy pertama ke VPS berhasil pada percobaan ketujuh, dan tiga hal yang
+ditemukan di sepanjang jalan itu diperbaiki di sini.
+
+### 500 di setiap request, dan itu bukan `resources/views`
+
+Sesudah deploy, aplikasi menjawab 500. Diagnosis yang beredar: `rsync --delete`
+menghapus `resources/views` karena folder itu tidak ada di GitHub.
+
+Bukan itu. `resources/views/welcome.blade.php` **ter-track** dan ikut terkirim
+seperti berkas lain. Yang hilang adalah **`storage/framework/views`** — dan itu
+memang tidak akan pernah sampai, karena `storage/` sengaja dikecualikan dari
+rsync: di situ tinggal unggahan, hasil, dan dataset training, dan deploy tidak
+punya urusan menyentuhnya. Tapi pengecualian yang sama berarti direktori kosong
+yang dibutuhkan Laravel saat runtime juga tidak ikut. Di repo ketiganya cuma
+folder berisi `.gitignore`, dan rsync melewati semuanya.
+
+Tanpa direktori itu Laravel melempar *"Please provide a valid cache path"* —
+pesan yang menyebut sebuah path di bawah `storage/framework` dan rutin terbaca
+sebagai view yang hilang, karena kata yang menarik mata adalah `views`.
+
+Deploy sekarang membuat kerangkanya sendiri tiap kali dijalankan
+(`storage/framework/{views,cache/data,sessions,testing}`, `storage/logs`,
+`storage/app/{private,public}`, `storage/backups`). Ia menyembuhkan diri, dan
+harus begitu: satu-satunya jalan direktori itu bisa ada.
+
+### Skrip provisioning menganggap mesinnya milik sendiri
+
+VPS ini juga melayani situs lain di port 80 dan 443, dan backend ini sudah
+diberi site nginx sendiri di **port 8080**. Skrip provisioning akan menulis
+site keduanya di port 80 dan mengaktifkannya.
+
+Itu tidak akan gagal dengan berisik — justru itu masalahnya. Dua konfigurasi
+untuk satu backend, dan orang berikutnya yang menaikkan `client_max_body_size`
+menaikkannya di berkas yang salah.
+
+Sekarang skripnya memeriksa dulu: kalau sudah ada site aktif yang mengarah ke
+`127.0.0.1:8000`, site itu dibiarkan dan tidak ada yang ditulis. `NGINX_SITE`,
+`NGINX_PORT` dan `FORCE_NGINX` mengatur sisanya.
+
+Pemeriksaannya memakai `grep -R`, bukan `-r`. Semua isi `sites-enabled` adalah
+symlink ke `sites-available`, dan `-r` pada GNU grep hanya mengikuti symlink
+yang disebut di command line — di dalam direktori ia berjalan melewatinya. Dengan
+`-r` pemeriksaan ini tidak akan menemukan apa pun, di mesin mana pun yang
+mengaktifkan site-nya dengan cara normal, lalu dengan riang menulis konfigurasi
+kedua di sebelah yang sudah bekerja.
+
+### Skrip provisioning dipindah ke `be/scripts/`
+
+Ia ada di `scripts/` di root, dan deploy meng-`rsync` **`be/` saja** — jadi
+skrip itu tidak akan pernah sampai ke server yang membutuhkannya. Sekarang di
+`be/scripts/provision-vps.sh`, dan mendarat sebagai
+`/var/www/deepct-ai/scripts/provision-vps.sh` dibawa oleh deploy pertama.
+
+### Dua backend, dan HTTPS yang memaksa memilih
+
+APK boleh berbicara ke `http://` — `usesCleartextTraffic="true"` ada di
+manifest. Klien web di Vercel tidak: halamannya selalu HTTPS, dan browser
+menolak permintaan `http://` dari halaman HTTPS sebagai mixed content, tanpa
+error jaringan yang jelas, cuma request yang tidak pernah berangkat.
+
+Karena `NGROK_BE` satu variabel untuk semua target, mengarahkannya ke VPS
+selama VPS masih HTTP **memperbaiki APK dan mematikan web**. Ditulis di
+ARCHITECTURE §8 sebagai tabel, karena ini jenis hal yang menghabiskan sore.
+
+---
+
 ## [1.19.14] - 2026-08-18
 
 ### Setiap deploy akan menghapus RoadRunner
@@ -47,7 +115,7 @@ tepat setelah deploy yang tampak berhasil.
 Sekarang dikecualikan bersama `.rr.yaml`, `public/build`, `public/storage` dan
 `auth.json` — semuanya gitignore, semuanya akan bernasib sama.
 
-### `scripts/provision-vps.sh`
+### `be/scripts/provision-vps.sh`
 
 Sekali jalan, di server, mengerjakan persis yang **tidak** dikerjakan job
 deploy: database dan usernya, `.env` dengan `APP_DEBUG=false` dan

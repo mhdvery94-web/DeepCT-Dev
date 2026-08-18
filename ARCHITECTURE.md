@@ -635,13 +635,30 @@ adalah repository variable **`NGROK_BE`**, dan ia berlaku untuk semua target
 sekaligus — web, APK, iOS, desktop.
 
 Jadi keduanya bisa hidup berdampingan, tapi klien yang di-deploy ke Vercel
-berbicara ke salah satu saja. Memindahkannya ke VPS berarti mengubah satu
+berbicara ke salah satu saja.
+
+**Dan satu variabel itu tidak bisa memuaskan semua target sekaligus selama VPS
+masih HTTP.** Ini yang paling mudah menghabiskan sore:
+
+| Klien | Ke `http://<ip>:8080/api` | Ke `https://…/api` |
+|---|---|---|
+| **APK Android** | Jalan. `usesCleartextTraffic="true"` ada di manifest | Jalan |
+| **Web di Vercel** | **Diblokir.** Halaman Vercel selalu HTTPS, dan browser menolak permintaan `http://` dari halaman HTTPS sebagai mixed content | Jalan |
+
+Kegagalannya tidak sopan: tidak ada error jaringan yang jelas, cuma request
+yang tidak pernah berangkat dan sebuah pesan di console browser. Jadi selama
+VPS belum punya TLS, mengarahkan `NGROK_BE` ke sana **memperbaiki APK dan
+mematikan web**.
+
+Jalan keluarnya satu: sertifikat untuk VPS-nya. Arahkan sebuah nama ke IP-nya,
+lalu `sudo certbot --nginx -d <nama itu>`. Sesudah itu satu alamat HTTPS
+melayani ketiga target sekaligus dan variabelnya cukup diubah sekali. Memindahkannya ke VPS berarti mengubah satu
 variabel di Settings → Secrets and variables → Actions → Variables, lalu
 menjalankan ulang workflow-nya; tidak ada kode yang berubah. Job `preflight`
 memeriksa nilainya tidak kosong dan berakhiran `/api` — **bentuknya saja, bukan
 apakah alamat itu menjawab**, jadi menunjuk ke backend yang mati tetap lolos.
 
-### Menyiapkan VPS-nya sekali: `scripts/provision-vps.sh`
+### Menyiapkan VPS-nya sekali: `be/scripts/provision-vps.sh`
 
 Job deploy sengaja tidak menyiapkan apa pun — ia tidak pernah menulis `.env`,
 tidak menjalankan `db:seed`, dan tidak menyentuh nginx, karena deploy yang
@@ -649,14 +666,35 @@ memiliki ketiganya akan menimpa kredensial produksi pada push berikutnya.
 Skrip ini yang mengerjakannya, sekali, di server:
 
 ```bash
+cd /var/www/deepct-ai
 DB_PASSWORD='...' SEED_ADMIN_PASSWORD='...' bash scripts/provision-vps.sh
 ```
+
+Ia ada di bawah `be/` bukan tanpa sebab: deploy meng-`rsync` **`be/` saja**,
+jadi skrip yang diletakkan di atas itu tidak akan pernah sampai ke server yang
+membutuhkannya. Di server ia mendarat sebagai
+`/var/www/deepct-ai/scripts/provision-vps.sh`, dibawa oleh deploy pertama —
+yang justru merupakan langkah 1 dari urutan di bawah.
 
 Ia membuat database dan usernya, menulis `.env` dengan `APP_DEBUG=false` plus
 `TRAINING_WORKER_TOKEN` baru, mengunduh binari RoadRunner, menjalankan migrasi,
 memasang ketiga program supervisor dan reverse proxy nginx, lalu **menanyakan
 `GET /api/news` ke proses yang benar-benar berjalan** sebelum menyatakan
-selesai. Aman dijalankan ulang, dan satu hal yang tidak akan pernah ia timpa
+selesai.
+
+**Ia tidak menganggap mesin ini miliknya sendiri.** Kalau sudah ada site nginx
+yang aktif dan mengarah ke `127.0.0.1:8000`, site itu dibiarkan dan tidak ada
+yang ditulis — mesin yang juga melayani situs lain biasanya sudah punya server
+block sendiri untuk backend ini, dan menambah yang kedua tidak akan gagal
+dengan berisik, ia cuma meninggalkan dua konfigurasi untuk satu backend
+sehingga orang berikutnya yang menaikkan batas unggah menaikkannya di berkas
+yang salah. Yang bisa diatur:
+
+| Variabel | Bawaan | Untuk apa |
+|---|---|---|
+| `NGINX_SITE` | `brin-api` | Nama berkas di `sites-available` |
+| `NGINX_PORT` | `80` | Pakai mis. `8080` kalau port 80 sudah dipakai situs lain |
+| `FORCE_NGINX` | `0` | `1` untuk menulis walau sudah ada yang mengarah ke 8000 | Aman dijalankan ulang, dan satu hal yang tidak akan pernah ia timpa
 adalah `.env` yang sudah ada — di situ `APP_KEY` tinggal, dan menggantinya
 membuat setiap nilai terenkripsi dan setiap token yang pernah diterbitkan tidak
 terbaca lagi.

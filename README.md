@@ -164,7 +164,7 @@ running process to confirm it came back. It needs the repository secrets
 `VPS_HOST`, `VPS_USERNAME`, `VPS_SSH` and optionally `VPS_PORT`.
 
 The server is prepared once, by hand, with
-[`scripts/provision-vps.sh`](scripts/provision-vps.sh) — database, `.env`,
+[`be/scripts/provision-vps.sh`](be/scripts/provision-vps.sh) — database, `.env`,
 RoadRunner, supervisor and nginx. The deploy job never writes any of them,
 because a deploy that owned them would overwrite production credentials on the
 next push.

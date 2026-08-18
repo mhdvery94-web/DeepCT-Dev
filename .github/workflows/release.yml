@@ -460,6 +460,34 @@ jobs:
             exit 1
           fi
 
+          # The storage skeleton, recreated on every deploy because it can
+          # never arrive by any other route.
+          #
+          # `storage/` is excluded from the rsync above — it holds the uploads,
+          # the results and the training datasets, and a deploy has no business
+          # touching those. But the same exclusion means the *empty* directories
+          # Laravel needs at run time never arrive either. They exist in the
+          # repository as folders holding nothing but a .gitignore, and rsync
+          # skips the lot.
+          #
+          # Missing, they produce "Please provide a valid cache path" on every
+          # request: a 500 that names a directory under storage/framework and
+          # is routinely misread as a missing view, because the word that
+          # catches the eye is `views`. resources/views is tracked and arrives
+          # with everything else; storage/framework/views is the one that does
+          # not.
+          echo "--- Storage skeleton"
+          mkdir -p \
+            storage/app/private \
+            storage/app/public \
+            storage/framework/cache/data \
+            storage/framework/sessions \
+            storage/framework/testing \
+            storage/framework/views \
+            storage/logs \
+            storage/backups
+          echo "ensured."
+
           echo "--- Dependencies"
           composer install --no-dev --optimize-autoloader --no-interaction --no-progress
 

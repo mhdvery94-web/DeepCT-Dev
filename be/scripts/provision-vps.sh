@@ -7,8 +7,14 @@
 # deploy that owned those would overwrite production credentials on the next
 # push. Somebody has to set them up once instead, and this is that somebody.
 #
-# Run it on the server, as the account the deploy will use:
+# It lives under be/ on purpose: the deploy rsyncs `be/` and nothing else, so a
+# script anywhere above that would never reach the server that needs it. On the
+# server it lands at $APP_DIR/scripts/provision-vps.sh.
 #
+# Run it on the server, from the application directory, as the account the
+# deploy will use:
+#
+#   cd /var/www/deepct-ai
 #   DB_PASSWORD='...' SEED_ADMIN_PASSWORD='...' bash scripts/provision-vps.sh
 #
 # It is safe to run again. Every step checks for what it is about to create,
@@ -41,6 +47,17 @@ DB_PASSWORD="${DB_PASSWORD:-}"
 PHP_UPLOAD_LIMIT="${PHP_UPLOAD_LIMIT:-32M}"
 NGINX_BODY_LIMIT="${NGINX_BODY_LIMIT:-64m}"
 PHP_MEMORY_LIMIT="${PHP_MEMORY_LIMIT:-512M}"
+
+# nginx, and the assumption not to make: that this machine serves only us.
+#
+# It may already carry an unrelated site on 80 and 443, in which case this
+# backend belongs on a port of its own and the site file has a name of its own.
+# Nothing here is written if some enabled site already proxies to
+# 127.0.0.1:8000 — that site is already doing this job, and a second one would
+# be a duplicate nobody remembers writing. FORCE_NGINX=1 overrides.
+NGINX_SITE="${NGINX_SITE:-brin-api}"
+NGINX_PORT="${NGINX_PORT:-80}"
+FORCE_NGINX="${FORCE_NGINX:-0}"
 
 say()  { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 warn() { printf '\033[33m    ! %s\033[0m\n' "$1"; }
@@ -197,7 +214,12 @@ else
   warn "Run: SEED_ADMIN_PASSWORD='...' php artisan db:seed --force"
 fi
 
-mkdir -p storage/backups
+# The directories Laravel needs at run time. They exist in the repository as
+# folders holding nothing but a .gitignore, and the deploy excludes `storage/`
+# wholesale, so they can only ever arrive here. Missing, they produce "Please
+# provide a valid cache path" on every request — a 500 that is routinely
+# misread as a missing view.
+mkdir -p   storage/app/private   storage/app/public   storage/framework/cache/data   storage/framework/sessions   storage/framework/testing   storage/framework/views   storage/logs   storage/backups
 chmod -R ug+rwX storage bootstrap/cache
 
 # ---------------------------------------------------------------- supervisor
@@ -262,16 +284,39 @@ sudo supervisorctl status | sed 's/^/    /'
 
 say "nginx"
 
-sudo tee /etc/nginx/sites-available/brin-api >/dev/null <<CONF
-# Written by scripts/provision-vps.sh.
+# Is somebody already doing this? A machine that carries other sites may well
+# have a server block pointed at 127.0.0.1:8000 already, written by hand and
+# working. Adding a second one would not break anything loudly — it would just
+# leave two configurations for one backend, and the next person to change the
+# upload limit would change the wrong one.
+#
+# `-R`, not `-r`. Everything in sites-enabled is a symlink into
+# sites-available, and GNU grep's `-r` follows symlinks only when they are
+# named on the command line — inside a directory it walks straight past them.
+# With `-r` this check would find nothing, every time, on every machine that
+# enables its sites the normal way, and would then cheerfully write a second
+# configuration next to the working one.
+EXISTING=""
+if [ -d /etc/nginx/sites-enabled ]; then
+  EXISTING="$(sudo grep -Rls "127\.0\.0\.1:8000" /etc/nginx/sites-enabled/ 2>/dev/null | head -1 || true)"
+fi
+
+if [ -n "$EXISTING" ] && [ "$FORCE_NGINX" != "1" ]; then
+  echo "    $EXISTING already proxies to 127.0.0.1:8000. Left alone."
+  echo "    Listening on: $(sudo grep -hE "^\s*listen" "$EXISTING" | tr -s ' ' | sed 's/^ //' | paste -sd', ')"
+  warn "Not writing $NGINX_SITE. Re-run with FORCE_NGINX=1 to write it anyway."
+  warn "Check that site's client_max_body_size exceeds the chunk PHP advertises ($PHP_UPLOAD_LIMIT)."
+else
+  sudo tee "/etc/nginx/sites-available/$NGINX_SITE" >/dev/null <<CONF
+# Written by be/scripts/provision-vps.sh.
 #
 # A reverse proxy and nothing more. Octane serves everything including static
 # files, so there is no root and no try_files here — pointing nginx at public/
 # as well would give two answers to the same request.
 
 server {
-    listen 80;
-    listen [::]:80;
+    listen $NGINX_PORT;
+    listen [::]:$NGINX_PORT;
     server_name $SERVER_NAME;
 
     # Must exceed the largest chunk PHP will advertise. See the note in
@@ -301,10 +346,11 @@ server {
 }
 CONF
 
-sudo ln -sf /etc/nginx/sites-available/brin-api /etc/nginx/sites-enabled/brin-api
-sudo nginx -t
-sudo systemctl reload nginx
-echo "    proxying $SERVER_NAME to 127.0.0.1:8000, body limit $NGINX_BODY_LIMIT."
+  sudo ln -sf "/etc/nginx/sites-available/$NGINX_SITE" "/etc/nginx/sites-enabled/$NGINX_SITE"
+  sudo nginx -t
+  sudo systemctl reload nginx
+  echo "    $NGINX_SITE: $SERVER_NAME on port $NGINX_PORT -> 127.0.0.1:8000, body limit $NGINX_BODY_LIMIT."
+fi
 
 # ---------------------------------------------------------------- proof
 #
