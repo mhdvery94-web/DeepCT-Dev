@@ -29,7 +29,7 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/var/www/deepct-ai}"
 SERVICE_USER="${SERVICE_USER:-$(whoami)}"
 SERVER_NAME="${SERVER_NAME:-api.brin.fajrianhost.my.id}"
-APP_URL="${APP_URL:-https://$SERVER_NAME}"
+APP_URL="${APP_URL:-https://$SERVER_NAME}"  # only written into a *new* .env
 
 DB_DATABASE="${DB_DATABASE:-db_aict}"
 DB_USERNAME="${DB_USERNAME:-aict}"
@@ -45,19 +45,23 @@ DB_PASSWORD="${DB_PASSWORD:-}"
 # chunk PHP would advertise on a stock install. That mismatch is invisible
 # until the first upload from a real client.
 PHP_UPLOAD_LIMIT="${PHP_UPLOAD_LIMIT:-32M}"
-NGINX_BODY_LIMIT="${NGINX_BODY_LIMIT:-64m}"
+NGINX_BODY_LIMIT="${NGINX_BODY_LIMIT:-100M}"
 PHP_MEMORY_LIMIT="${PHP_MEMORY_LIMIT:-512M}"
 
-# nginx, and the assumption not to make: that this machine serves only us.
+# Passed straight through to deploy/apply.sh, which owns nginx and supervisor.
 #
-# It may already carry an unrelated site on 80 and 443, in which case this
-# backend belongs on a port of its own and the site file has a name of its own.
-# Nothing here is written if some enabled site already proxies to
-# 127.0.0.1:8000 — that site is already doing this job, and a second one would
-# be a duplicate nobody remembers writing. FORCE_NGINX=1 overrides.
-NGINX_SITE="${NGINX_SITE:-brin-api}"
-NGINX_PORT="${NGINX_PORT:-80}"
-FORCE_NGINX="${FORCE_NGINX:-0}"
+# The assumption not to make is that this machine serves only us. It may
+# already carry an unrelated site on 80 and 443, in which case this backend
+# belongs on ports of its own — which is why these default to 8080 and 8443
+# rather than 80 and 443.
+#
+# TLS_DOMAIN empty means the plain-HTTP door only. Set it to a hostname this
+# machine already holds a certificate for; the certificate binds the hostname,
+# not the port, so an existing one works on a port of our own without any new
+# DNS record.
+HTTP_PORT="${HTTP_PORT:-8080}"
+TLS_PORT="${TLS_PORT:-8443}"
+TLS_DOMAIN="${TLS_DOMAIN:-}"
 
 say()  { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 warn() { printf '\033[33m    ! %s\033[0m\n' "$1"; }
@@ -174,7 +178,10 @@ else
 
   php artisan key:generate --force
   echo "    wrote .env with APP_DEBUG=false and a fresh training worker token."
-  warn "CORS: config/cors.php must allow the web client's origin. Check it."
+  # No CORS note here on purpose. config/cors.php has never been published, so
+  # the framework default applies and allowed_origins is `*` — which is safe
+  # here because Sanctum is used with bearer tokens and nothing sends a cookie.
+  # See ARCHITECTURE section 8.
 fi
 
 # ---------------------------------------------------------------- dependencies
@@ -222,161 +229,28 @@ fi
 mkdir -p   storage/app/private   storage/app/public   storage/framework/cache/data   storage/framework/sessions   storage/framework/testing   storage/framework/views   storage/logs   storage/backups
 chmod -R ug+rwX storage bootstrap/cache
 
-# ---------------------------------------------------------------- supervisor
+# ------------------------------------------------- nginx, supervisor, proof
 #
-# Three programs, because three processes have to be alive and none of them
-# starts on its own. Without the queue worker an upload succeeds and the
-# prediction sits at `pending` for ever; without the scheduler, expired files
-# are never deleted and model status goes stale.
+# Delegated rather than duplicated. `deploy/apply.sh` writes both configuration
+# files from the templates beside it and then proves the result answers, and it
+# is the file that ships with every deploy — so a change to a timeout or an
+# upload limit lands on the server without anybody remembering this script
+# exists.
 #
-# The names are load-bearing: the deploy job restarts them by these exact
-# names and stops with an error if supervisor does not know one.
+# It also does the two things this script used to get wrong on a machine that
+# already carried other work: it replaces the site that already proxies to this
+# backend instead of adding a second one, and it replaces the file that already
+# defines [program:brin-octane] instead of adding a second definition. Two
+# files defining the same program make supervisorctl refuse to reread anything
+# at all, which surfaces later as the deploy job reporting that supervisor does
+# not know the programs it is looking at.
 
-say "Supervisor"
+say "nginx and supervisor"
 
-PHP_BIN="$(command -v php)"
-sudo tee /etc/supervisor/conf.d/brin.conf >/dev/null <<CONF
-; Written by scripts/provision-vps.sh. The deploy job restarts these three by
-; name; renaming one means editing .github/workflows/release.yml to match.
+[ -x "$APP_DIR/deploy/apply.sh" ] || [ -f "$APP_DIR/deploy/apply.sh" ]   || die "$APP_DIR/deploy/apply.sh is missing. It arrives with a deploy; run one first."
 
-[program:brin-octane]
-command=$PHP_BIN artisan octane:start --server=roadrunner --host=127.0.0.1 --port=8000 --workers=4 --max-requests=250
-directory=$APP_DIR
-user=$SERVICE_USER
-autostart=true
-autorestart=true
-; Octane needs longer than the default 10s to finish in-flight requests.
-stopwaitsecs=30
-stdout_logfile=/var/log/supervisor/brin-octane.log
-redirect_stderr=true
+APP_DIR="$APP_DIR" RUN_USER="$SERVICE_USER" PHP_BIN="$PHP_BIN" HTTP_PORT="${HTTP_PORT:-8080}" TLS_PORT="${TLS_PORT:-8443}" TLS_DOMAIN="${TLS_DOMAIN:-}" BODY_LIMIT="${NGINX_BODY_LIMIT:-100M}"   bash "$APP_DIR/deploy/apply.sh"
 
-[program:brin-queue]
-; --tries=1 because an interpolation job is not safely repeatable, and 7200
-; because a large sequence genuinely takes that long.
-command=$PHP_BIN artisan queue:work --tries=1 --timeout=7200
-directory=$APP_DIR
-user=$SERVICE_USER
-autostart=true
-autorestart=true
-; Longer than the job timeout, or supervisor kills a run that is still working.
-stopwaitsecs=7260
-stdout_logfile=/var/log/supervisor/brin-queue.log
-redirect_stderr=true
-
-[program:brin-schedule]
-command=$PHP_BIN artisan schedule:work
-directory=$APP_DIR
-user=$SERVICE_USER
-autostart=true
-autorestart=true
-stdout_logfile=/var/log/supervisor/brin-schedule.log
-redirect_stderr=true
-CONF
-
-sudo supervisorctl reread
-sudo supervisorctl update
-for program in brin-octane brin-queue brin-schedule; do
-  sudo supervisorctl restart "$program" >/dev/null 2>&1 || sudo supervisorctl start "$program" || true
-done
-sudo supervisorctl status | sed 's/^/    /'
-
-# ---------------------------------------------------------------- nginx
-
-say "nginx"
-
-# Is somebody already doing this? A machine that carries other sites may well
-# have a server block pointed at 127.0.0.1:8000 already, written by hand and
-# working. Adding a second one would not break anything loudly — it would just
-# leave two configurations for one backend, and the next person to change the
-# upload limit would change the wrong one.
-#
-# `-R`, not `-r`. Everything in sites-enabled is a symlink into
-# sites-available, and GNU grep's `-r` follows symlinks only when they are
-# named on the command line — inside a directory it walks straight past them.
-# With `-r` this check would find nothing, every time, on every machine that
-# enables its sites the normal way, and would then cheerfully write a second
-# configuration next to the working one.
-EXISTING=""
-if [ -d /etc/nginx/sites-enabled ]; then
-  EXISTING="$(sudo grep -Rls "127\.0\.0\.1:8000" /etc/nginx/sites-enabled/ 2>/dev/null | head -1 || true)"
-fi
-
-if [ -n "$EXISTING" ] && [ "$FORCE_NGINX" != "1" ]; then
-  echo "    $EXISTING already proxies to 127.0.0.1:8000. Left alone."
-  echo "    Listening on: $(sudo grep -hE "^\s*listen" "$EXISTING" | tr -s ' ' | sed 's/^ //' | paste -sd', ')"
-  warn "Not writing $NGINX_SITE. Re-run with FORCE_NGINX=1 to write it anyway."
-  warn "Check that site's client_max_body_size exceeds the chunk PHP advertises ($PHP_UPLOAD_LIMIT)."
-else
-  sudo tee "/etc/nginx/sites-available/$NGINX_SITE" >/dev/null <<CONF
-# Written by be/scripts/provision-vps.sh.
-#
-# A reverse proxy and nothing more. Octane serves everything including static
-# files, so there is no root and no try_files here — pointing nginx at public/
-# as well would give two answers to the same request.
-
-server {
-    listen $NGINX_PORT;
-    listen [::]:$NGINX_PORT;
-    server_name $SERVER_NAME;
-
-    # Must exceed the largest chunk PHP will advertise. See the note in
-    # provision-vps.sh about why these two numbers travel together.
-    client_max_body_size $NGINX_BODY_LIMIT;
-
-    # A prediction runs on the queue, not in the request, so these cover slow
-    # uploads over a bad link rather than slow inference.
-    proxy_connect_timeout 60s;
-    proxy_send_timeout    600s;
-    proxy_read_timeout    600s;
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Host              \$host;
-        proxy_set_header X-Real-IP         \$remote_addr;
-        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Upgrade           \$http_upgrade;
-        proxy_set_header Connection        "upgrade";
-        # Results reach ~1.5 GB. Buffering one to disk before sending a byte
-        # would double the wait and fill /var/lib/nginx.
-        proxy_buffering off;
-        proxy_request_buffering off;
-    }
-}
-CONF
-
-  sudo ln -sf "/etc/nginx/sites-available/$NGINX_SITE" "/etc/nginx/sites-enabled/$NGINX_SITE"
-  sudo nginx -t
-  sudo systemctl reload nginx
-  echo "    $NGINX_SITE: $SERVER_NAME on port $NGINX_PORT -> 127.0.0.1:8000, body limit $NGINX_BODY_LIMIT."
-fi
-
-# ---------------------------------------------------------------- proof
-#
-# Asking the application, rather than asking systemd whether it started
-# something. /api/news is public, cheap, reaches the database, and answers 200
-# on an empty feed, which is what makes it usable as a check.
-
-say "Checking it actually answers"
-
-ok=0
-for attempt in $(seq 1 10); do
-  code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/news || true)"
-  if [ "$code" = "200" ]; then
-    echo "    GET /api/news -> 200 after $attempt attempt(s)."
-    ok=1
-    break
-  fi
-  echo "    attempt $attempt: got '$code', waiting."
-  sleep 3
-done
-
-if [ "$ok" != "1" ]; then
-  sudo supervisorctl status brin-octane || true
-  tail -n 40 /var/log/supervisor/brin-octane.log 2>/dev/null || true
-  die "The application never answered on 127.0.0.1:8000."
-fi
 
 # ---------------------------------------------------------------- what is left
 

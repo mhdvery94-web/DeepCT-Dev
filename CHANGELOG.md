@@ -33,6 +33,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.16] - 2026-08-18
+
+Konfigurasi server jadi berkas terversi di `be/deploy/`, setelah melihat mesin
+sungguhannya dan menemukan skrip provisioning akan merusaknya.
+
+### Skrip provisioning akan melumpuhkan supervisor
+
+VPS ini sudah punya `/etc/supervisor/conf.d/deepct.conf` yang mendefinisikan
+`brin-octane`, `brin-queue` dan `brin-schedule` — **nama yang sama persis**
+dengan yang akan ditulis skrip ke `brin.conf`.
+
+Dua berkas yang mendefinisikan program yang sama membuat `supervisorctl
+reread` menolak memuat apa pun. Kegagalannya muncul jauh dari sebabnya: job
+deploy melaporkan supervisor tidak mengenali program yang jelas-jelas ada di
+`supervisorctl status`.
+
+Ini kelas kesalahan yang sama dengan bug nginx di rilis sebelumnya, dan
+ditemukan dengan cara yang sama — dengan benar-benar melihat mesinnya.
+
+### `stopwaitsecs` yang hilang, dan harganya
+
+Konfigurasi supervisor di server tidak punya `stopwaitsecs`, jadi berlaku
+bawaan **10 detik**. `brin-queue` berjalan dengan `--timeout=7200`.
+
+Artinya setiap deploy yang me-restart worker itu meng-SIGKILL prediksi yang
+sedang berjalan: sampai dua jam waktu GPU dan satu job milik peneliti, hilang
+sepuluh detik setelah restart yang tak seorang pun mengira merusak. Template
+baru menyetelnya 7260, dan `brin-octane` 30.
+
+### `be/deploy/`, dan kenapa terpisah dari provisioning
+
+Provisioning berjalan sekali dan melakukan hal yang tak bisa dibatalkan —
+membuat database, menulis `.env` berisi `APP_KEY`. Menulis ulang dua berkas
+konfigurasi bukan itu.
+
+`deploy/apply.sh` sekarang memiliki nginx dan supervisor, dari template di
+sebelahnya, dan **ikut terkirim di setiap deploy** — jadi perubahan timeout
+atau batas unggah sampai ke server tanpa siapa pun mengingat skrip provisioning
+itu ada. `provision-vps.sh` mendelegasikan ke sana alih-alih menyimpan salinan
+kedua.
+
+Snippet proxy-nya satu berkas yang di-`include` **kedua** server block, supaya
+pintu HTTP dan pintu TLS tidak bisa berbeda.
+
+### Buffering, dan hasil 1,5 GB
+
+`proxy_buffering` menyala secara bawaan, dan satu hasil prediksi mencapai ~1,5
+GB. nginx akan menulis seluruh berkas ke `/var/lib/nginx` sebelum mengirim byte
+pertama: unduhan makan waktu kira-kira dua kali lipat, dan disk terisi salinan
+berkas yang sebentar lagi dihapus platform sendiri. Dimatikan, dua arah —
+unggahan juga sampai 2 GB.
+
+### TLS tanpa record DNS baru
+
+Sertifikat mengikat **hostname, bukan port**. Mesin ini sudah memegang
+sertifikat untuk sebuah nama; server block TLS di port sendiri memakainya apa
+adanya, dan klien yang menyambung ke `https://<nama itu>:8443/api` melihat
+hostname yang dicakup sertifikatnya.
+
+Ini menyelesaikan mixed content — klien web Vercel selalu HTTPS dan menolak
+memanggil `http://` — **tanpa satu pun record DNS baru**, yang penting karena
+justru record itulah yang menghambat: semua subdomain kandidat menjawab
+NXDOMAIN, dan `certbot` tidak bisa menerbitkan apa pun untuk nama yang belum
+menunjuk ke mesinnya.
+
+**Belum diterapkan ke server.** Menulis ke `/etc/nginx` di mesin produksi
+diblokir oleh pagar izin di lingkungan ini, jadi konfigurasinya dikirim sebagai
+berkas terversi yang menyusul lewat deploy, bukan disunting langsung. Sintaks
+`apply.sh` dan ketiga template lolos pemeriksaan dan substitusi placeholder-nya
+diuji, tapi `nginx -t` terhadap hasil akhirnya belum pernah dijalankan.
+
+---
+
 ## [1.19.15] - 2026-08-18
 
 Deploy pertama ke VPS berhasil pada percobaan ketujuh, dan tiga hal yang

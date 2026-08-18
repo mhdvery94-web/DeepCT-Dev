@@ -696,22 +696,66 @@ memasang ketiga program supervisor dan reverse proxy nginx, lalu **menanyakan
 `GET /api/news` ke proses yang benar-benar berjalan** sebelum menyatakan
 selesai.
 
-**Ia tidak menganggap mesin ini miliknya sendiri.** Kalau sudah ada site nginx
-yang aktif dan mengarah ke `127.0.0.1:8000`, site itu dibiarkan dan tidak ada
-yang ditulis — mesin yang juga melayani situs lain biasanya sudah punya server
-block sendiri untuk backend ini, dan menambah yang kedua tidak akan gagal
-dengan berisik, ia cuma meninggalkan dua konfigurasi untuk satu backend
-sehingga orang berikutnya yang menaikkan batas unggah menaikkannya di berkas
-yang salah. Yang bisa diatur:
+Aman dijalankan ulang, dan satu hal yang tidak akan pernah ia timpa adalah
+`.env` yang sudah ada — di situ `APP_KEY` tinggal, dan menggantinya membuat
+setiap nilai terenkripsi dan setiap token yang pernah diterbitkan tidak terbaca
+lagi.
 
-| Variabel | Bawaan | Untuk apa |
-|---|---|---|
-| `NGINX_SITE` | `brin-api` | Nama berkas di `sites-available` |
-| `NGINX_PORT` | `80` | Pakai mis. `8080` kalau port 80 sudah dipakai situs lain |
-| `FORCE_NGINX` | `0` | `1` untuk menulis walau sudah ada yang mengarah ke 8000 | Aman dijalankan ulang, dan satu hal yang tidak akan pernah ia timpa
-adalah `.env` yang sudah ada — di situ `APP_KEY` tinggal, dan menggantinya
-membuat setiap nilai terenkripsi dan setiap token yang pernah diterbitkan tidak
-terbaca lagi.
+nginx dan supervisor bukan urusannya; ia mendelegasikan keduanya ke
+`be/deploy/apply.sh`.
+
+### nginx dan supervisor: `be/deploy/apply.sh`
+
+Terpisah dari provisioning karena sifatnya berbeda. Provisioning berjalan
+sekali dan melakukan hal yang tak bisa dibatalkan; ini hanya menulis ulang dua
+berkas konfigurasi, aman dijalankan kapan pun keduanya berubah, dan **ikut
+terkirim di setiap deploy** — jadi perubahan timeout atau batas unggah sampai
+ke server tanpa siapa pun mengingat skrip provisioning itu ada.
+
+```bash
+cd /var/www/deepct-ai
+TLS_DOMAIN=contoh.org bash deploy/apply.sh
+```
+
+Sumbernya template di `be/deploy/`:
+
+| Berkas | Jadi apa |
+|---|---|
+| `nginx/deepct-proxy.conf` | Snippet yang di-`include` **kedua** server block, supaya pintu HTTP dan pintu TLS tidak bisa berbeda |
+| `nginx/deepct-http.conf.template` | Server block HTTP (`HTTP_PORT`, bawaan 8080) |
+| `nginx/deepct-tls.conf.template` | Server block TLS (`TLS_PORT`, bawaan 8443); dilewati kalau `TLS_DOMAIN` kosong |
+| `supervisor/deepct.conf.template` | Ketiga program, dengan `stopwaitsecs` |
+
+**Ia mengganti, bukan menambah.** Ia mencari berkas yang *sudah* mem-proxy ke
+`127.0.0.1:8000` dan yang *sudah* mendefinisikan `[program:brin-octane]`, lalu
+menulis ke situ. Alasannya beda untuk masing-masing: server block nginx kedua
+tidak gagal dengan berisik, ia cuma memecah suntingan berikutnya ke dua berkas;
+sedangkan **dua berkas supervisor yang mendefinisikan program yang sama membuat
+`supervisorctl reread` menolak memuat apa pun**, dan itu muncul belakangan
+sebagai job deploy melaporkan supervisor tidak mengenali program yang jelas-
+jelas ada.
+
+**`stopwaitsecs` itu bukan hiasan.** Bawaannya 10 detik. `brin-queue` berjalan
+dengan `--timeout=7200`, jadi pada nilai bawaan **setiap deploy yang me-restart
+worker akan meng-SIGKILL prediksi yang sedang berjalan** — sampai dua jam waktu
+GPU dan satu job milik peneliti, hilang sepuluh detik setelah restart yang tak
+seorang pun mengira merusak. Template ini menyetelnya 7260.
+
+### TLS tanpa record DNS baru
+
+Sertifikat mengikat **hostname, bukan port**. Kalau mesin ini sudah memegang
+sertifikat untuk sebuah nama — bahkan untuk situs lain yang tidak berhubungan —
+server block TLS di port sendiri bisa memakainya apa adanya, dan klien yang
+menyambung ke `https://<nama itu>:8443/api` melihat hostname yang dicakup
+sertifikatnya. Sah, dan **tanpa satu pun record DNS baru**.
+
+Itu penting karena record DNS-lah yang biasanya menghambat: `certbot` tidak
+bisa menerbitkan apa pun untuk nama yang belum menunjuk ke mesin ini, dan
+membuat record itu ada di penyedia DNS, bukan di sini.
+
+Begitu API punya hostname sendiri (satu A record plus
+`certbot --nginx -d api.contoh.org`), yang berubah cuma `server_name` dan jalur
+sertifikat di template TLS.
 
 **Tiga angka yang harus sejalan, dan ini yang paling sering salah.**
 `PredictionUploadController::chunkSize()` menurunkan ukuran potongan yang ia

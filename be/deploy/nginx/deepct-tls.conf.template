@@ -1,0 +1,16 @@
+server {
+    listen __TLS_PORT__ ssl http2;
+    listen [::]:__TLS_PORT__ ssl http2;
+    server_name __TLS_DOMAIN__;
+
+    ssl_certificate     __TLS_CERT__;
+    ssl_certificate_key __TLS_KEY__;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    client_max_body_size __BODY_LIMIT__;
+
+    location / {
+        include snippets/deepct-proxy.conf;
+    }
+}

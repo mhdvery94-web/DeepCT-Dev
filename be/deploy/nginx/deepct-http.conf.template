@@ -1,0 +1,44 @@
+# DeepCT backend — nginx site. Installed by be/deploy/apply.sh, which fills in
+# the placeholders below. Do not edit the installed copy; edit this one and
+# re-run, or the next deploy's version and the server's will disagree.
+#
+# Two doors, one application:
+#
+#   __HTTP_PORT__  plain HTTP. The Android client may use it —
+#                  usesCleartextTraffic is set in the manifest — and it is the
+#                  address in use today.
+#
+#   __TLS_PORT__   the same application over TLS. It exists because the web
+#                  client is served from Vercel over HTTPS, and a browser
+#                  refuses to call an http:// URL from an https:// page. The
+#                  request never leaves, and there is no network error to
+#                  explain why: it fails in the console, silently, and looks
+#                  like the API is down.
+#
+# The TLS block presents a certificate that already exists on this machine for
+# another site. That is deliberate and it is not a bodge: a certificate binds a
+# *hostname*, not a port. A client connecting to
+# https://__TLS_DOMAIN__:__TLS_PORT__/api is talking to a hostname the
+# certificate covers, so it validates — and no new DNS record was required,
+# which is what would otherwise have blocked this entirely.
+#
+# Give the API its own hostname when there is one (an A record plus
+# `certbot --nginx -d api.example.org`) and this block needs only its
+# server_name and certificate paths changed.
+
+server {
+    listen __HTTP_PORT__;
+    listen [::]:__HTTP_PORT__;
+    server_name _;
+
+    # Must exceed the largest chunk PHP advertises. chunkSize() derives that
+    # from upload_max_filesize and post_max_size at run time, so these two
+    # settings travel together — nginx answering 413 before PHP sees the
+    # request is invisible until a real client tries to upload.
+    client_max_body_size __BODY_LIMIT__;
+
+    location / {
+        include snippets/deepct-proxy.conf;
+    }
+}
+

@@ -1,0 +1,48 @@
+; DeepCT backend — supervisor programs. Installed by be/deploy/apply.sh, which
+; fills in the placeholders.
+;
+; Three processes, and all three are required. Without the queue worker an
+; upload succeeds and the prediction sits at `pending` for ever; without the
+; scheduler, expired files are never deleted and model status goes stale.
+;
+; The names are load-bearing. The `vps` job in .github/workflows/release.yml
+; restarts these three by these exact names and stops with an error if
+; supervisor does not know one of them. Renaming a program here means editing
+; that workflow to match.
+
+[program:brin-octane]
+command=__PHP_BIN__ artisan octane:start --server=roadrunner --host=127.0.0.1 --port=8000 --workers=4 --max-requests=250
+directory=__APP_DIR__
+user=__RUN_USER__
+autostart=true
+autorestart=true
+; Supervisor's default is 10 seconds, which is not enough for Octane to finish
+; the requests it is holding. Below this it gets SIGKILL mid-response.
+stopwaitsecs=30
+stderr_logfile=/var/log/brin-octane.err.log
+stdout_logfile=/var/log/brin-octane.out.log
+
+[program:brin-queue]
+; --tries=1 because an interpolation job is not safely repeatable, and 7200
+; because a large sequence genuinely takes that long.
+command=__PHP_BIN__ artisan queue:work --tries=1 --timeout=7200
+directory=__APP_DIR__
+user=__RUN_USER__
+autostart=true
+autorestart=true
+; Longer than the job timeout, and this one matters more than it looks. At the
+; default 10 seconds, every deploy that restarts this worker SIGKILLs whatever
+; prediction is running — up to two hours of GPU time and a researcher's job,
+; discarded ten seconds into a restart nobody thought was destructive.
+stopwaitsecs=7260
+stderr_logfile=/var/log/brin-queue.err.log
+stdout_logfile=/var/log/brin-queue.out.log
+
+[program:brin-schedule]
+command=__PHP_BIN__ artisan schedule:work
+directory=__APP_DIR__
+user=__RUN_USER__
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/brin-schedule.err.log
+stdout_logfile=/var/log/brin-schedule.out.log
