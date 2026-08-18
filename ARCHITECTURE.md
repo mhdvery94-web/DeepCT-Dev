@@ -620,6 +620,68 @@ demo dan skripsi, tidak untuk layanan yang dipakai orang lain.
    "disknya mati": tujuh berkas itu ada di mesin yang sama dengan
    databasenya. Backup di luar mesin masih belum ada.
 
+### Dua backend, dan klien hanya bisa menunjuk satu
+
+Sejak VPS hidup, ada **dua** backend yang dua-duanya sah:
+
+| | Di mana | Untuk apa |
+|---|---|---|
+| **Lokal** | mesin lab, port 8000, lewat ngrok | Pengembangan, dan satu-satunya yang pernah diuji ujung-ke-ujung terhadap worker GPU |
+| **VPS** | `/var/www/deepct-ai`, di balik nginx | Layanan yang hidup terus, tidak ikut mati kalau mesin lab dimatikan |
+
+Yang perlu diingat, dan gampang terlewat: **alamat API dikompilasi masuk ke
+klien.** Sebuah build hanya bisa menunjuk satu backend. Yang memilihkannya
+adalah repository variable **`NGROK_BE`**, dan ia berlaku untuk semua target
+sekaligus — web, APK, iOS, desktop.
+
+Jadi keduanya bisa hidup berdampingan, tapi klien yang di-deploy ke Vercel
+berbicara ke salah satu saja. Memindahkannya ke VPS berarti mengubah satu
+variabel di Settings → Secrets and variables → Actions → Variables, lalu
+menjalankan ulang workflow-nya; tidak ada kode yang berubah. Job `preflight`
+memeriksa nilainya tidak kosong dan berakhiran `/api` — **bentuknya saja, bukan
+apakah alamat itu menjawab**, jadi menunjuk ke backend yang mati tetap lolos.
+
+### Menyiapkan VPS-nya sekali: `scripts/provision-vps.sh`
+
+Job deploy sengaja tidak menyiapkan apa pun — ia tidak pernah menulis `.env`,
+tidak menjalankan `db:seed`, dan tidak menyentuh nginx, karena deploy yang
+memiliki ketiganya akan menimpa kredensial produksi pada push berikutnya.
+Skrip ini yang mengerjakannya, sekali, di server:
+
+```bash
+DB_PASSWORD='...' SEED_ADMIN_PASSWORD='...' bash scripts/provision-vps.sh
+```
+
+Ia membuat database dan usernya, menulis `.env` dengan `APP_DEBUG=false` plus
+`TRAINING_WORKER_TOKEN` baru, mengunduh binari RoadRunner, menjalankan migrasi,
+memasang ketiga program supervisor dan reverse proxy nginx, lalu **menanyakan
+`GET /api/news` ke proses yang benar-benar berjalan** sebelum menyatakan
+selesai. Aman dijalankan ulang, dan satu hal yang tidak akan pernah ia timpa
+adalah `.env` yang sudah ada — di situ `APP_KEY` tinggal, dan menggantinya
+membuat setiap nilai terenkripsi dan setiap token yang pernah diterbitkan tidak
+terbaca lagi.
+
+**Tiga angka yang harus sejalan, dan ini yang paling sering salah.**
+`PredictionUploadController::chunkSize()` menurunkan ukuran potongan yang ia
+iklankan dari `upload_max_filesize` dan `post_max_size` PHP **saat runtime**.
+nginx harus mengizinkan lebih besar dari potongan terbesar itu, dan bawaan
+Ubuntu `client_max_body_size 1m` justru **lebih kecil** daripada yang PHP
+iklankan di instalasi standar. Ketidakcocokan itu tidak terlihat sampai
+unggahan pertama dari klien sungguhan menjawab 413. Skrip ini menyetel
+ketiganya sekaligus.
+
+Satu lagi yang halus: yang diedit adalah **php.ini milik CLI**, bukan FPM.
+RoadRunner menjalankan aplikasi lewat SAPI CLI, dan tidak ada PHP-FPM di
+tumpukan ini sama sekali — mengedit ini FPM tidak akan berpengaruh apa pun.
+
+**Urutan deploy pertama**, dan ia memang bertelur-ayam:
+
+1. Push ke `main`. Job `vps` men-`rsync` kodenya ke server, lalu **berhenti**
+   dengan "`.env` does not exist" — itu perilaku yang benar, bukan kegagalan.
+2. Jalankan `scripts/provision-vps.sh` di server. Sekarang kodenya sudah ada
+   di sana untuk dikerjakan.
+3. Jalankan ulang workflow-nya. Deploy penuh berjalan sampai selesai.
+
 ### Deploy otomatis dari GitHub Actions
 
 Job `vps` di `.github/workflows/release.yml` mengirim `be/` ke VPS pada tiap

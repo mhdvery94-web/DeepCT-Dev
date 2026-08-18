@@ -33,6 +33,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.14] - 2026-08-18
+
+### Setiap deploy akan menghapus RoadRunner
+
+Cacat di job `vps` yang ditulis satu commit sebelumnya, ketemu saat menyiapkan
+skrip provisioning. `rsync --delete` menghapus berkas di tujuan yang tidak ada
+di sumber, dan binari `rr` ada di `be/.gitignore` — jadi ia tidak pernah ada di
+sumber, dan setiap deploy akan menghapus server yang baru saja ia restart.
+Kegagalannya akan muncul sebagai `octane:start` mengeluh binarinya hilang,
+tepat setelah deploy yang tampak berhasil.
+
+Sekarang dikecualikan bersama `.rr.yaml`, `public/build`, `public/storage` dan
+`auth.json` — semuanya gitignore, semuanya akan bernasib sama.
+
+### `scripts/provision-vps.sh`
+
+Sekali jalan, di server, mengerjakan persis yang **tidak** dikerjakan job
+deploy: database dan usernya, `.env` dengan `APP_DEBUG=false` dan
+`TRAINING_WORKER_TOKEN` baru, binari RoadRunner, migrasi, ketiga program
+supervisor, dan reverse proxy nginx. Aman dijalankan ulang.
+
+Yang tidak akan pernah ia timpa: `.env` yang sudah ada. `APP_KEY` tinggal di
+sana, dan menggantinya membuat setiap nilai terenkripsi dan setiap token yang
+pernah diterbitkan tidak terbaca — kegagalan yang muncul sebagai "semua orang
+ter-logout dan tidak ada yang bisa didekripsi", jauh dari skrip ini.
+
+**Tiga angka yang harus sejalan.** `chunkSize()` menurunkan ukuran potongan
+dari `upload_max_filesize` dan `post_max_size` saat runtime; nginx harus
+mengizinkan lebih besar dari potongan terbesar; dan bawaan Ubuntu
+`client_max_body_size 1m` justru lebih kecil daripada yang PHP iklankan di
+instalasi standar. Ketidakcocokan itu tak terlihat sampai unggahan pertama dari
+klien sungguhan menjawab 413.
+
+Yang diedit php.ini **CLI**, bukan FPM: RoadRunner menjalankan aplikasi lewat
+SAPI CLI dan tidak ada PHP-FPM di tumpukan ini sama sekali.
+
+Token trainer dibuat dengan `openssl rand` alih-alih pipeline `/dev/urandom`
+yang berakhir di `head`: di bawah `set -o pipefail`, `head` menutup pipe lebih
+awal bisa mengirim SIGPIPE ke tahap sebelumnya dan menjatuhkan seluruh skrip.
+Itu bergantung pada timing buffer, jadi ia akan lolos saat diuji dan gagal di
+mesin yang penting.
+
+### Dua backend, dan klien cuma bisa menunjuk satu
+
+Mesin lab di balik ngrok dan VPS dua-duanya sah sekarang. Yang gampang
+terlewat: alamat API **dikompilasi masuk**, jadi satu build hanya bisa bicara
+ke satu backend, dan repository variable `NGROK_BE` yang memilihkannya untuk
+semua target sekaligus. Memindahkannya ke VPS berarti mengubah satu variabel,
+bukan satu baris kode.
+
+Didokumentasikan di ARCHITECTURE §8 bersama urutan deploy pertama yang memang
+bertelur-ayam: push dulu (rsync berhasil, job berhenti di "`.env` does not
+exist" — itu benar), provisioning kedua, jalankan ulang workflow ketiga.
+
+**Belum diverifikasi:** skrip ini belum pernah dijalankan di server mana pun.
+Sintaksnya lolos `bash -n`, dan kedua fungsi penulis berkasnya — `.env` dan
+php.ini — diuji terhadap `.env.example` sungguhan dan php.ini contoh, termasuk
+kasus baris yang ter-komentar dan password ber-`/`, `+` dan `=`. Sisanya belum.
+
+---
+
 ## [1.19.13] - 2026-08-18
 
 Hasil review menyeluruh atas keadaan repo, lalu tiga hal yang diperbaiki dan

@@ -163,6 +163,17 @@ dump, `migrate --force`, and a supervisor restart, followed by a request to the
 running process to confirm it came back. It needs the repository secrets
 `VPS_HOST`, `VPS_USERNAME`, `VPS_SSH` and optionally `VPS_PORT`.
 
+The server is prepared once, by hand, with
+[`scripts/provision-vps.sh`](scripts/provision-vps.sh) — database, `.env`,
+RoadRunner, supervisor and nginx. The deploy job never writes any of them,
+because a deploy that owned them would overwrite production credentials on the
+next push.
+
+**There are two backends now, and a client can only point at one.** The lab
+machine behind ngrok and the VPS are both valid; the API address is compiled
+into every build, and the repository variable `NGROK_BE` decides which one a
+build talks to.
+
 Configuration, DNS layout, the supervisor unit files and the deploy job step by
 step are in [ARCHITECTURE.md](ARCHITECTURE.md) §8, along with the
 pre-deployment checklist.

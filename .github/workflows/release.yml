@@ -406,12 +406,26 @@ jobs:
       # still answers.
       #
       # Everything excluded is also protected from that `--delete` — rsync's
-      # default for excluded paths, and the reason this is safe to run:
-      #   .env       the server's own configuration, never ours to overwrite
-      #   storage/   uploads, results and training datasets. The data.
-      #   vendor/    installed on the server, against the server's own PHP
-      #   rr.exe     RoadRunner for Windows. composer fetches the Linux binary;
-      #              shipping a 30 MB PE file would be worse than useless.
+      # default for excluded paths, and the reason this is safe to run.
+      #
+      # The list is not arbitrary. Everything on it is in `be/.gitignore`,
+      # which means it is absent from the source of this copy, which means
+      # `--delete` would remove it from the server. For the data that would be
+      # a catastrophe and for the binaries it would be a puzzle:
+      #
+      #   .env         the server's own configuration, never ours to overwrite
+      #   storage/     uploads, results and training datasets. The data.
+      #   vendor/      installed on the server, against the server's own PHP
+      #   rr, .rr.yaml RoadRunner itself. `octane:install` downloads the binary
+      #                once during provisioning and it is gitignored, so
+      #                without this line every deploy would delete the server
+      #                it just restarted — and `octane:start` would fail with a
+      #                missing-binary error that reads like a broken install.
+      #   public/build Vite output, built on the server if it is needed at all
+      #   auth.json    composer credentials, if the server ever has any
+      #   rr.exe       RoadRunner for Windows. Gitignored too, so it is never in
+      #                the source; listed because a 30 MB PE file arriving on a
+      #                Linux box would be a long afternoon.
       - name: Send the backend
         run: |
           set -euo pipefail
@@ -422,7 +436,12 @@ jobs:
             --exclude='storage/' \
             --exclude='vendor/' \
             --exclude='node_modules/' \
+            --exclude='rr' \
             --exclude='rr.exe' \
+            --exclude='.rr.yaml' \
+            --exclude='public/build' \
+            --exclude='public/storage' \
+            --exclude='auth.json' \
             --exclude='.git/' \
             be/ deploy:"$DEPLOY_PATH"/
 
