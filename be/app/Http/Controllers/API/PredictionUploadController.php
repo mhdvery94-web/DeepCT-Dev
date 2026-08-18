@@ -61,7 +61,13 @@ class PredictionUploadController extends Controller
             // controller solves — a second copy of it for training datasets
             // would drift from this one the first time either was touched.
             'purpose' => 'nullable|in:prediction,training',
-            'model_id' => 'required_without:purpose|exclude_if:purpose,training|exists:models,id',
+            // `required_unless`, not `required_without`: the latter asks
+            // whether `purpose` was *sent*, not what it said, so a caller
+            // naming the default — `purpose: prediction` — switched the model
+            // off and reached the controller with no `model_id` and no
+            // complaint. Reading the key then raised a 500 with a stack trace
+            // where a 422 naming the field belonged. Only training may omit it.
+            'model_id' => 'required_unless:purpose,training|exclude_if:purpose,training|exists:models,id',
             'total_size' => 'required|integer|min:1|max:' . self::MAX_TOTAL_BYTES,
             'filename' => 'nullable|string|max:255',
             // Training only.

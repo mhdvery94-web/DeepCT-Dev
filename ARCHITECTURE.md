@@ -614,7 +614,58 @@ demo dan skripsi, tidak untuk layanan yang dipakai orang lain.
 5. **`script-deepct.py` jangan di-commit.** Berkas itu memuat token otentikasi
    ngrok dalam teks polos. Saat ini belum ter-track; biarkan begitu, atau
    pindahkan tokennya ke variabel lingkungan lebih dulu.
-6. **Backup database.** Belum ada satu pun sekarang.
+6. **Backup database.** Tiap deploy otomatis sekarang menulis satu dump
+   sebelum menjalankan migrasi (lihat di bawah), dan menyimpan tujuh yang
+   terakhir. Itu menutup kasus "migrasi merusak sesuatu", **bukan** kasus
+   "disknya mati": tujuh berkas itu ada di mesin yang sama dengan
+   databasenya. Backup di luar mesin masih belum ada.
+
+### Deploy otomatis dari GitHub Actions
+
+Job `vps` di `.github/workflows/release.yml` mengirim `be/` ke VPS pada tiap
+push ke `main` dan tiap tag. Klien web tidak ikut — ia pergi ke Vercel lewat
+job `vercel`, sesuai pembagian di awal bagian ini.
+
+Empat secret repository dibutuhkan, dan job-nya menyebut yang hilang satu per
+satu alih-alih sekadar gagal:
+
+| Secret | Isi |
+|---|---|
+| `VPS_HOST` | Alamat atau hostname server |
+| `VPS_USERNAME` | Akun SSH-nya (`ubuntu` di mesin sekarang) |
+| `VPS_PORT` | Port SSH; **opsional**, dianggap 22 kalau kosong |
+| `VPS_SSH` | Private key OpenSSH, isi berkasnya, bukan path |
+| `VPS_KNOWN_HOSTS` | **Opsional.** Kalau diisi, host key dipatok dari sini. Kalau tidak, ia dipelajari dari apa pun yang menjawab di alamat itu — cukup untuk menangkap host yang *berubah* antar run, tapi mempercayai yang pertama. |
+
+Urutannya, dan alasan tiap langkah ada:
+
+1. **`rsync --delete`**, dengan `.env`, `storage/`, `vendor/`, `node_modules/`
+   dan `rr.exe` dikecualikan — dan karena dikecualikan, juga terlindung dari
+   `--delete` itu. `storage/` adalah datanya; `.env` adalah konfigurasi milik
+   server yang tidak pernah jadi urusan repo; `rr.exe` adalah RoadRunner versi
+   Windows, dan mengirim berkas PE 30 MB ke mesin Linux lebih buruk daripada
+   sia-sia.
+2. **`composer install --no-dev`** di server, bukan `vendor/` yang dikirim dari
+   CI, supaya dependensinya terpasang terhadap PHP milik server sendiri.
+3. **`mysqldump` sebelum `migrate`.** Kredensialnya dibaca dari `.env` server.
+   Kalau dump-nya gagal, deploy berhenti di situ — sebelum migrasi menyentuh
+   apa pun.
+4. **`migrate --force`**, lalu `config:cache`, `route:cache`, `view:cache`.
+5. **`supervisorctl restart`** untuk `brin-octane`, `brin-queue` dan
+   `brin-schedule`. Ketiga nama itu sekarang **mengikat**: job-nya memanggil
+   mereka apa adanya, dan berhenti dengan pesan yang jelas kalau supervisor
+   tidak mengenali salah satunya. Octane memegang aplikasi di memori — tanpa
+   restart, kode baru ada di disk sementara proses lama terus melayani yang
+   lama, persis jebakan yang diperingatkan CLAUDE.md.
+6. **`GET /api/news` di `127.0.0.1:8000`**, sampai sepuluh kali dengan jeda 3
+   detik. Restart yang melapor sukses bukan bukti aplikasinya kembali hidup;
+   ini menanyakannya ke proses yang benar-benar berjalan. Endpoint itu dipakai
+   karena publik, murah, dan tetap menjawab 200 walau feed-nya kosong.
+
+Yang **tidak** dikerjakan job ini, dan disengaja: ia tidak pernah menulis
+`.env`, tidak pernah menjalankan `db:seed`, dan tidak menyentuh konfigurasi
+nginx. Ketiganya milik server, dan sebuah deploy yang menimpanya akan
+menghapus kredensial produksi pada push berikutnya.
 
 
 ---
@@ -626,34 +677,53 @@ tiga pintu masuk, dan pekerjaannya tidak sama:
 
 | Pemicu | Yang dibangun | Hasilnya ke mana |
 |---|---|---|
-| **Push ke `main`** | test → web + Android | Artifact di run itu |
-| **Tag `v*`** (`git tag v1.2.0 && git push origin v1.2.0`) | ketiganya | GitHub Release + Google Drive |
-| **Actions → Run workflow** | ketiganya | Google Drive saja |
+| **Push ke cabang fitur** | dua job test + `web` | Artifact di run itu, plus preview Vercel |
+| **Push ke `main`** | semuanya | Rilis `latest`, Vercel produksi, **dan deploy backend ke VPS** |
+| **Tag `v*`** (`git tag v1.2.0 && git push origin v1.2.0`) | semuanya | GitHub Release + Google Drive + VPS |
+| **Actions → Run workflow** | semuanya | Google Drive saja |
 
 | Job | Runner | Hasil |
 |---|---|---|
-| `test` | ubuntu | `flutter analyze` + `flutter test`; sisanya tidak jalan kalau ini merah |
-| `web` | ubuntu | `brin-neutron-ct-web.zip` |
+| `preflight` | ubuntu | Memeriksa alamat API sebelum sepuluh menit build terbuang |
+| `test` | ubuntu | `flutter analyze` + `flutter test` |
+| `test-backend` | ubuntu | `php artisan test` di atas MySQL 8 dan PHP 8.3 |
+| `web` | ubuntu | `brin-neutron-ct-web.zip` + direktori untuk Vercel |
+| `vercel` | ubuntu | Deploy klien web (produksi di `main`, preview di cabang) |
+| `vps` | ubuntu | **Deploy backend ke VPS** — lihat §8 |
 | `android` | ubuntu | `brin-neutron-ct.apk` |
-| `ios` | **macos** | `brin-neutron-ct-ios-unsigned.ipa` — tag dan manual saja |
+| `linux` | ubuntu | Bundle x64, butuh GTK 3 di mesin tujuan |
+| `apple` | **macos** | `.ipa` dan `.app`, dua-duanya tanpa tanda tangan |
 | `publish` | ubuntu | GitHub Release + unggah ke Google Drive |
 
-**Kenapa iOS tidak ikut di push ke `main`.** Runner macOS ditagih sepuluh kali
-lipat menit ubuntu, dan build tak bertanda tangan yang tidak bisa dipasang siapa
-pun tidak sepadan dengan itu untuk tiap commit.
+**Kenapa ada dua job test.** `test` menjalankan sisi Flutter, `test-backend`
+menjalankan sisi Laravel. Pemisahannya bukan soal kerapian: `vps` bergantung
+pada `test-backend` saja, karena job itu mengirim `be/` dan tidak ada
+hubungannya dengan klien. Sebelum job VPS ada, suite backend memang tidak
+pernah berjalan di CI sama sekali — itu bisa dimaklumi selama berkas ini cuma
+membangun klien, dan berhenti bisa dimaklumi begitu ia mulai men-deploy.
+
+**Kenapa cabang fitur tidak mendapat semuanya.** Runner macOS ditagih sepuluh
+kali lipat menit ubuntu, dan APK maupun `.ipa` yang tidak diminta siapa pun
+adalah menit runner yang terbuang tiap push. Cabang fitur mendapat kedua job
+test dan sebuah preview URL; `android`, `linux`, `apple`, `vercel` produksi dan
+`vps` menunggu sampai `main` atau sebuah tag.
 
 Efek samping yang justru berharga: sebelumnya `flutter analyze` dan
 `flutter test` hanya berjalan saat ada tag, jadi `main` bisa rusak berminggu-
 minggu tanpa ketahuan. Sekarang tiap push mengujinya.
 
 Alamat API dikompilasi masuk, jadi CI membacanya dari repository variable
-`API_BASE_URL`.
+**`NGROK_BE`**, dengan `API_BASE_URL` masih dihormati sebagai nama lama.
+Job `preflight` memeriksa ia tidak kosong dan berakhiran `/api` — **bentuknya
+saja, bukan apakah alamat itu benar-benar menjawab.**
 
 ### iOS tanpa punya Mac
 
 iOS hanya bisa dibangun di macOS — itu batas Apple, bukan batas Flutter. Job
-`ios` berjalan di runner macOS GitHub, jadi build iOS tetap dihasilkan tanpa
-siapa pun memiliki Mac.
+`apple` berjalan di runner macOS GitHub, jadi build iOS tetap dihasilkan tanpa
+siapa pun memiliki Mac. Ia membangun iOS dan macOS sekaligus di satu runner:
+toolchain-nya sama, pub cache-nya sudah panas, dan job macOS kedua akan
+menggandakan baris paling mahal di tagihan demi menghemat beberapa menit.
 
 **Targetnya sudah cocok untuk iPhone X.** `IPHONEOS_DEPLOYMENT_TARGET = 13.0`,
 sementara iPhone X (2017) menjalankan iOS 11 sampai 16.7 — jadi ia masuk dengan

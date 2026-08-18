@@ -296,4 +296,41 @@ class ChunkedUploadTest extends TestCase
             'total_size' => 1024,
         ])->assertStatus(503);
     }
+
+    /**
+     * `purpose` is optional, and saying `prediction` out loud must mean the
+     * same thing as leaving it out.
+     *
+     * It did not. The rule was `required_without:purpose`, which asks whether
+     * the *field* is present rather than what it says, so naming the default
+     * switched `model_id` off — and the controller then read a key that
+     * validation had just agreed did not have to be there. The caller got a
+     * 500 with a stack trace where a 422 naming the missing field belonged.
+     */
+    public function test_naming_the_default_purpose_still_requires_a_model(): void
+    {
+        $this->apiAs($this->token)->postJson('/api/predictions/uploads', [
+            'purpose' => 'prediction',
+            'total_size' => 1024,
+        ])->assertStatus(422)->assertJsonValidationErrors('model_id');
+    }
+
+    /** The same request, with the field left out, has always been a 422. */
+    public function test_omitting_the_purpose_still_requires_a_model(): void
+    {
+        $this->apiAs($this->token)->postJson('/api/predictions/uploads', [
+            'total_size' => 1024,
+        ])->assertStatus(422)->assertJsonValidationErrors('model_id');
+    }
+
+    /** And a training session is the one case that needs no model at all. */
+    public function test_a_training_session_needs_no_model(): void
+    {
+        $this->apiAs($this->token)->postJson('/api/predictions/uploads', [
+            'purpose' => 'training',
+            'name' => 'Balanced t sweep',
+            'total_epochs' => 5,
+            'total_size' => 1024,
+        ])->assertStatus(201);
+    }
 }

@@ -340,6 +340,13 @@ Untuk arsip besar. Lihat ARCHITECTURE.md §4 soal alasannya.
   "received": 0, "total_size": 4194750 }
 ```
 
+`purpose` boleh dihilangkan dan artinya `prediction`. `model_id` **wajib
+kecuali** `purpose: training` — menyebut `prediction` secara eksplisit tanpa
+`model_id` menjawab **422** dengan `model_id` di daftar errornya, sama seperti
+menghilangkan keduanya. (Sampai 18 Agustus 2026 kombinasi itu menjawab 500:
+aturannya `required_without:purpose`, yang menanyakan apakah field-nya *dikirim*
+alih-alih apa isinya.)
+
 `chunk_size` **dihitung server** dari batas PHP-nya sendiri. Pakai angka yang
 diberikan, jangan hard-code.
 

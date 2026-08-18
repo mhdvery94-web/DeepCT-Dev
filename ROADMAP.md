@@ -6,15 +6,16 @@ berjalan — centang diisi hanya setelah **diverifikasi**, bukan setelah ditulis
 Ini bukan dokumen status. Jangan buat `*_PLAN.md` atau `*_SUMMARY.md` baru;
 perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
-**Terakhir diperbarui:** 15 Agustus 2026
+**Terakhir diperbarui:** 18 Agustus 2026
 
 ---
 
 ## Sudah dikerjakan pada putaran ini
 
-Tujuh item di bawah semuanya selesai dan terverifikasi. Catatan keputusannya
-sengaja dipertahankan: alasan sebuah pilihan diambil jauh lebih mahal untuk
-ditemukan ulang daripada kodenya.
+Enam item di bawah semuanya selesai dan terverifikasi; no. 5, 6 dan 7 ada di
+"Sudah selesai" di bagian bawah. Catatan keputusannya sengaja dipertahankan:
+alasan sebuah pilihan diambil jauh lebih mahal untuk ditemukan ulang daripada
+kodenya.
 
 ### 1. ✅ Formulir Join yang benar-benar bekerja — SELESAI
 
@@ -201,7 +202,7 @@ avatarnya.
 
 ## Berikutnya
 
-### 10. Training dijalankan peneliti, bukan admin — BACKEND SELESAI, KLIEN BELUM
+### 10. Training dijalankan peneliti, bukan admin — TERPASANG, BELUM DIJALANI
 
 **Ketiga pertanyaan sudah dijawab pemilik produk:**
 
@@ -212,7 +213,7 @@ avatarnya.
    persis seperti model biasa.
 3. Sistem training khusus admin **diganti** oleh alur peneliti.
 
-Sisi backend sudah dibangun dan lulus test:
+Backend dan klien dua-duanya sudah terpasang dan lulus test:
 
 - [x] `models.kind` — trainer didaftarkan di registry yang sama dengan model
       inferensi, dengan sakelar on/off dan health check yang sama
@@ -222,20 +223,16 @@ Sisi backend sudah dibangun dan lulus test:
 - [x] `GET /me/training/jobs`, `GET /me/training/jobs/{id}` (dengan riwayat),
       `POST /me/training/jobs/{id}/cancel` — semuanya di-scope ke pemiliknya
 - [x] `TrainerDispatcher` — dipakai bersama oleh admin dan peneliti
-- [x] Test: 7 baru, 36 lama tetap hijau
-
 - [x] Unggah dataset **chunked** — `POST /predictions/uploads` menerima
       `purpose: training`, memakai ulang sesi resumable yang sudah ada
 - [x] Kolom upload dicabut dari `POST /admin/training/datasets`; admin
       mendaftarkan URL saja
-
 - [x] **Layar Flutter untuk peneliti** — `UserSection.training` di
       `user_shell.dart`, `training_screen.dart` (mulai run dengan unggah
       chunked, daftar run, tabel metrik per epoch), dan
       `researcher_training_service.dart`
 - [x] **Kolom upload dicabut dari layar admin Flutter**, sejalan dengan backend
       yang sudah menolaknya
-
 - [x] **`kind` di form model admin** — pilihan PREDICTION / TRAINING saat
       mendaftarkan endpoint, hanya saat membuat (mengubahnya belakangan akan
       diam-diam memindahkan job yang sudah merujuknya)
@@ -246,7 +243,7 @@ Sisi backend sudah dibangun dan lulus test:
       dialognya. Dua cara memulai run yang bedanya cuma atas nama siapa
       bukanlah pengawasan
 
-Yang **belum**:
+Yang **belum**, dan ini yang menentukan judul di atas:
 
 - [ ] **Uji end-to-end terhadap trainer sungguhan.** Belum ada satu run pun yang
       benar-benar berjalan di GPU, dan ini **tidak bisa dikerjakan dari sini** —
@@ -256,65 +253,43 @@ Yang **belum**:
       antarmuka jadi di atas jalur yang belum pernah dijalani.
 - [ ] **Resume untuk unggah dataset.** Unggah prediksi menyimpan sesi yang
       terputus dan menawarkannya kembali di perangkat; training belum — sebuah
-      unggahan yang putus harus diulang dari nol. Saat ini dikerjakan, loop
-      chunk di `prediction_service.dart` dan `researcher_training_service.dart`
-      layak diangkat jadi satu.
-- [ ] **Menyalakan `kind` di layar admin.** Backend menerima `kind` saat
-      mendaftarkan model; form admin belum menawarkannya, jadi trainer baru
-      bisa didaftarkan lewat API.
-- [ ] **Membersihkan route admin lama.** `POST /admin/training/datasets` dan
-      `POST /admin/training/jobs` masih ada dan masih berfungsi. Dibiarkan
-      sengaja sampai layar peneliti terbukti bekerja — mencabut jalan satu-satunya
-      yang ada sekarang sebelum penggantinya terpasang akan meninggalkan
-      platform tanpa cara apa pun untuk melatih.
+      unggahan yang putus harus diulang dari nol. Loop chunk di
+      `prediction_service.dart` dan `researcher_training_service.dart` layak
+      diangkat jadi satu saat itu dikerjakan.
+- [ ] **Membersihkan `POST /admin/training/datasets`.** Ia masih ada dan masih
+      berfungsi, dibiarkan sengaja sampai jalur peneliti terbukti bekerja di
+      GPU sungguhan — mencabut satu-satunya jalur yang pernah dijalani sebelum
+      penggantinya terbukti akan meninggalkan platform tanpa cara melatih sama
+      sekali. Pasangannya, `POST /admin/training/jobs`, sudah dicabut.
 
-**Permintaan pemilik produk:** "alurnya mirip dengan prediksi. Admin hanya
-on/off dan menyetel endpoint training lewat URL, persis seperti model.
-Kemudian user mengunggah dataset untuk dilatih sesuai model yang ada, persis
-seperti ketika user melakukan prediksi. Jadi yang melatih itu user, bukan
-admin. Pembedanya di output: prediksi menghasilkan gambar, training
-menghasilkan data untuk melihat kepintaran sebuah model."
+### 11. Dua lubang yang ditemukan saat review 18 Agustus 2026
 
-Bentuk sekarang **kebalikannya**: training seluruhnya milik admin. Dataset
-didaftarkan admin (`POST /admin/training/datasets`), job diantrekan admin, dan
-tidak ada satu pun route training di bawah `me/`. Peneliti tidak bisa
-menyentuhnya.
+Keduanya lahir dari perubahan di no. 10 dan tidak tercakup di daftar mana pun
+sebelum ini.
 
-Yang perlu berubah, dan besarnya jujur saja setara satu fase:
+- [ ] **Arsip dataset training tidak punya retensi.** `finalizeTraining()`
+      menulis ke `training/datasets/{uuid}.zip`, sampai 2 GB per run.
+      `predictions:cleanup` menyapu hasil prediksi, `temp/downloads`, dan
+      `.part` yang ditinggalkan — tapi tidak menyentuh direktori ini.
+      Satu-satunya penghapusan adalah `DELETE /admin/training/datasets/{id}`:
+      manual, admin saja. Peneliti tidak punya route hapus, dan membatalkan run
+      hanya mengubah status.
 
-- [ ] **Registry trainer, kembaran registry model.** Tabel sendiri dengan
-      `endpoint_url`, `is_active`, `status`, health check — supaya admin cukup
-      on/off dan menempel URL, sama seperti model. Hari ini URL trainer hidup
-      sebagai kolom di `training_jobs` plus satu variabel env.
-- [ ] **`training_jobs.user_id`** dan seluruh query di-scope ke pemiliknya,
-      sebagaimana `analysis_records` sudah begitu.
-- [ ] **Unggah dataset lewat jalur peneliti**, memakai kembali chunked upload
-      yang sudah ada — bukan pendaftaran URL oleh admin.
-- [ ] **Layar peneliti**: pilih model, unggah dataset, antre, pantau, lihat
-      hasil. Cerminan `upload_screen` + `prediction_history_screen`.
-- [ ] **Hasil sebagai angka, bukan berkas.** Prediksi mengembalikan TIFF;
-      training mengembalikan metrik per epoch. Perlu tabel metrik dan layar
-      yang membacanya sebagai kurva, bukan sekadar `.h5` untuk diunduh.
-- [ ] Admin tetap memegang: menyetujui/menolak, membatalkan, dan mendaftarkan
-      bobot hasil jadi versi model baru.
+      Ini memburuk justru karena no. 10: sebelumnya admin mendaftarkan URL dan
+      platform tidak menyimpan apa pun. **Keputusan yang dibutuhkan lebih dulu:
+      berapa lama sebuah dataset disimpan, dan apakah peneliti boleh
+      menghapusnya sendiri.** Retensi 24 jam ala prediksi jelas salah — dataset
+      dipakai ulang antar run; itu justru alasannya diunggah.
 
-**Tiga hal yang harus diputuskan sebelum satu baris ditulis**, karena
-jawabannya mengubah skemanya, bukan cuma tampilannya:
-
-1. **Apa isi "data kepintaran" itu?** Loss + PSNR + SSIM per epoch sudah bisa
-   dihasilkan `script-api-train-deepct.py` hari ini. Kalau yang dimaksud
-   perbandingan antar model atau contoh gambar sebelum/sesudah, itu tabel dan
-   layar yang berbeda.
-2. **Hasil training jadi model baru, atau catatan eksperimen?** Kalau tiap
-   peneliti bisa menerbitkan versi model, registry model butuh kepemilikan dan
-   persetujuan. Kalau hanya catatan, bobotnya tidak pernah meninggalkan job-nya.
-3. **Sistem admin yang sekarang dibuang atau ditumpuk?** Delapan route admin,
-   dua tabel, dan enam route worker sudah jalan dan tertutup test. Membuangnya
-   membuang yang berfungsi; menumpuk membuat dua jalur ke hal yang sama.
-
-Sampai ketiganya dijawab, ini **belum dimulai** — dan itu disengaja. Menulis
-skema atas tebakan pada fitur sebesar ini persis kesalahan yang membuat
-dokumen "COMPLETE & PRODUCTION READY" itu ada.
+- [ ] **Seluruh arsip dimuat ke RAM sebelum sepotong pun dikirim.**
+      `training_screen.dart` memakai `withData: true`, lalu loop chunk memotong
+      `Uint8List` yang sudah utuh di memori. Chunked upload dipakai ulang
+      justru karena dataset adalah hal terbesar yang diterima platform ini —
+      tapi yang diselamatkan chunking cuma transportnya, bukan memorinya, dan
+      perangkat Android atau tab browser mati jauh sebelum 2 GB.
+      `upload_screen.dart` berbentuk sama, tapi ZIP prediksi jauh lebih kecil.
+      Di native ada jalan keluar (`file.path` + `RandomAccessFile`, dibaca per
+      potong); di web tidak semudah itu.
 
 ---
 

@@ -123,6 +123,69 @@ jobs:
           flutter analyze
           flutter test
 
+  # The backend suite, which did not run here before.
+  #
+  # That mattered less while this file only built clients: a broken backend
+  # could not reach anybody through it. The `vps` job below changes that, and a
+  # deploy gated only on `test` would be claiming "tested" about the half it
+  # never touched.
+  test-backend:
+    name: Tests (backend)
+    runs-on: ubuntu-latest
+    # MySQL rather than sqlite, for the reason phpunit.xml gives at length: two
+    # migrations run `ALTER TABLE ... MODIFY`, and `activity_type` starts life
+    # as an enum the application long outgrew. A sqlite run produces both false
+    # passes and false failures, which is worse than no run at all.
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: db_aict_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      # phpunit.xml already forces DB_CONNECTION and DB_DATABASE. These are the
+      # four it cannot know. Laravel's dotenv is immutable, so a real
+      # environment variable wins over `.env`, and the sqlite default sitting
+      # in `.env.example` never takes effect here.
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    steps:
+      - uses: actions/checkout@v4
+
+      # 8.3 because that is what the VPS runs. composer.json allows 8.2, so
+      # testing on 8.3 tests the version production will actually execute.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_mysql, zip, fileinfo, bcmath
+          coverage: none
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ hashFiles('be/composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install
+        working-directory: be
+        run: |
+          composer install --prefer-dist --no-interaction --no-progress
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Test
+        working-directory: be
+        run: php artisan test
+
   web:
     name: Web
     needs: preflight
@@ -254,6 +317,243 @@ jobs:
           {
             echo "### Deployed"
             echo "$URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  vps:
+    name: Deploy backend to VPS
+    # `test-backend`, not `test`: this job ships `be/` and nothing else.
+    needs: [test-backend]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # One deployment at a time, and never cancelled halfway. A run interrupted
+    # between `rsync` and the restart leaves new code under an old process —
+    # the exact state CLAUDE.md warns about, where a new route 404s and nothing
+    # in the logs says why.
+    concurrency:
+      group: vps-deploy
+      cancel-in-progress: false
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
+      VPS_PORT: ${{ secrets.VPS_PORT }}
+      VPS_SSH: ${{ secrets.VPS_SSH }}
+      # Optional. When set, the host key is pinned from it rather than being
+      # learned on the spot — see the comment on the connection step.
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      DEPLOY_PATH: /var/www/deepct-ai
+    steps:
+      - uses: actions/checkout@v4
+
+      # Named individually rather than counted, because "a secret is missing"
+      # sends someone to read four settings pages.
+      - name: Check the secrets are all here
+        run: |
+          set -euo pipefail
+
+          missing=""
+          [ -n "${VPS_HOST:-}" ]     || missing="$missing VPS_HOST"
+          [ -n "${VPS_USERNAME:-}" ] || missing="$missing VPS_USERNAME"
+          [ -n "${VPS_SSH:-}" ]      || missing="$missing VPS_SSH"
+
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing"
+            echo "Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+          echo "Deploying to ${VPS_USERNAME}@${VPS_HOST}:${VPS_PORT:-22} $DEPLOY_PATH"
+
+      - name: Open the SSH connection
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          # Host key handling, stated plainly because the two branches are not
+          # equally safe. With VPS_KNOWN_HOSTS set the key is pinned and a
+          # substituted host is refused. Without it the key is learned from
+          # whatever answers on that address — which still catches a host that
+          # changes between runs, but trusts the first one. Weaker than
+          # pinning, and better than StrictHostKeyChecking=no, which trusts
+          # every one of them.
+          if [ -n "${VPS_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            echo "Host key pinned from VPS_KNOWN_HOSTS."
+          else
+            ssh-keyscan -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            echo "::warning::VPS_KNOWN_HOSTS is not set, so the host key was accepted on sight."
+            echo "Pin it with: ssh-keyscan -p ${VPS_PORT:-22} -H <host>"
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+          cat >> ~/.ssh/config <<CONF
+          Host deploy
+            HostName $VPS_HOST
+            User $VPS_USERNAME
+            Port ${VPS_PORT:-22}
+            IdentityFile ~/.ssh/id_deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 30
+          CONF
+
+          ssh deploy 'echo "Connected as $(whoami) on $(hostname), $(uname -sr)"'
+
+      # `--delete`, so a file removed from the repository is removed from the
+      # server too: a controller deleted here but left there is a route that
+      # still answers.
+      #
+      # Everything excluded is also protected from that `--delete` — rsync's
+      # default for excluded paths, and the reason this is safe to run:
+      #   .env       the server's own configuration, never ours to overwrite
+      #   storage/   uploads, results and training datasets. The data.
+      #   vendor/    installed on the server, against the server's own PHP
+      #   rr.exe     RoadRunner for Windows. composer fetches the Linux binary;
+      #              shipping a 30 MB PE file would be worse than useless.
+      - name: Send the backend
+        run: |
+          set -euo pipefail
+
+          rsync -az --delete --human-readable --stats \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='storage/' \
+            --exclude='vendor/' \
+            --exclude='node_modules/' \
+            --exclude='rr.exe' \
+            --exclude='.git/' \
+            be/ deploy:"$DEPLOY_PATH"/
+
+      - name: Install, back up, migrate, restart
+        run: |
+          set -euo pipefail
+
+          ssh deploy "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+
+          if [ ! -f .env ]; then
+            echo "::error::$DEPLOY_PATH/.env does not exist."
+            echo "The server keeps its own configuration; the deploy never writes one."
+            echo "ARCHITECTURE.md section 8 lists what it has to contain."
+            exit 1
+          fi
+
+          echo "--- Dependencies"
+          composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+
+          # The backup goes before the migration, not after. ARCHITECTURE.md
+          # section 8 lists "no database backups" as an outstanding item, and
+          # running migrations automatically against a live database is the
+          # moment that stops being tolerable.
+          echo "--- Backup"
+          env_value() { sed -n "s/^$1=//p" .env | tail -1 | tr -d "\"'"; }
+          DB_DATABASE="$(env_value DB_DATABASE)"
+          DB_USERNAME="$(env_value DB_USERNAME)"
+          DB_PASSWORD="$(env_value DB_PASSWORD)"
+          DB_HOST="$(env_value DB_HOST)"
+
+          if [ -n "$DB_DATABASE" ]; then
+            mkdir -p storage/backups
+            STAMP="$(date +%Y%m%d-%H%M%S)"
+            MYSQL_PWD="$DB_PASSWORD" mysqldump \
+              --single-transaction --quick --routines \
+              -h "${DB_HOST:-127.0.0.1}" -u "${DB_USERNAME:-root}" \
+              "$DB_DATABASE" | gzip > "storage/backups/db-$STAMP.sql.gz"
+            echo "Wrote storage/backups/db-$STAMP.sql.gz"
+            # Seven survives a bad week and is small enough to stop thinking about.
+            ls -1t storage/backups/db-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm --
+          else
+            echo "::warning::DB_DATABASE is not set in .env, so nothing was backed up."
+          fi
+
+          echo "--- Migrate"
+          php artisan migrate --force
+
+          echo "--- Caches"
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+
+          # storage/ is excluded from rsync and keeps its own permissions.
+          # bootstrap/cache is not, and arrives owned by the deploy user.
+          chmod -R ug+rwX bootstrap/cache storage || true
+
+          echo "--- Restart"
+          # Passwordless sudo is checked on its own, because without it every
+          # supervisorctl call below fails identically and the error would read
+          # as "supervisor does not know these programs" when it means "this
+          # account may not ask".
+          if ! sudo -n true 2>/dev/null; then
+            echo "::error::$(whoami) cannot use sudo without a password."
+            echo "supervisorctl needs it. Grant it, or give this account supervisor access directly."
+            exit 1
+          fi
+
+          # Octane holds the application in memory. Without this the old
+          # process keeps serving the old code, and a new route 404s while
+          # every other sign says the deploy worked.
+          #
+          # The list is read once rather than probing each name: a program that
+          # is configured but currently stopped makes `supervisorctl status
+          # <name>` exit non-zero, which would report it as missing when it is
+          # merely down — and stopped is exactly the state a restart fixes.
+          known="$(sudo -n supervisorctl status 2>/dev/null | awk '{print $1}')"
+          absent=""
+          for program in brin-octane brin-queue brin-schedule; do
+            # `(^|:)name$` so a program inside a supervisor group matches too,
+            # and the restart uses the full name supervisor actually printed.
+            target="$(echo "$known" | grep -E "(^|:)${program}\$" | head -1 || true)"
+            if [ -n "$target" ]; then
+              sudo -n supervisorctl restart "$target"
+            else
+              absent="$absent $program"
+            fi
+          done
+
+          if [ -n "$absent" ]; then
+            echo "::error::supervisor does not know:$absent"
+            echo "New code is on disk, but the old processes are still serving it."
+            echo "Install the three programs from ARCHITECTURE.md section 8, then re-run."
+            echo "What supervisor does know:"
+            echo "$known"
+            exit 1
+          fi
+          REMOTE
+
+      # A restart that reported success is not proof the application came back.
+      # This asks the running process, on the port nginx proxies to.
+      - name: Ask the server whether it is actually up
+        run: |
+          set -euo pipefail
+
+          ssh deploy "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+
+          # /api/news is public, cheap, and reaches the database. An empty feed
+          # is still a 200, which is what makes it usable as a smoke check.
+          for attempt in $(seq 1 10); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/news || true)"
+            if [ "$code" = "200" ]; then
+              echo "GET /api/news -> 200 after ${attempt} attempt(s)."
+              exit 0
+            fi
+            echo "attempt ${attempt}: got '${code}', waiting."
+            sleep 3
+          done
+
+          echo "::error::The API never answered 200 on 127.0.0.1:8000 within 30s."
+          sudo -n supervisorctl status brin-octane || true
+          tail -n 40 storage/logs/laravel.log 2>/dev/null || true
+          exit 1
+          REMOTE
+
+          {
+            echo "### Backend deployed"
+            echo "Commit ${{ github.sha }} to $DEPLOY_PATH on the VPS."
           } >> "$GITHUB_STEP_SUMMARY"
 
   android:

@@ -119,9 +119,9 @@ the status code alone never confirms success.
 ## Testing
 
 ```bash
-cd be && php artisan test        # 225 tests
+cd be && php artisan test        # 238 tests
 cd fe && flutter analyze         # must be clean
-cd fe && flutter test            # 120 tests
+cd fe && flutter test            # 129 tests
 ```
 
 The backend suite runs against MySQL rather than SQLite: several migrations use
@@ -157,8 +157,15 @@ processes, the health check runs on a 10-second interval, a prediction job may
 run for up to two hours, and results reach ~1.5 GB on disk. A small VPS with
 nginx, supervisor and MySQL covers all of it.
 
-Configuration, DNS layout and the supervisor unit files are in
-[ARCHITECTURE.md](ARCHITECTURE.md) §8, along with the pre-deployment checklist.
+Pushing to `main` deploys both halves: the web client to Vercel, and the
+backend to the VPS over SSH — rsync, `composer install --no-dev`, a database
+dump, `migrate --force`, and a supervisor restart, followed by a request to the
+running process to confirm it came back. It needs the repository secrets
+`VPS_HOST`, `VPS_USERNAME`, `VPS_SSH` and optionally `VPS_PORT`.
+
+Configuration, DNS layout, the supervisor unit files and the deploy job step by
+step are in [ARCHITECTURE.md](ARCHITECTURE.md) §8, along with the
+pre-deployment checklist.
 
 ---
 

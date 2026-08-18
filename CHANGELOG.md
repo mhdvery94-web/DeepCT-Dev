@@ -33,6 +33,127 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.13] - 2026-08-18
+
+Hasil review menyeluruh atas keadaan repo, lalu tiga hal yang diperbaiki dan
+satu yang ditambahkan.
+
+### Menyebut nilai bawaannya menjawab 500
+
+`POST /api/predictions/uploads` dengan `purpose: prediction` dan tanpa
+`model_id` menjawab **HTTP 500** berisi stack trace, di tempat yang seharusnya
+**422** menyebut field yang kurang.
+
+Aturannya `required_without:purpose`, dan itu menanyakan apakah `purpose`
+**dikirim**, bukan apa isinya. Jadi menyebut nilai bawaannya dengan lantang
+justru mematikan syarat `model_id`; `exclude_if` juga tidak menyala karena
+nilainya bukan `training`; dan controller lalu membaca kunci yang validasi baru
+saja setuju boleh tidak ada.
+
+Sekarang `required_unless:purpose,training` — hanya training yang boleh tanpa
+model. Tiga test mengunci ketiga jalurnya: `purpose` disebut, `purpose`
+dihilangkan, dan `purpose: training`.
+
+Klien Flutter tidak pernah mengirim kombinasi itu, jadi tidak ada pengguna yang
+pernah terkena. Yang terkena adalah siapa pun yang membaca daftar nilai `in:`
+dan mempercayainya.
+
+### ROADMAP bertentangan dengan dirinya sendiri
+
+Item 10 memuat sisa rencana dari sebelum pekerjaannya dikerjakan, dan sisa itu
+tidak ikut terhapus waktu hasilnya ditulis di atasnya. Dalam satu bagian yang
+sama terdapat:
+
+- judul "BACKEND SELESAI, **KLIEN BELUM**" di atas daftar yang setiap item
+  kliennya sudah `[x]`;
+- `[ ] Menyalakan kind di layar admin` empat belas baris di bawah
+  `[x] kind di form model admin`;
+- `[ ]` untuk mencabut `POST /admin/training/jobs`, yang sudah dicabut di rilis
+  sebelumnya;
+- satu blok utuh yang menyatakan "tidak ada satu pun route training di bawah
+  `me/`" — ada empat — dengan enam kotak kosong yang semuanya sudah terbangun;
+- "Sampai ketiganya dijawab, ini **belum dimulai**", seratus baris di bawah
+  "Ketiga pertanyaan sudah dijawab pemilik produk".
+
+Blok basi itu dibuang, judulnya diluruskan jadi **TERPASANG, BELUM DIJALANI**,
+dan "Yang belum" sekarang cuma berisi yang benar-benar belum: uji di GPU
+sungguhan, resume untuk unggah dataset, dan pencabutan
+`POST /admin/training/datasets`.
+
+Ini melanggar aturan 3 dan 4 CLAUDE.md, dan justru di berkas yang aturan itu
+ada untuk melindunginya.
+
+### Item 11: dua lubang yang ditemukan saat review
+
+Keduanya lahir dari perubahan di item 10 dan tidak tercatat di mana pun.
+
+**Arsip dataset training tidak punya retensi.** `finalizeTraining()` menulis
+sampai 2 GB per run ke `training/datasets/`, dan `predictions:cleanup` tidak
+menyentuh direktori itu. Satu-satunya penghapusan manual dan admin saja.
+Sebelum item 10, admin mendaftarkan URL dan platform tidak menyimpan apa pun —
+jadi perubahan itulah yang membuatnya jadi masalah. Butuh keputusan produk
+lebih dulu: berapa lama, dan siapa yang boleh menghapus.
+
+**Seluruh arsip dimuat ke RAM sebelum sepotong pun dikirim.** `withData: true`
+lalu memotong `Uint8List` yang sudah utuh di memori. Chunked upload dipakai
+ulang justru karena dataset adalah hal terbesar yang diterima platform ini,
+tapi yang diselamatkan chunking hanya transportnya.
+
+### Angka test di empat dokumen sudah tidak benar
+
+`CLAUDE.md`, `README.md`, `be/README.md` dan `fe/README.md` menyebut 225 dan
+120. Terukur hari ini: **238** (969 assertions) dan **129**.
+
+### Backend deploy sendiri ke VPS
+
+Job `vps` baru di `.github/workflows/release.yml`, berjalan pada push ke `main`
+dan pada tag. Klien web tetap ke Vercel; job ini hanya `be/`.
+
+`rsync --delete` dengan `.env`, `storage/`, `vendor/`, `node_modules/` dan
+`rr.exe` dikecualikan — dan karena dikecualikan, juga terlindung dari
+penghapusan itu. Lalu `composer install --no-dev` di server, **satu dump
+database sebelum migrasi**, `migrate --force`, ketiga cache, dan
+`supervisorctl restart` untuk `brin-octane`, `brin-queue`, `brin-schedule`.
+
+Dua hal yang membuatnya bukan sekadar menyalin berkas:
+
+**Restart Octane wajib, dan kegagalannya harus berisik.** Octane memegang
+aplikasi di memori; tanpa restart, kode baru ada di disk sementara proses lama
+terus melayani yang lama — persis jebakan yang sudah diperingatkan CLAUDE.md.
+Kalau supervisor tidak mengenali salah satu dari ketiga program itu, job-nya
+berhenti dan menyebut namanya, alih-alih melapor sukses.
+
+**Restart yang sukses bukan bukti aplikasinya hidup.** Langkah terakhir
+meminta `GET /api/news` di `127.0.0.1:8000` sampai sepuluh kali. Endpoint itu
+publik, murah, menyentuh database, dan tetap 200 walau feed-nya kosong.
+
+Dump sebelum migrasi menutup item 6 di checklist ARCHITECTURE §8 sebagian saja,
+dan dokumennya sekarang mengatakan begitu: tujuh berkas itu ada di mesin yang
+sama dengan databasenya, jadi ia menjawab "migrasi merusak sesuatu" dan tidak
+menjawab "disknya mati".
+
+### Suite backend akhirnya berjalan di CI
+
+Job `test-backend` baru — PHP 8.3 (versi yang dijalankan VPS) di atas MySQL 8,
+bukan sqlite, karena dua migrasi memakai `ALTER TABLE ... MODIFY`. `vps`
+bergantung padanya, bukan pada `test`.
+
+Sebelum ini suite backend tidak pernah berjalan di CI sama sekali. Itu bisa
+dimaklumi selama berkas itu cuma membangun klien; ia berhenti bisa dimaklumi
+begitu ia mulai men-deploy.
+
+`php artisan test` → **238 passed**, 969 assertions. `flutter analyze` →
+clean. `flutter test` → **129 passed**.
+
+**Yang belum diverifikasi:** job `vps` belum pernah dijalankan terhadap VPS
+sungguhan. Sintaks YAML dan kesepuluh blok shell-nya diperiksa di sini, fungsi
+pembaca `.env` dan rotasi tujuh backup diuji secara lokal — tapi rsync,
+supervisor, dan smoke check-nya belum pernah menyentuh mesin itu. Nama program
+supervisor diambil dari ARCHITECTURE §8, yang merupakan rancangan; kalau server
+memakai nama lain, job-nya akan berhenti dan menyebutkannya.
+
+---
+
 ## [1.19.12] - 2026-08-18
 
 ### Publishing could not tell which repository it was for
