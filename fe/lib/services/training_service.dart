@@ -1,6 +1,4 @@
-import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 
 import '../config/api_config.dart';
 import '../models/pagination.dart';
@@ -28,35 +26,26 @@ class TrainingService {
         .toList();
   }
 
-  /// POST /admin/training/datasets — an archive, or a URL to fetch.
+  /// POST /admin/training/datasets — a URL the worker fetches for itself.
+  ///
+  /// There is no upload here any more, and the endpoint refuses one. An
+  /// administrator registering a dataset is recording where data already
+  /// lives; carrying 20 GB through this server so the GPU host can pull it
+  /// back down wastes both trips. Researchers upload, chunked and resumable,
+  /// through their own screen.
   Future<TrainingDataset> addDataset({
     required String name,
     String? description,
-    required bool hosted,
-    String? sourceUrl,
+    required String sourceUrl,
     int? frameCount,
-    Uint8List? archiveBytes,
-    String? archiveName,
-    void Function(double progress)? onProgress,
   }) async {
-    final form = FormData.fromMap({
-      'name': name,
-      'description': ?description,
-      'source_type': hosted ? 'upload' : 'url',
-      'source_url': ?sourceUrl,
-      if (frameCount != null) 'frame_count': '$frameCount',
-      if (archiveBytes != null)
-        'archive': MultipartFile.fromBytes(
-          archiveBytes,
-          filename: archiveName ?? 'dataset.zip',
-        ),
-    });
-
-    final body = await _api.sendMultipart(
+    final body = await _api.post(
       ApiConfig.adminTrainingDatasets,
-      data: form,
-      onSendProgress: (sent, total) {
-        if (total > 0) onProgress?.call(sent / total);
+      data: {
+        'name': name,
+        'description': ?description,
+        'source_url': sourceUrl,
+        'frame_count': ?frameCount,
       },
     );
 

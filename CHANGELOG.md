@@ -33,6 +33,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.11] - 2026-08-18
+
+### The researcher can see training now
+
+`Model Training` joins Dashboard, New Analysis, Results & History, My Activity
+and Messages in the researcher console. It was the thing actually asked for two
+releases ago and the thing that kept not getting done: the endpoints were
+finished and tested while the app had no door into them.
+
+The screen is deliberately the shape of the two it sits between — choose an
+archive, start it, watch the queue. Three details are not decoration:
+
+- **The dataset goes up in chunks**, through the same resumable session a
+  prediction upload uses. A failed chunk is retried three times, and each retry
+  re-reads how much the server actually holds first: a request that timed out
+  may well have landed, and re-sending from a stale offset earns a 409.
+- **Polling stops when nothing is moving.** A finished list does not need
+  refreshing, and a screen that keeps asking after a queue nobody is working is
+  a quiet cost that adds up on a shared server.
+- **The metric table takes its columns from what was reported**, not from a
+  fixed list. When the training code learns to measure something new it appears
+  on its own.
+
+The result view is the point of the whole feature: epoch down the side, every
+metric the notebook sent across the top. One number says how a run is doing; the
+series says whether it learned anything.
+
+When no trainer endpoint is registered, the screen says so before the button is
+pressed, and a run started anyway is queued rather than refused — with the
+reason shown rather than left as a job sitting silently at `queued`.
+
+### The upload field is gone from the admin screen
+
+The backend stopped accepting it in 1.19.10; the form kept offering it, which
+would have earned a 422 on the first press. Both halves now agree: an
+administrator registers a URL, a researcher uploads.
+
+`flutter analyze` → **No issues found!**. `flutter test` → **122 passed**.
+
+**Not verified:** no training run has actually executed on a GPU. What is proven
+is the chunked upload (backend tests) and that the screen analyses clean and the
+suite passes. Per `CLAUDE.md` the prediction pipeline is tested end to end
+against the real worker; training has not been, and until it is, this is a
+finished interface over an unexercised path. No widget test covers the new
+screen either.
+
+---
+
 ## [1.19.10] - 2026-08-18
 
 ### Publishing retries instead of giving up

@@ -229,22 +229,31 @@ Sisi backend sudah dibangun dan lulus test:
 - [x] Kolom upload dicabut dari `POST /admin/training/datasets`; admin
       mendaftarkan URL saja
 
+- [x] **Layar Flutter untuk peneliti** — `UserSection.training` di
+      `user_shell.dart`, `training_screen.dart` (mulai run dengan unggah
+      chunked, daftar run, tabel metrik per epoch), dan
+      `researcher_training_service.dart`
+- [x] **Kolom upload dicabut dari layar admin Flutter**, sejalan dengan backend
+      yang sudah menolaknya
+
 Yang **belum**:
 
-- [ ] **Layar Flutter untuk peneliti.** Belum ada satu pun, dan ini bagian
-      terbesar yang tersisa. Endpoint-nya hidup dan teruji tapi tidak ada pintu
-      masuk di aplikasi. Yang dibutuhkan: entri `UserSection.training` di
-      `user_shell.dart`, satu layar mulai-run (unggah chunked + nama + jumlah
-      epoch), daftar run, dan layar hasil yang menggambar kurva dari
-      `data.history`.
-
-      Tiga hal kecil yang belum ada dan dibutuhkan layar itu: `ApiConfig`
-      belum punya entri `meTrainingJobs`, `ApiClient` belum punya pembantu
-      untuk mengirim satu chunk, dan berkas layanannya harus bernama sendiri —
-      `training_service.dart` sudah dipakai konsol admin.
-- [ ] **Kolom upload di layar admin Flutter** masih ada padahal backend sudah
-      menolaknya. Harus dicabut bersamaan, atau admin akan menekan tombol yang
-      dijawab 422.
+- [ ] **Uji end-to-end terhadap trainer sungguhan.** Belum ada satu run pun yang
+      benar-benar berjalan di GPU. Yang terbukti baru: unggah chunked (test
+      backend), dan layar yang menganalisis serta lulus suite Flutter. Sesuai
+      aturan CLAUDE.md, pipeline prediksi diuji ujung-ke-ujung terhadap worker
+      nyata — training belum.
+- [ ] **Widget test untuk layar training.** 122 test Flutter lulus, tapi tidak
+      satu pun menyentuh layar baru ini.
+- [ ] **`kind` di form model admin.** Trainer masih hanya bisa didaftarkan lewat
+      API, jadi tombol "start training" di layar peneliti akan selalu
+      memberitahu bahwa belum ada trainer sampai itu dikerjakan.
+- [ ] **Resume untuk unggah dataset.** Unggah prediksi menyimpan sesi yang
+      terputus dan menawarkannya kembali; training belum. Saat itu ditambahkan,
+      loop chunk di dua layanan itu layak diangkat jadi satu.
+- [ ] **Route admin lama** (`POST /admin/training/datasets` untuk URL, dan
+      `POST /admin/training/jobs`) masih ada. Sekarang penggantinya sudah
+      terlihat, jadi mencabutnya sudah aman — tapi belum dilakukan.
 - [ ] **Menyalakan `kind` di layar admin.** Backend menerima `kind` saat
       mendaftarkan model; form admin belum menawarkannya, jadi trainer baru
       bisa didaftarkan lewat API.

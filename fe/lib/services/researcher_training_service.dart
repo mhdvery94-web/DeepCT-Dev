@@ -1,0 +1,221 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
+import '../config/api_config.dart';
+import 'api_client.dart';
+
+/// One epoch's numbers, as the notebook reported them.
+///
+/// The keys are the notebook's, not ours — `loss`, `psnr`, `ssim` today. Any
+/// other key still arrives and is still shown; a fixed set here would have to
+/// be edited every time the training code learns to measure something new.
+class TrainingPoint {
+  const TrainingPoint({required this.epoch, required this.metrics});
+
+  final int epoch;
+  final Map<String, dynamic> metrics;
+
+  double? value(String key) {
+    final raw = metrics[key];
+    if (raw is num) return raw.toDouble();
+    return double.tryParse('${raw ?? ''}');
+  }
+
+  factory TrainingPoint.fromJson(Map<String, dynamic> json) => TrainingPoint(
+    epoch: (json['epoch'] as num?)?.toInt() ?? 0,
+    metrics: Map<String, dynamic>.from(json['metrics'] as Map? ?? const {}),
+  );
+}
+
+/// A training run belonging to the signed-in researcher.
+class TrainingRun {
+  const TrainingRun({
+    required this.id,
+    required this.name,
+    required this.status,
+    required this.totalEpochs,
+    required this.currentEpoch,
+    required this.progressPercent,
+    this.metrics = const {},
+    this.trainerName,
+    this.errorMessage,
+    this.createdAt,
+    this.history = const [],
+  });
+
+  final int id;
+  final String name;
+  final String status;
+  final int totalEpochs;
+  final int currentEpoch;
+  final double progressPercent;
+  final Map<String, dynamic> metrics;
+  final String? trainerName;
+  final String? errorMessage;
+  final DateTime? createdAt;
+  final List<TrainingPoint> history;
+
+  bool get isFinished =>
+      status == 'completed' || status == 'failed' || status == 'cancelled';
+
+  factory TrainingRun.fromJson(Map<String, dynamic> json) => TrainingRun(
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    name: json['name']?.toString() ?? '',
+    status: json['status']?.toString() ?? 'queued',
+    totalEpochs: (json['total_epochs'] as num?)?.toInt() ?? 0,
+    currentEpoch: (json['current_epoch'] as num?)?.toInt() ?? 0,
+    progressPercent: (json['progress_percent'] as num?)?.toDouble() ?? 0,
+    metrics: Map<String, dynamic>.from(json['metrics'] as Map? ?? const {}),
+    trainerName: (json['trainer'] as Map?)?['name']?.toString(),
+    errorMessage: json['error_message']?.toString(),
+    createdAt: json['created_at'] == null
+        ? null
+        : DateTime.tryParse(json['created_at'].toString()),
+    history: (json['history'] as List? ?? const [])
+        .map((e) => TrainingPoint.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList(),
+  );
+}
+
+/// Training, from the researcher's side.
+///
+/// Named for its half of the app on purpose: `training_service.dart` is the
+/// administrator's, and the two answer different endpoints.
+///
+/// The dataset goes up through the **same** resumable session a prediction
+/// upload uses, told what the archive is for. A training set is the largest
+/// thing this platform accepts and the least likely to arrive in one piece.
+///
+/// The chunk loop here is its own rather than shared with [PredictionService].
+/// That one also maintains the resume store — the record that lets an
+/// interrupted upload be offered back on the device — and training has no
+/// resume UI yet. When it grows one, the loop is worth lifting into something
+/// both can call.
+class ResearcherTrainingService {
+  final ApiClient _api = ApiClient.instance;
+
+  /// How many times one chunk is retried before the upload gives up.
+  static const int _chunkAttempts = 3;
+
+  Future<({List<TrainingRun> runs, bool trainerAvailable})> list() async {
+    final body = await _api.get(ApiConfig.meTrainingJobs);
+
+    return (
+      runs: (body['data'] as List? ?? const [])
+          .map((e) => TrainingRun.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      // False means nothing will pick a queued run up. The screen says so
+      // rather than leaving someone watching a queue that cannot move.
+      trainerAvailable: (body['meta'] as Map?)?['trainer_available'] == true,
+    );
+  }
+
+  Future<TrainingRun> show(int id) async {
+    final body = await _api.get('${ApiConfig.meTrainingJobs}/$id');
+
+    return TrainingRun.fromJson(Map<String, dynamic>.from(body['data'] as Map));
+  }
+
+  Future<void> cancel(int id) async {
+    await _api.post('${ApiConfig.meTrainingJobs}/$id/cancel');
+  }
+
+  /// Upload a dataset and start a run.
+  ///
+  /// Returns the server's message and, when there is one, the reason nothing
+  /// has started yet. A run with no trainer reachable is queued rather than
+  /// refused, and saying so is the difference between a job that looks stuck
+  /// and one that is honestly waiting.
+  Future<({int id, String message, String? warning})> start({
+    required String name,
+    required int totalEpochs,
+    required Uint8List bytes,
+    required String filename,
+    void Function(double progress)? onProgress,
+  }) async {
+    final started = await _api.post(
+      ApiConfig.predictionUploads,
+      data: {
+        'purpose': 'training',
+        'name': name,
+        'total_epochs': totalEpochs,
+        'total_size': bytes.length,
+        'filename': filename,
+      },
+    );
+
+    final session = Map<String, dynamic>.from(started['data'] as Map);
+    final uploadId = session['upload_id'].toString();
+    final chunkSize = (session['chunk_size'] as num?)?.toInt() ?? 1 << 20;
+
+    var offset = 0;
+
+    while (offset < bytes.length) {
+      final end = (offset + chunkSize).clamp(0, bytes.length);
+      final slice = Uint8List.sublistView(bytes, offset, end);
+
+      // Whether the server took this chunk. On the other path — a retry that
+      // found the server further along than we thought — `offset` has already
+      // moved there, and assuming `end` would skip what sits in between.
+      var accepted = false;
+
+      for (var attempt = 1; ; attempt++) {
+        try {
+          await _api.sendMultipart(
+            '${ApiConfig.predictionUploads}/$uploadId',
+            method: 'PATCH',
+            data: FormData.fromMap({
+              'offset': offset,
+              'chunk': MultipartFile.fromBytes(slice, filename: 'chunk'),
+            }),
+            onSendProgress: (sent, total) {
+              if (total <= 0) return;
+              final done = offset + (sent / total) * slice.length;
+              onProgress?.call((done / bytes.length).clamp(0.0, 1.0));
+            },
+          );
+          accepted = true;
+          break;
+        } on ApiException {
+          if (attempt >= _chunkAttempts) rethrow;
+
+          await Future<void>.delayed(Duration(seconds: attempt));
+
+          // The failed request may have landed anyway. The server is the
+          // authority on how much it holds, and re-sending from a stale offset
+          // earns a 409.
+          final synced = await _receivedSoFar(uploadId);
+          if (synced != null && synced != offset) {
+            offset = synced;
+            break;
+          }
+        }
+      }
+
+      if (accepted) offset = end;
+      onProgress?.call(offset / bytes.length);
+    }
+
+    final body = await _api.post(
+      '${ApiConfig.predictionUploads}/$uploadId/finalize',
+    );
+
+    return (
+      id: ((body['data'] as Map)['id'] as num).toInt(),
+      message: body['message']?.toString() ?? 'Training run queued.',
+      warning: body['dispatch_message']?.toString(),
+    );
+  }
+
+  /// How many bytes the server has, or null if even that call failed.
+  Future<int?> _receivedSoFar(String uploadId) async {
+    try {
+      final status = await _api.get('${ApiConfig.predictionUploads}/$uploadId');
+
+      return ((status['data'] as Map)['received'] as num?)?.toInt();
+    } on ApiException {
+      return null;
+    }
+  }
+}

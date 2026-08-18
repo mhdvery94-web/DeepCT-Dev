@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/pagination.dart';
@@ -10,7 +8,6 @@ import '../../services/api_client.dart';
 import '../../services/me_service.dart';
 import '../../services/training_service.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/file_extension.dart';
 import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
@@ -789,11 +786,7 @@ class _DatasetFormState extends State<_DatasetForm> {
   final _description = TextEditingController();
   final _url = TextEditingController();
 
-  bool _hosted = false;
-  Uint8List? _bytes;
-  String? _filename;
   bool _busy = false;
-  double _progress = 0;
   String? _error;
 
   @override
@@ -804,40 +797,12 @@ class _DatasetFormState extends State<_DatasetForm> {
     super.dispose();
   }
 
-  Future<void> _pick() async {
-    // FileType.any, then check the name: a `custom` extension list becomes an
-    // `accept` attribute a mobile browser cannot turn into a working filter,
-    // and the file ends up greyed out and unselectable.
-    final result = await FilePicker.pickFiles(type: FileType.any, withData: true);
-    final file = result?.files.firstOrNull;
-    if (file?.bytes == null) return;
-
-    if (!mounted) return;
-
-    if (!hasExtension(file!.name, const ['zip'])) {
-      setState(() => _error = 'Choose a .zip archive.');
-      return;
-    }
-
-    setState(() {
-      _bytes = file.bytes;
-      _filename = file.name;
-      _error = null;
-    });
-  }
-
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    if (_hosted && _bytes == null) {
-      setState(() => _error = 'Choose an archive, or register a URL instead.');
-      return;
-    }
 
     setState(() {
       _busy = true;
       _error = null;
-      _progress = 0;
     });
 
     try {
@@ -846,13 +811,7 @@ class _DatasetFormState extends State<_DatasetForm> {
         description: _description.text.trim().isEmpty
             ? null
             : _description.text.trim(),
-        hosted: _hosted,
-        sourceUrl: _hosted ? null : _url.text.trim(),
-        archiveBytes: _hosted ? _bytes : null,
-        archiveName: _filename,
-        onProgress: (p) {
-          if (mounted) setState(() => _progress = p);
-        },
+        sourceUrl: _url.text.trim(),
       );
 
       if (!mounted) return;
@@ -898,55 +857,29 @@ class _DatasetFormState extends State<_DatasetForm> {
               ),
               const SizedBox(height: 20),
 
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('BY URL')),
-                  ButtonSegment(value: true, label: Text('UPLOAD')),
-                ],
-                selected: {_hosted},
-                onSelectionChanged: (s) => setState(() => _hosted = s.first),
+              // Upload is gone from this form, and the backend refuses it now
+              // too. An administrator registering a dataset is recording where
+              // data already lives; carrying it through this server so the GPU
+              // host can pull it back down wastes both trips. Researchers
+              // upload — chunked, resumable, and on their own screen.
+              TextFormField(
+                controller: _url,
+                decoration: const InputDecoration(
+                  labelText: 'Archive URL',
+                  hintText: 'https://…/frames.zip',
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'URL is required';
+                  if (!v.startsWith('http')) return 'Enter a full URL';
+                  return null;
+                },
               ),
-              const SizedBox(height: 12),
-
-              if (_hosted) ...[
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _pick,
-                  icon: const Icon(Icons.folder_zip_outlined, size: 16),
-                  label: Text(_filename ?? 'CHOOSE A .ZIP'),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Goes through this server, so keep it modest. Anything large '
-                  'belongs on a URL: sending 20 GB up to the server and back '
-                  'down to Kaggle wastes both trips.',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-              ] else ...[
-                TextFormField(
-                  controller: _url,
-                  decoration: const InputDecoration(
-                    labelText: 'Archive URL',
-                    hintText: 'https://…/frames.zip',
-                  ),
-                  validator: (v) {
-                    if (_hosted) return null;
-                    if (v == null || v.trim().isEmpty) return 'URL is required';
-                    if (!v.startsWith('http')) return 'Enter a full URL';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'The GPU worker fetches this itself, which is the right way '
-                  'round for a large dataset.',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-              ],
-
-              if (_busy && _hosted) ...[
-                const SizedBox(height: 16),
-                LinearProgressIndicator(value: _progress),
-              ],
+              const SizedBox(height: 8),
+              Text(
+                'The GPU worker fetches this itself, which is the right way '
+                'round for a large dataset.',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
 
               if (_error != null) ...[
                 const SizedBox(height: 16),
