@@ -232,13 +232,24 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                   color: AppTheme.surface,
                   border: Border.all(color: AppTheme.border),
                 ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _recentActivities.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) =>
-                      _ActivityTile(activity: _recentActivities[index]),
+                child: ConstrainedBox(
+                  // Roughly four rows: long enough to read as a list, short
+                  // enough that the dashboard stays one screen on a phone.
+                  // Before this the list expanded to its full height and
+                  // pushed everything under it off the page.
+                  constraints: const BoxConstraints(maxHeight: 320),
+                  child: ListView.separated(
+                    // Kept deliberately. With a bounded height and no
+                    // shrinkWrap the list fills all 320px even when it holds
+                    // two rows; this makes it as tall as its content, up to
+                    // the cap. What makes it scroll is the removal of
+                    // NeverScrollableScrollPhysics, not of shrinkWrap.
+                    shrinkWrap: true,
+                    itemCount: _recentActivities.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) =>
+                        _ActivityTile(activity: _recentActivities[index]),
+                  ),
                 ),
               ),
           ],
