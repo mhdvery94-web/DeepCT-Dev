@@ -11,6 +11,7 @@ import '../../services/prediction_service.dart';
 import '../../services/upload_resume_store.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/file_extension.dart';
+import '../../utils/frame_bundle.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/model_status_strip.dart';
 
@@ -148,34 +149,58 @@ class _UploadScreenState extends State<UploadScreen> {
     //    the OS dialog filters by extension rather than by MIME type.
     final result = await FilePicker.pickFiles(
       type: FileType.any,
+      // Several loose .tif frames are as valid a choice as one archive, so a
+      // researcher no longer has to zip them first.
+      allowMultiple: true,
       // The chunked uploader needs the bytes in memory anyway, and on web
       // there is no path to read from.
       withData: true,
     );
 
-    final file = result?.files.firstOrNull;
-    if (file?.bytes == null) return;
+    final picked = result?.files.where((f) => f.bytes != null).toList() ?? [];
+    if (picked.isEmpty) return;
 
     if (!mounted) return;
 
     // Nothing filtered this for us on any platform, so it is checked here.
-    if (!hasExtension(file!.name, const ['zip'])) {
+    final tiffs = picked
+        .where((f) => hasExtension(f.name, const ['tif', 'tiff']))
+        .toList();
+
+    if (picked.length == 1 && hasExtension(picked.single.name, const ['zip'])) {
       setState(() {
-        // Cleared, so a previously chosen archive cannot be uploaded by
-        // accident while this error is on screen.
-        _fileBytes = null;
-        _fileName = null;
-        _uploadError =
-            '"${file.name}" is not a ZIP archive. Choose the .zip holding '
-            'your numbered .tif frames.';
+        _fileBytes = picked.single.bytes;
+        _fileName = picked.single.name;
+        _uploadError = null;
+      });
+      return;
+    }
+
+    if (tiffs.length == picked.length) {
+      // Bundled here so the backend keeps one intake shape. The names travel
+      // unchanged; their numbering is what marks the gaps to fill.
+      final bundle = await bundleFrames([
+        for (final f in tiffs) (name: f.name, bytes: f.bytes!),
+      ]);
+
+      if (!mounted) return;
+
+      setState(() {
+        _fileBytes = bundle.bytes;
+        _fileName = bundle.filename;
+        _uploadError = null;
       });
       return;
     }
 
     setState(() {
-      _fileBytes = file.bytes;
-      _fileName = file.name;
-      _uploadError = null;
+      // Cleared, so a previously chosen archive cannot be uploaded by
+      // accident while this error is on screen.
+      _fileBytes = null;
+      _fileName = null;
+      _uploadError =
+          'Choose one .zip archive, or one or more numbered .tif frames — '
+          'not a mixture.';
     });
   }
 
@@ -397,7 +422,7 @@ class _UploadScreenState extends State<UploadScreen> {
               _buildModelPicker(context),
               const SizedBox(height: 24),
 
-              _section(context, '2. Choose your archive'),
+              _section(context, '2. Choose your frames'),
               const SizedBox(height: 8),
               _buildFilePicker(context),
               const SizedBox(height: 24),
@@ -517,7 +542,7 @@ class _UploadScreenState extends State<UploadScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              hasFile ? _fileName! : 'Tap to choose a .zip archive',
+              hasFile ? _fileName! : 'Tap to choose your frames',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium,
             ),
@@ -525,7 +550,7 @@ class _UploadScreenState extends State<UploadScreen> {
             Text(
               hasFile
                   ? _formatBytes(_fileBytes!.length)
-                  : 'The archive holds your .tif frames',
+                  : 'A .zip archive, or several numbered .tif frames',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             if (hasFile && !_uploading) ...[

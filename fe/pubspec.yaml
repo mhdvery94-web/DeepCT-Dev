@@ -82,6 +82,7 @@ dependencies:
   crypto: ^3.0.7
   video_player: ^2.14.0
   emoji_picker_flutter: ^4.5.3
+  archive: ^4.1.0
 
 dev_dependencies:
   flutter_test:
