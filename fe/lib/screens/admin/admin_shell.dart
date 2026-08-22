@@ -262,7 +262,7 @@ class _AdminShellState extends State<AdminShell> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        user?.username ?? 'admin',
+                        user?.name ?? 'admin',
                         style: Theme.of(context).textTheme.labelLarge,
                         overflow: TextOverflow.ellipsis,
                       ),

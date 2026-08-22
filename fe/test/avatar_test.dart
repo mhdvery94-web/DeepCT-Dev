@@ -8,7 +8,6 @@ Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 UserModel _user({String? avatar}) => UserModel(
   id: 3,
-  username: 'dyanna',
   name: 'Dyanna Basia',
   email: 'dyanna@brin.go.id',
   role: 'user',
@@ -21,7 +20,6 @@ void main() {
     test('reads avatar_url from the payload', () {
       final user = UserModel.fromJson(const {
         'id': 3,
-        'username': 'dyanna',
         'name': 'Dyanna Basia',
         'email': 'dyanna@brin.go.id',
         'role': 'user',
@@ -36,7 +34,6 @@ void main() {
     test('an account with no photo reports none', () {
       final user = UserModel.fromJson(const {
         'id': 3,
-        'username': 'dyanna',
         'name': 'Dyanna Basia',
         'email': 'dyanna@brin.go.id',
         'role': 'user',
@@ -53,7 +50,7 @@ void main() {
 
       expect(updated.avatarPath, '/users/3/avatar');
       expect(updated.id, 3);
-      expect(updated.username, 'dyanna');
+      expect(updated.name, 'Dyanna Basia');
       expect(updated.role, 'user');
       expect(updated.isActive, isTrue);
     });

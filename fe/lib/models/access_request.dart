@@ -16,8 +16,8 @@ class AccessRequest {
   final String? reviewNote;
   final String? reviewerName;
 
-  /// Username of the account created when this was approved.
-  final String? createdUsername;
+  /// Email of the account created when this was approved.
+  final String? createdEmail;
 
   final DateTime? createdAt;
   final DateTime? reviewedAt;
@@ -32,7 +32,7 @@ class AccessRequest {
     required this.status,
     this.reviewNote,
     this.reviewerName,
-    this.createdUsername,
+    this.createdEmail,
     this.createdAt,
     this.reviewedAt,
   });
@@ -56,10 +56,10 @@ class AccessRequest {
       status: json['status']?.toString() ?? 'pending',
       reviewNote: json['review_note']?.toString(),
       reviewerName: reviewer is Map
-          ? (reviewer['name'] ?? reviewer['username'])?.toString()
+          ? reviewer['name']?.toString()
           : null,
-      createdUsername: createdUser is Map
-          ? createdUser['username']?.toString()
+      createdEmail: createdUser is Map
+          ? createdUser['email']?.toString()
           : null,
       createdAt: _date(json['created_at']),
       reviewedAt: _date(json['reviewed_at']),

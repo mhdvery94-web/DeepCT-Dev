@@ -26,7 +26,6 @@ class _FakeAuth extends AuthProvider {
 
 UserModel _user({required bool mustChange}) => UserModel(
   id: 2,
-  username: 'researcher',
   name: 'Dr Sample Researcher',
   email: 'researcher@brin.go.id',
   role: 'user',

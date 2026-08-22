@@ -1,7 +1,7 @@
 /// A single audit-trail entry from `user_activities`.
 ///
-/// The backend eager-loads `user:id,username,name,email,avatar_path`, so
-/// [userName], [userUsername] and [userAvatarPath] are populated whenever the
+/// The backend eager-loads `user:id,name,email,avatar_path`, so
+/// [userName] and [userAvatarPath] are populated whenever the
 /// actor still exists.
 class ActivityLog {
   final int id;
@@ -14,7 +14,6 @@ class ActivityLog {
   final Map<String, dynamic>? metadata;
   final DateTime? createdAt;
 
-  final String? userUsername;
   final String? userName;
   final String? userEmail;
 
@@ -31,7 +30,6 @@ class ActivityLog {
     this.userAgent,
     this.metadata,
     this.createdAt,
-    this.userUsername,
     this.userName,
     this.userEmail,
     this.userAvatarPath,
@@ -68,7 +66,6 @@ class ActivityLog {
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
-      userUsername: user is Map ? user['username']?.toString() : null,
       userName: user is Map ? user['name']?.toString() : null,
       userEmail: user is Map ? user['email']?.toString() : null,
       userAvatarPath: user is Map ? user['avatar_url']?.toString() : null,
@@ -77,7 +74,6 @@ class ActivityLog {
 
   /// Best available label for the actor; deleted users fall back to their ID.
   String get actorLabel {
-    if (userUsername != null && userUsername!.isNotEmpty) return userUsername!;
     if (userName != null && userName!.isNotEmpty) return userName!;
     if (userId != null) return 'User #$userId';
     return 'System';

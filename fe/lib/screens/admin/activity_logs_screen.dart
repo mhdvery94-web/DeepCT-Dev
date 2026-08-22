@@ -264,7 +264,7 @@ class _ActivityLogsScreenState extends State<ActivityLogsScreen> {
             ..._users.map(
               (u) => DropdownMenuItem<int?>(
                 value: u.id,
-                child: Text(u.username, overflow: TextOverflow.ellipsis),
+                child: Text(u.name, overflow: TextOverflow.ellipsis),
               ),
             ),
           ],

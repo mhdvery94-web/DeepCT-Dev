@@ -253,7 +253,7 @@ class _UserShellState extends State<UserShell> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        user?.username ?? 'researcher',
+                        user?.name ?? 'researcher',
                         style: Theme.of(context).textTheme.labelLarge,
                         overflow: TextOverflow.ellipsis,
                       ),

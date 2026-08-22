@@ -127,8 +127,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       await _service.toggleStatus(user.id);
       _showMessage(
         user.isActive
-            ? '${user.username} has been deactivated'
-            : '${user.username} has been activated',
+            ? '${user.name} has been deactivated'
+            : '${user.name} has been activated',
       );
       _load();
     } on ApiException catch (e) {
@@ -156,7 +156,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final confirmed = await _confirm(
       title: 'Reset password',
       message:
-          'Reset the password for "${user.username}" to the platform default?',
+          'Reset the password for "${user.name}" to the platform default?',
       confirmLabel: 'RESET',
     );
     if (confirmed != true) return;
@@ -174,7 +174,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('New password for ${user.username}:'),
+            Text('New password for ${user.name}:'),
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
@@ -206,7 +206,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Future<void> _delete(UserModel user) async {
     final confirmed = await _confirm(
       title: 'Delete user',
-      message: 'Permanently delete "${user.username}"? This cannot be undone.',
+      message: 'Permanently delete "${user.name}"? This cannot be undone.',
       confirmLabel: 'DELETE',
       destructive: true,
     );
@@ -214,7 +214,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
     try {
       await _service.delete(user.id);
-      _showMessage('${user.username} deleted');
+      _showMessage('${user.name} deleted');
 
       // Step back a page if we just removed the only row on it.
       if (_users.length == 1 && _page > 1) _page--;
@@ -298,7 +298,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             controller: _searchController,
             onChanged: _onSearchChanged,
             decoration: InputDecoration(
-              hintText: 'Search name, username, email',
+              hintText: 'Search name, email, phone',
               prefixIcon: const Icon(Icons.search, size: 18),
               isDense: true,
               suffixIcon: _searchController.text.isEmpty
@@ -406,7 +406,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                             Row(
                               children: [
                                 Text(
-                                  user.username,
+                                  user.phone ?? '—',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -570,7 +570,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _name;
-  late final TextEditingController _username;
+  late final TextEditingController _phone;
   late final TextEditingController _email;
   late final TextEditingController _password;
 
@@ -585,7 +585,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
     super.initState();
     final u = widget.existing;
     _name = TextEditingController(text: u?.name ?? '');
-    _username = TextEditingController(text: u?.username ?? '');
+    _phone = TextEditingController(text: u?.phone ?? '');
     _email = TextEditingController(text: u?.email ?? '');
     _password = TextEditingController();
     _role = u?.role ?? 'user';
@@ -594,7 +594,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
   @override
   void dispose() {
     _name.dispose();
-    _username.dispose();
+    _phone.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
@@ -613,7 +613,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
         await widget.service.update(
           id: widget.existing!.id,
           name: _name.text.trim(),
-          username: _username.text.trim(),
+          phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
           email: _email.text.trim(),
           role: _role,
         );
@@ -622,7 +622,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
       } else {
         final result = await widget.service.create(
           name: _name.text.trim(),
-          username: _username.text.trim(),
+          phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
           email: _email.text.trim(),
           role: _role,
           password: _password.text.trim().isEmpty
@@ -702,11 +702,12 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  controller: _username,
-                  decoration: const InputDecoration(labelText: 'USERNAME'),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Username is required'
-                      : null,
+                  controller: _phone,
+                  keyboardType: TextInputType.phone,
+                  // No validator: the field is optional, and Indonesian
+                  // numbers are written +62, 62 and 0 interchangeably, so
+                  // there is no format worth insisting on.
+                  decoration: const InputDecoration(labelText: 'PHONE'),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(

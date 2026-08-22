@@ -6,13 +6,11 @@ import 'api_client.dart';
 /// Outcome of approving a request: the new account, plus the one-time password
 /// the administrator has to pass on.
 class ApprovedAccount {
-  final String username;
   final String name;
   final String email;
   final String defaultPassword;
 
   const ApprovedAccount({
-    required this.username,
     required this.name,
     required this.email,
     required this.defaultPassword,
@@ -105,7 +103,6 @@ class AccessRequestService {
     final user = Map<String, dynamic>.from(data['user'] as Map);
 
     return ApprovedAccount(
-      username: user['username']?.toString() ?? '',
       name: user['name']?.toString() ?? '',
       email: user['email']?.toString() ?? '',
       defaultPassword: data['default_password']?.toString() ?? '',

@@ -48,7 +48,7 @@ class AdminUserService {
   /// (`user12345678`), which it returns as `default_password`.
   Future<({UserModel user, String? defaultPassword})> create({
     required String name,
-    required String username,
+    String? phone,
     required String email,
     required String role,
     String? password,
@@ -57,7 +57,7 @@ class AdminUserService {
       ApiConfig.adminUsers,
       data: {
         'name': name,
-        'username': username,
+        'phone': phone,
         'email': email,
         'role': role,
         if (password != null && password.isNotEmpty) 'password': password,
@@ -76,17 +76,17 @@ class AdminUserService {
     return UserModel.fromJson(Map<String, dynamic>.from(body['data'] as Map));
   }
 
-  /// PUT /admin/users/{id} — only name, username, email and role are editable.
+  /// PUT /admin/users/{id} — only name, phone, email and role are editable.
   Future<UserModel> update({
     required int id,
     required String name,
-    required String username,
+    String? phone,
     required String email,
     required String role,
   }) async {
     final body = await _api.put(
       '${ApiConfig.adminUsers}/$id',
-      data: {'name': name, 'username': username, 'email': email, 'role': role},
+      data: {'name': name, 'phone': phone, 'email': email, 'role': role},
     );
 
     return UserModel.fromJson(Map<String, dynamic>.from(body['data'] as Map));

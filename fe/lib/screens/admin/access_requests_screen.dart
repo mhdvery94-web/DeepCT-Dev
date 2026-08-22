@@ -200,7 +200,6 @@ class _AccessRequestsScreenState extends State<AccessRequestsScreen> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
-          _CredentialRow(label: 'Username', value: account.username),
           const SizedBox(height: 8),
           _CredentialRow(label: 'Email', value: account.email),
           const SizedBox(height: 8),
@@ -503,10 +502,10 @@ class _RequestCard extends StatelessWidget {
             ),
           ],
 
-          if (request.createdUsername != null) ...[
+          if (request.createdEmail != null) ...[
             const SizedBox(height: 8),
             Text(
-              'Account created: ${request.createdUsername}',
+              'Account created: ${request.createdEmail}',
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: AppTheme.success),

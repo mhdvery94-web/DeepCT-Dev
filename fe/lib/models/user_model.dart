@@ -1,6 +1,9 @@
 class UserModel {
   final int id;
-  final String username;
+
+  /// Optional and not unique — how to reach this researcher, not how to
+  /// identify them. Nullable because most accounts will not have one.
+  final String? phone;
   final String name;
   final String email;
   final String role; // 'admin' or 'user'
@@ -20,7 +23,7 @@ class UserModel {
 
   UserModel({
     required this.id,
-    required this.username,
+    this.phone,
     required this.name,
     required this.email,
     required this.role,
@@ -34,7 +37,7 @@ class UserModel {
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       id: json['id'],
-      username: json['username'],
+      phone: json['phone']?.toString(),
       name: json['name'],
       email: json['email'],
       role: json['role'],
@@ -53,7 +56,7 @@ class UserModel {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'username': username,
+      'phone': phone,
       'name': name,
       'email': email,
       'role': role,
@@ -82,7 +85,7 @@ class UserModel {
     bool avatarPathGiven = false,
   }) => UserModel(
     id: id,
-    username: username,
+    phone: phone,
     name: name,
     email: email,
     role: role,

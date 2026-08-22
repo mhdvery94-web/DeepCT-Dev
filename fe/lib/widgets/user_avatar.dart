@@ -130,7 +130,7 @@ class AvatarButton extends StatelessWidget {
         onTap: onTap,
         child: UserAvatar(
           avatarPath: user?.avatarPath,
-          name: user?.name ?? user?.username ?? '?',
+          name: user?.name ?? '?',
           size: size,
         ),
       ),
