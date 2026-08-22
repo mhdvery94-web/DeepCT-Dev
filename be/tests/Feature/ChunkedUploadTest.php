@@ -146,7 +146,15 @@ class ChunkedUploadTest extends TestCase
         $this->assertGreaterThan(0, $chunkSize);
     }
 
-    public function test_a_complete_chunked_upload_queues_a_job(): void
+    /**
+     * Finalising assembles the archive and stops.
+     *
+     * It used to queue the run in the same breath. The two were split so a
+     * researcher can look at the frames before spending a GPU slot, so this
+     * now asserts both halves: finalising leaves the record waiting, and
+     * starting it produces the finished job it used to produce on its own.
+     */
+    public function test_a_complete_chunked_upload_waits_to_be_started(): void
     {
         $uploadId = $this->start();
 
@@ -162,9 +170,16 @@ class ChunkedUploadTest extends TestCase
             ->assertJsonPath('data.input_files_count', 2);
 
         $record = AnalysisRecord::first()->fresh();
+        $this->assertSame('uploaded', $record->status, 'finalising must not queue');
+        $this->assertSame('frames.zip', $record->file_name);
+
+        $this->apiAs($this->token)
+            ->postJson("/api/predictions/{$record->id}/start")
+            ->assertOk();
+
+        $record->refresh();
         $this->assertSame('completed', $record->status, $record->error_message ?? '');
         $this->assertSame(3, $record->output_files_count);
-        $this->assertSame('frames.zip', $record->file_name);
     }
 
     public function test_the_status_endpoint_reports_progress_for_resuming(): void

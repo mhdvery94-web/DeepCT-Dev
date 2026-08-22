@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessDeepLearningImage;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
 use App\Models\UserActivity;
@@ -300,6 +301,60 @@ class AnalysisController extends Controller
     }
 
     /** Fetch a record that belongs to the caller, or 404. */
+    /**
+     * POST /api/predictions/{id}/start — queue an upload that is waiting.
+     *
+     * Upload and analysis are separate so a researcher can look at the frames
+     * before spending a GPU slot on them. This is the second half.
+     */
+    public function start(Request $request, $id)
+    {
+        // 404 rather than 403 for someone else's record: whether it exists is
+        // not their business either.
+        $prediction = $this->findOwned($request, $id);
+
+        if (!$prediction->hasFiles()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Files have expired and been deleted',
+            ], 410);
+        }
+
+        if ($prediction->status !== 'uploaded') {
+            // A double tap on a phone reaches here. Two workers on one job
+            // would write over the same output folder.
+            return response()->json([
+                'success' => false,
+                'message' => 'This analysis has already been started.',
+            ], 409);
+        }
+
+        $prediction->update(['status' => 'pending']);
+
+        ProcessDeepLearningImage::dispatch($prediction);
+
+        UserActivity::create([
+            'user_id' => $request->user()->id,
+            'model_id' => $prediction->model_id,
+            'activity_type' => 'prediction',
+            'description' => "Started analysis of {$prediction->input_files_count} frame(s)",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Analysis queued.',
+            'data' => [
+                'id' => $prediction->id,
+                'status' => $prediction->status,
+                'queue_position' => AnalysisRecord::where('status', 'pending')
+                    ->where('created_at', '<', $prediction->created_at)
+                    ->count() + 1,
+            ],
+        ]);
+    }
+
     private function findOwned(Request $request, $id): AnalysisRecord
     {
         return AnalysisRecord::where('id', $id)

@@ -118,14 +118,30 @@ class PredictionPipelineTest extends TestCase
         ]);
     }
 
+    /**
+     * Upload and start, which used to be one request and is now two.
+     *
+     * The split exists so a researcher can look at the frames before spending
+     * a GPU slot on them. Every test below is about what happens once the run
+     * is going, so the helper does both halves — the queue is `sync` here, so
+     * starting runs the job inline exactly as dispatching used to.
+     */
     private function upload(array $names = ['frame_001.tif', 'frame_005.tif']): array
     {
-        return $this->apiAs($this->token)
+        $body = $this->apiAs($this->token)
             ->post('/api/predictions', [
                 'model_id' => $this->model->id,
                 'file' => $this->zipFile($names),
             ], ['Accept' => 'application/json'])
             ->json();
+
+        $id = $body['data']['id'] ?? null;
+
+        if ($id !== null) {
+            $this->apiAs($this->token)->postJson("/api/predictions/{$id}/start");
+        }
+
+        return $body;
     }
 
     // ---------------------------------------------------------------- tests

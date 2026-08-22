@@ -225,6 +225,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [AnalysisController::class, 'show'])->name('api.predictions.show');
         Route::delete('/{id}', [AnalysisController::class, 'destroy'])->name('api.predictions.destroy');
         Route::get('/{id}/frames', [AnalysisController::class, 'frames'])->name('api.predictions.frames');
+        Route::post('/{id}/start', [AnalysisController::class, 'start'])->name('api.predictions.start');
         Route::get('/{id}/frames/{name}/preview', [AnalysisController::class, 'framePreview'])->name('api.predictions.frames.preview');
         Route::get('/{id}/download/results', [AnalysisController::class, 'downloadResults'])->name('api.predictions.download.results');
         Route::get('/{id}/download/complete', [AnalysisController::class, 'downloadComplete'])->name('api.predictions.download.complete');

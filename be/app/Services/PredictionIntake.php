@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Jobs\ProcessDeepLearningImage;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
 use App\Models\User;
@@ -69,18 +68,18 @@ class PredictionIntake
             'file_name' => $originalFilename,
             'input_folder' => $inputFolder,
             'output_folder' => "predictions/{$user->id}/{$jobId}/output",
-            'status' => 'pending',
+            // Not `pending`: the files are here, but nobody has said to run
+            // them yet. POST /predictions/{id}/start does that.
+            'status' => 'uploaded',
             'input_files_count' => $extracted,
             'expires_at' => now()->addHours(24),
         ]);
-
-        ProcessDeepLearningImage::dispatch($record);
 
         UserActivity::create([
             'user_id' => $user->id,
             'model_id' => $model->id,
             'activity_type' => 'prediction',
-            'description' => "Started prediction with {$extracted} input frame(s)",
+            'description' => "Uploaded {$extracted} input frame(s)",
             'ip_address' => $ipAddress,
             'user_agent' => $userAgent,
             'metadata' => [
