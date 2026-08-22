@@ -33,6 +33,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.23.0] - 2026-08-23
+
+### Bagian C: unggah, lihat, lalu analisis
+
+Bagian keempat dari sepuluh permintaan perubahan. Rancangan dan rencananya ada
+di `docs/superpowers/specs/2026-08-23-c-frame-viewer-design.md` dan
+`docs/superpowers/plans/2026-08-23-c-frame-viewer.md`.
+
+#### Tiga hal yang ternyata sudah ada
+
+C jauh lebih kecil daripada bunyi permintaannya, dan itu baru terlihat setelah
+kodenya dibaca.
+
+`GET /predictions/{id}/frames` **sudah** menggabungkan folder input dan output.
+Galeri **sudah** menampilkan gabungan itu — `_generatedOnly` default `false`,
+jadi filternya ada tapi mati. Dan `_FrameViewer` **sudah** punya `PageView`,
+`InteractiveViewer` untuk pan/zoom, pemuat per-frame, dan latar hitam.
+
+Pernyataan sebelumnya dalam sesi ini bahwa galeri "sengaja memfilter hanya
+frame hasil" salah.
+
+Yang benar-benar baru: slider, tick penanda, badge, dan pengangkatan widget-nya
+supaya bagian D bisa memakainya.
+
+#### Yang tidak kecil: pipeline dipecah dua
+
+Preview yang diminta harus muncul setelah berkas naik dan **sebelum** analisis
+dimulai. Keduanya dulu satu tombol — `PredictionIntake` membuat record
+berstatus `pending` dan memanggil `dispatch()` dalam napas yang sama.
+
+Sekarang ada `uploaded` di depan `pending`, dan
+`POST /predictions/{id}/start` yang mengantrikan. Ia menjawab 409 pada tekanan
+kedua, karena ketukan ganda di ponsel akan menempatkan dua worker pada satu job
+yang saling menimpa folder output yang sama; 404 untuk milik orang lain,
+bentuk yang sama dengan seluruh rute prediksi; dan 410 untuk berkas
+kedaluwarsa.
+
+Alternatifnya — merender TIFF di klien sebelum berkas naik — ditolak dengan
+sadar. Ia menuntut `TiffPreview.php` diporting ke Dart: 302 baris parsing IFD,
+penurunan 16-bit, dan encoder PNG tulis tangan, menghasilkan dua dekoder yang
+bisa saling berbeda tanpa ada yang tahu.
+
+Lima belas test memerah karenanya, persis seperti yang diperkirakan.
+Perbaikannya menambahkan panggilan `start`, bukan melemahkan asersinya. Satu
+test berganti nama dari `..._queues_a_job` jadi `..._waits_to_be_started` dan
+kini menguji **dua** fakta: `finalize` meninggalkan record menunggu, dan
+`start` menghasilkan pekerjaan selesai yang dulu ia hasilkan sendiri.
+
+Baris log aktivitas ikut berubah. *"Started prediction with N frames"* tidak
+lagi benar saat unggah, dan log yang mengaku sebaliknya menyesatkan siapa pun
+yang membacanya nanti.
+
+#### Slider, dan tick yang membuatnya berguna
+
+Slider tersambung **dua arah** dengan `PageController`: menggeser slider
+memindah halaman, menggeser halaman memindah slider. Satu arah akan
+meninggalkan slider yang berbohong begitu seseorang menyapu gambarnya.
+`jumpToPage`, bukan `animateToPage` — menggeser adalah pencarian, dan animasi
+300 ms di tiap langkah membuatnya lengket.
+
+Tick di jalur slider itulah alasan ia mengalahkan tombol panah: sebaran
+sisipan model terlihat sekaligus. Ia ditaruh sebagai `Row` berisi `Expanded`
+di atas slider, bukan dilukis ke dalam track — perataan yang sama, tanpa
+painter.
+
+Badge pindah ke atas gambar. Mata sedang di gambar; keterangan yang jauh dari
+sana tidak terbaca.
+
+#### Beberapa `.tif` tanpa membungkusnya sendiri
+
+Memilih enam frame dari sebuah folder tidak lagi menuntut periset membungkusnya
+lebih dulu. Arsipnya dibuat di klien dan menempuh jalur yang sudah ada, jadi
+backend tetap punya satu bentuk masukan.
+
+Namanya dipertahankan persis. Penomoran di dalamnya itulah yang memberi tahu
+backend di mana celahnya; menormalkannya akan menghancurkan satu-satunya
+informasi yang dibutuhkan interpolasi.
+
+#### Terverifikasi, dan yang belum
+
+Backend **274 test** (dari 270), Flutter **162 test** (dari 153),
+`flutter analyze` bersih.
+
+**Belum terverifikasi, dan ini yang paling penting:** belum ada satu prediksi
+pun yang dijalankan terhadap GPU sungguhan sejak pipeline-nya dipecah. Itu
+satu-satunya jalur di proyek ini yang pernah dibuktikan ujung-ke-ujung
+(18 Agustus), dan bagian C menyentuh `PredictionIntake` beserta enum
+statusnya. Suite yang hijau tidak membuktikan jalurnya masih utuh.
+
+Begitu juga seluruh pemeriksaan mata di perangkat. Aplikasi bisa dipasang ke
+`SM A325F` yang tersambung, tetapi menelusuri alurnya menuntut mata dan jari.
+
 ## [1.22.0] - 2026-08-22
 
 ### Bagian B2: video di berita riset, emoji, dan pesan yang terlihat sedang dikirim

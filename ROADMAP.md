@@ -418,8 +418,23 @@ C sebelum D karena D memakai widget yang lahir di C.
       `uploaded` sebelum `pending`, supaya preview bisa muncul sebelum
       pekerjaan diantrikan. Itu menyentuh `PredictionIntake` — satu-satunya
       jalur yang pernah dibuktikan ujung-ke-ujung terhadap GPU sungguhan (no. 2
-      di "Sudah selesai"), jadi C ditutup dengan satu run nyata, bukan dengan
-      suite yang hijau.
+      di "Sudah selesai").
+
+      **Kode selesai 23 Agustus 2026, dan sengaja belum dicentang.** Backend
+      274 test (dari 270), Flutter 162 test (dari 153), `flutter analyze`
+      bersih.
+
+      **Dua hal yang menahan centangnya:**
+
+      - **Belum ada satu prediksi pun terhadap GPU sungguhan sejak pipeline
+        dipecah.** Suite yang hijau tidak membuktikan jalurnya masih utuh;
+        hanya satu run nyata yang bisa. Menunggu sesi Kaggle dinyalakan.
+      - **Belum ada pemeriksaan mata di perangkat.** `SM A325F` tersambung dan
+        APK-nya bisa dipasang, tetapi menelusuri alurnya menuntut mata dan
+        jari. Daftarnya: unggah beberapa `.tif` sekaligus, geser slider dengan
+        jari, cubit untuk memperbesar, START ANALYSIS, lalu geser lagi hasilnya
+        dan pastikan tick menandai frame sisipan — ditambah semua yang
+        tertunda sejak bagian A.
 - [ ] **D — Training periset.** Tab Training sisi admin dihapus; tab sisi
       periset dikembangkan dengan unggah, viewer dari C, dan metrik PSNR/SSIM/
       MAE/MSE. Dibangun di atas jalur yang belum pernah dijalani (no. 10 di

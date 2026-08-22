@@ -128,6 +128,27 @@ jawabannya.
 `avatar_url` (null kalau belum ada foto, yang jadi sinyal untuk menggambar
 bingkai inisial).
 
+### Unggah dan analisis adalah dua langkah
+
+Sejak 23 Agustus 2026, mengunggah berkas **tidak** mengantrekan pekerjaan.
+`PredictionIntake` menulis record berstatus `uploaded` dan berhenti; sebuah
+permintaan kedua, `POST /predictions/{id}/start`, yang memindahkannya ke
+`pending` dan memanggil `ProcessDeepLearningImage::dispatch()`.
+
+Alasannya satu: preview harus berada di antara keduanya. Periset melihat dan
+menggeser frame yang baru ia kirim sebelum memutuskan menghabiskan slot GPU
+pada sesi Kaggle yang tidak selalu hidup.
+
+Alternatifnya — merender TIFF di sisi klien sebelum berkas naik — ditolak
+dengan sadar. Ia menuntut `TiffPreview.php` diporting ke Dart: 302 baris
+parsing IFD, penurunan 16-bit ke 8-bit, dan encoder PNG tulis tangan, dengan
+hasil dua dekoder yang bisa saling berbeda tanpa ada yang menyadarinya.
+
+`queuePosition` menghitung record ber-status `pending`, jadi unggahan yang
+belum dimulai memang tidak terlihat olehnya tanpa perubahan apa pun. Dan
+`expires_at` sudah disetel saat record dibuat, sehingga unggahan yang
+ditinggalkan tetap disapu `predictions:cleanup` seperti yang lain.
+
 ### `models` — registry model AI
 `name`, `version`, `endpoint_url`, `status` (enum online/offline/trouble),
 `is_active`, `last_health_check`, `health_check_error`, `health_check_reason`,

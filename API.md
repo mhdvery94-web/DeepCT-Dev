@@ -128,7 +128,7 @@ tidak ada jalan membaca data akun lain.
 ```json
 { "activities_total": 25, "activities_today": 10,
   "analyses_total": 0,
-  "analyses_by_status": { "pending":0, "processing":0, "completed":0, "failed":0 },
+  "analyses_by_status": { "uploaded":0, "pending":0, "processing":0, "completed":0, "failed":0 },
   "models_online": 1, "models_total": 1 }
 ```
 
@@ -274,7 +274,25 @@ Tiap aksi di-scope ke pemanggil di dalam `AnalysisController`.
 | Method | Path | Keterangan |
 |---|---|---|
 | `GET` | `/predictions` | Daftar job sendiri. Filter opsional `status`. |
-| `POST` | `/predictions` | Unggah arsip dalam satu request |
+| `POST` | `/predictions` | Unggah arsip dalam satu request. **Tidak mengantrekan apa pun** |
+| `POST` | `/predictions/{id}/start` | Antrekan unggahan yang menunggu |
+
+**Unggah dan analisis adalah dua permintaan.** Sejak 23 Agustus 2026, unggah —
+lewat `POST /predictions` maupun lewat sesi berpotongan — meninggalkan record
+berstatus **`uploaded`** dan tidak mengantrekan apa pun. Frame-nya sudah bisa
+dibaca lewat `GET /predictions/{id}/frames`, sehingga periset dapat melihat dan
+menggesernya sebelum sebuah slot GPU dipakai.
+
+`POST /predictions/{id}/start` yang memindahkannya ke `pending` dan
+mengantrekan pekerjaannya. Ia menjawab:
+
+- **200** dengan `{id, status, queue_position}` bila berhasil;
+- **409** bila statusnya sudah lewat `uploaded` — ketukan ganda di ponsel tidak
+  boleh menempatkan dua worker pada satu job, yang akan saling menimpa folder
+  output yang sama;
+- **404** bila record itu milik akun lain, bentuk yang sama dengan seluruh rute
+  prediksi lain: keberadaannya pun bukan urusan mereka;
+- **410** bila berkasnya sudah kedaluwarsa dan dihapus.
 | `GET` | `/predictions/{id}` | Detail; memuat posisi antrean saat masih pending |
 | `DELETE` | `/predictions/{id}` | Hapus job beserta berkasnya |
 | `GET` | `/predictions/{id}/frames` | Daftar frame di disk (input + output) |
@@ -345,7 +363,7 @@ Untuk arsip besar. Lihat ARCHITECTURE.md §4 soal alasannya.
 | `POST` | `/predictions/uploads` | Buka sesi |
 | `GET` | `/predictions/uploads/{uploadId}` | Berapa byte yang sudah masuk |
 | `PATCH` | `/predictions/uploads/{uploadId}` | Kirim satu potongan |
-| `POST` | `/predictions/uploads/{uploadId}/finalize` | Rakit dan antrekan job |
+| `POST` | `/predictions/uploads/{uploadId}/finalize` | Rakit arsipnya. **Tidak mengantrekan** |
 | `DELETE` | `/predictions/uploads/{uploadId}` | Batalkan |
 
 **Buka sesi** — body `model_id`, `total_size`, `filename` (opsional):
