@@ -80,6 +80,7 @@ dependencies:
   # 11.0.0 has dropped the v1 embedding and still resolves against win32 5.x.
   file_picker: ^11.0.0
   crypto: ^3.0.7
+  video_player: ^2.14.0
 
 dev_dependencies:
   flutter_test:

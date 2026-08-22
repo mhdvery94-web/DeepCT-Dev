@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/news_post.dart';
 import '../services/news_service.dart';
 import 'authed_image.dart';
+import 'news_video_player.dart';
 import '../theme/app_theme.dart';
 import 'app_dialog.dart';
 
@@ -238,12 +239,20 @@ class _NewsSlide extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if ((post.body ?? '').isNotEmpty) ...[
+          // A video is reason enough to open the post, even with no body —
+          // otherwise a clip attached to a one-line item would be
+          // unreachable. The slide itself stays a teaser: a player inside it
+          // would fight a fixed height and a maxLines summary.
+          if ((post.body ?? '').isNotEmpty || post.hasVideo) ...[
             const SizedBox(height: 10),
             TextButton(
               onPressed: () => _showFull(context),
               style: TextButton.styleFrom(padding: EdgeInsets.zero),
-              child: const Text('READ MORE'),
+              child: Text(
+                post.hasVideo && (post.body ?? '').isEmpty
+                    ? 'WATCH VIDEO'
+                    : 'READ MORE',
+              ),
             ),
           ],
         ],
@@ -256,9 +265,22 @@ class _NewsSlide extends StatelessWidget {
       context: context,
       title: post.title,
       maxWidth: 560,
-      content: Text(
-        post.body ?? post.summary,
-        style: Theme.of(context).textTheme.bodyMedium,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            post.body ?? post.summary,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (post.hasVideo && post.videoUrl != null) ...[
+            const SizedBox(height: 16),
+            NewsVideoPlayer(
+              url: post.videoUrl!,
+              sizeLabel: post.videoSizeLabel,
+            ),
+          ],
+        ],
       ),
       actions: [
         TextButton(
