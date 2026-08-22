@@ -429,12 +429,17 @@ C sebelum D karena D memakai widget yang lahir di C.
       - **Belum ada satu prediksi pun terhadap GPU sungguhan sejak pipeline
         dipecah.** Suite yang hijau tidak membuktikan jalurnya masih utuh;
         hanya satu run nyata yang bisa. Menunggu sesi Kaggle dinyalakan.
-      - **Belum ada pemeriksaan mata di perangkat.** `SM A325F` tersambung dan
-        APK-nya bisa dipasang, tetapi menelusuri alurnya menuntut mata dan
-        jari. Daftarnya: unggah beberapa `.tif` sekaligus, geser slider dengan
-        jari, cubit untuk memperbesar, START ANALYSIS, lalu geser lagi hasilnya
-        dan pastikan tick menandai frame sisipan — ditambah semua yang
-        tertunda sejak bagian A.
+      - **Belum ada pemeriksaan mata di perangkat.** Yang **sudah** dibuktikan
+        23 Agustus 2026: APK release 60,9 MB terpasang ke `SM A325F` dan
+        **berjalan tanpa crash** — proses hidup, tidak ada `FATAL EXCEPTION`
+        di logcat. Itu membuktikan build-nya benar, bukan alurnya.
+
+        Yang masih menuntut mata dan jari: unggah beberapa `.tif` sekaligus,
+        geser slider dengan jari, cubit untuk memperbesar, START ANALYSIS,
+        lalu geser lagi hasilnya dan pastikan tick menandai frame sisipan —
+        ditambah semua yang tertunda sejak bagian A, terutama **mengirim pesan
+        dengan backend dimatikan**: gelembungnya harus merah dan teksnya harus
+        kembali ke kolom ketik.
 - [ ] **D — Training periset.** Tab Training sisi admin dihapus; tab sisi
       periset dikembangkan dengan unggah, viewer dari C, dan metrik PSNR/SSIM/
       MAE/MSE. Dibangun di atas jalur yang belum pernah dijalani (no. 10 di
