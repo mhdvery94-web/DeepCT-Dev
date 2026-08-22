@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
+use App\Models\NewsPost;
 use App\Models\TrainingDataset;
 use App\Models\TrainingJob;
 use App\Models\UserActivity;
@@ -60,24 +61,48 @@ class PredictionUploadController extends Controller
             // over an unreliable link, which is the entire problem this
             // controller solves — a second copy of it for training datasets
             // would drift from this one the first time either was touched.
-            'purpose' => 'nullable|in:prediction,training',
+            // Three purposes now. All three are a large file arriving in
+            // pieces over an unreliable link, which is the entire problem
+            // this controller solves.
+            'purpose' => 'nullable|in:prediction,training,news_video',
             // `required_unless`, not `required_without`: the latter asks
             // whether `purpose` was *sent*, not what it said, so a caller
             // naming the default — `purpose: prediction` — switched the model
             // off and reached the controller with no `model_id` and no
             // complaint. Reading the key then raised a 500 with a stack trace
             // where a 422 naming the field belonged. Only training may omit it.
-            'model_id' => 'required_unless:purpose,training|exclude_if:purpose,training|exists:models,id',
-            'total_size' => 'required|integer|min:1|max:' . self::MAX_TOTAL_BYTES,
+            // Only a prediction needs a model. `required_unless` takes a
+            // list, and each `exclude_if` takes one value, so both of the
+            // other purposes have to be named twice.
+            'model_id' => 'required_unless:purpose,training,news_video|exclude_if:purpose,training|exclude_if:purpose,news_video|exists:models,id',
+            'total_size' => [
+                'required',
+                'integer',
+                'min:1',
+                // Refused before a single byte travels, rather than after
+                // fifty megabytes do.
+                'max:' . ($request->input('purpose') === 'news_video'
+                    ? NewsPost::MAX_VIDEO_BYTES
+                    : self::MAX_TOTAL_BYTES),
+            ],
             'filename' => 'nullable|string|max:255',
             // Training only.
             'name' => 'required_if:purpose,training|nullable|string|max:200',
             'total_epochs' => 'required_if:purpose,training|nullable|integer|min:1|max:10000',
             'base_model_id' => 'nullable|exists:models,id',
+            // News video only.
+            'news_post_id' => 'required_if:purpose,news_video|nullable|exists:news_posts,id',
         ]);
 
         $purpose = $validated['purpose'] ?? 'prediction';
         $model = null;
+
+        // The route is open to every signed-in user, because uploading a
+        // prediction is a researcher's job. Attaching a video to a research
+        // post is not, so the role check lives here rather than on the route.
+        if ($purpose === 'news_video' && $request->user()->role !== 'admin') {
+            return $this->error('Only an administrator may attach a video to a post.', 403);
+        }
 
         if ($purpose === 'prediction') {
             $model = Model::findOrFail($validated['model_id']);
@@ -107,6 +132,7 @@ class PredictionUploadController extends Controller
             'name' => $validated['name'] ?? null,
             'total_epochs' => $validated['total_epochs'] ?? null,
             'base_model_id' => $validated['base_model_id'] ?? null,
+            'news_post_id' => $validated['news_post_id'] ?? null,
             'filename' => $validated['filename'] ?? 'upload.zip',
             'total_size' => (int) $validated['total_size'],
             'received' => 0,
@@ -227,6 +253,10 @@ class PredictionUploadController extends Controller
 
         if (($meta['purpose'] ?? 'prediction') === 'training') {
             return $this->finalizeTraining($request, $uploadId, $meta, $partPath);
+        }
+
+        if (($meta['purpose'] ?? 'prediction') === 'news_video') {
+            return $this->finalizeNewsVideo($request, $uploadId, $meta, $partPath);
         }
 
         $model = Model::find($meta['model_id']);
@@ -367,6 +397,74 @@ class PredictionUploadController extends Controller
      * largest thing this platform stores, and writing a second copy of it only
      * to delete the first is an avoidable few gigabytes of disk churn.
      */
+    /**
+     * Attach a finished upload to a news post.
+     *
+     * The type is read from the assembled bytes rather than the filename or
+     * anything the client claimed, for the same reason `validatePayload()`
+     * uses `mimetypes:` instead of `mimes:` for the photo: an extension is a
+     * suggestion, and this machine cannot re-encode anything that turns out
+     * to be something else.
+     */
+    private function finalizeNewsVideo(Request $request, string $uploadId, array $meta, string $partPath)
+    {
+        $userId = $request->user()->id;
+
+        // Checked again here, not only at start(): the two calls are separate
+        // requests and a role can change between them.
+        if ($request->user()->role !== 'admin') {
+            $this->discard($userId, $uploadId);
+            return $this->error('Only an administrator may attach a video to a post.', 403);
+        }
+
+        $post = NewsPost::find($meta['news_post_id'] ?? null);
+
+        if (!$post) {
+            $this->discard($userId, $uploadId);
+            return $this->error('That post no longer exists.', 404);
+        }
+
+        $mime = mime_content_type(Storage::path($partPath)) ?: 'application/octet-stream';
+
+        if (!in_array($mime, NewsPost::VIDEO_MIMES, true)) {
+            $this->discard($userId, $uploadId);
+            return $this->error(
+                'That file is not a video the platform can play. Use MP4 or WebM.',
+                422
+            );
+        }
+
+        // Replace rather than accumulate. A 50 MB file left behind is how a
+        // VPS disk fills without anyone deciding to.
+        if ($post->video_path && Storage::exists($post->video_path)) {
+            Storage::delete($post->video_path);
+        }
+
+        $extension = $mime === 'video/webm' ? 'webm' : 'mp4';
+        $finalPath = 'news/' . Str::uuid() . '.' . $extension;
+
+        Storage::move($partPath, $finalPath);
+
+        $post->update([
+            'video_path' => $finalPath,
+            'video_mime' => $mime,
+            'video_size_bytes' => $meta['total_size'],
+        ]);
+
+        // The part file has become the final file, so only the metadata is
+        // left to clean up. Storage::delete tolerates the missing part.
+        $this->discard($userId, $uploadId);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Video attached.',
+            'data' => [
+                'video_url' => "/news/{$post->id}/video",
+                'video_size_bytes' => $post->video_size_bytes,
+            ],
+        ]);
+    }
+
     private function finalizeTraining(Request $request, string $uploadId, array $meta, string $partPath)
     {
         $userId = $request->user()->id;
