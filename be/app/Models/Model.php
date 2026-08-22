@@ -25,6 +25,7 @@ class Model extends EloquentModel
         'total_predictions',
         'deployed_at',
         'health_check_error',
+        'health_check_reason',
         'is_active',
     ];
 

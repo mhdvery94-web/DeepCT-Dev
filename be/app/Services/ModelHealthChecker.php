@@ -44,6 +44,18 @@ class ModelHealthChecker
     public const TIMEOUT_SECONDS = 8;
 
     /**
+     * Why a model is not usable, in a form the client can branch on.
+     *
+     * Kept separate from the message in `health_check_error`: the message is
+     * written for whoever restarts the worker, and naming an ngrok error code
+     * to a researcher tells them nothing they can act on.
+     */
+    public const REASON_NO_ENDPOINT = 'no_endpoint';
+    public const REASON_TUNNEL_DOWN = 'tunnel_down';
+    public const REASON_UNREACHABLE = 'unreachable';
+    public const REASON_SLOW = 'slow';
+
+    /**
      * Probe the model endpoint and persist the resulting status.
      *
      * @return array{status:string, response_time_ms?:float, error?:string}
@@ -51,7 +63,10 @@ class ModelHealthChecker
     public function check(Model $model): array
     {
         if (empty($model->endpoint_url)) {
-            return $this->persist($model, 'offline', null, 'Endpoint URL is not set');
+            return $this->persist(
+                $model, 'offline', null, 'Endpoint URL is not set',
+                self::REASON_NO_ENDPOINT
+            );
         }
 
         try {
@@ -69,7 +84,11 @@ class ModelHealthChecker
             );
         } catch (\Throwable $e) {
             // Connection refused, DNS failure or timeout: nothing is listening.
-            return $this->persist($model, 'offline', null, $this->cleanMessage($e->getMessage()));
+            return $this->persist(
+                $model, 'offline', null,
+                $this->cleanMessage($e->getMessage()),
+                self::REASON_UNREACHABLE
+            );
         }
     }
 
@@ -95,7 +114,8 @@ class ModelHealthChecker
         foreach ($models as $model) {
             if (empty($model->endpoint_url)) {
                 $results[$model->id] = $this->persist(
-                    $model, 'offline', null, 'Endpoint URL is not set'
+                    $model, 'offline', null, 'Endpoint URL is not set',
+                    self::REASON_NO_ENDPOINT
                 );
 
                 continue;
@@ -129,7 +149,9 @@ class ModelHealthChecker
 
             if ($response instanceof \Throwable) {
                 $results[$model->id] = $this->persist(
-                    $model, 'offline', null, $this->cleanMessage($response->getMessage())
+                    $model, 'offline', null,
+                    $this->cleanMessage($response->getMessage()),
+                    self::REASON_UNREACHABLE
                 );
 
                 continue;
@@ -137,7 +159,8 @@ class ModelHealthChecker
 
             if (! $response instanceof Response) {
                 $results[$model->id] = $this->persist(
-                    $model, 'offline', null, 'No response from the probe'
+                    $model, 'offline', null, 'No response from the probe',
+                    self::REASON_UNREACHABLE
                 );
 
                 continue;
@@ -176,7 +199,8 @@ class ModelHealthChecker
                 $model,
                 'offline',
                 $responseTime,
-                "Tunnel is not running ({$ngrokError})"
+                "Tunnel is not running ({$ngrokError})",
+                self::REASON_TUNNEL_DOWN
             );
         }
 
@@ -187,7 +211,8 @@ class ModelHealthChecker
                 $model,
                 'offline',
                 $responseTime,
-                "Endpoint unreachable (HTTP {$response->status()})"
+                "Endpoint unreachable (HTTP {$response->status()})",
+                self::REASON_UNREACHABLE
             );
         }
 
@@ -196,7 +221,8 @@ class ModelHealthChecker
                 $model,
                 'trouble',
                 $responseTime,
-                "Slow response: {$responseTime}ms"
+                "Slow response: {$responseTime}ms",
+                self::REASON_SLOW
             );
         }
 
@@ -244,7 +270,8 @@ class ModelHealthChecker
         Model $model,
         string $status,
         ?float $responseTime,
-        ?string $error
+        ?string $error,
+        ?string $reason = null
     ): array {
         $previous = $model->status;
 
@@ -252,6 +279,10 @@ class ModelHealthChecker
             'status' => $status,
             'last_health_check' => now(),
             'health_check_error' => $error,
+            // Always written, never merely left alone: a model coming back up
+            // has to lose the reason it was down, or the client keeps
+            // explaining a failure that is over.
+            'health_check_reason' => $reason,
         ]);
 
         // Only on a *transition*. This runs every ten seconds, so a model that
