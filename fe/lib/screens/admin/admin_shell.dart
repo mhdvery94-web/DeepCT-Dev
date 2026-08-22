@@ -238,7 +238,9 @@ class _AdminShellState extends State<AdminShell> {
             _NavItem(
               section: section,
               selected: _section == section,
-              badge: section == AdminSection.messages ? _unreadConversations : 0,
+              badge: section == AdminSection.messages
+                  ? _unreadConversations
+                  : 0,
               onTap: () {
                 _goTo(section);
                 if (isDrawer) Navigator.pop(context);
@@ -316,57 +318,61 @@ class _AdminShellState extends State<AdminShell> {
       // Wide layouts have no AppBar, so nothing reserves room for the system
       // status bar and the sidebar would run underneath it on a tablet. On
       // desktop and web the inset is zero and this changes nothing.
-      body: SafeArea(
-        bottom: false,
-        child: Row(
-          children: [
-            if (isWide) ...[
-              _buildSidebar(isDrawer: false),
-              const VerticalDivider(width: 1),
-            ],
-            Expanded(
-              child: Column(
-                children: [
-                  if (isWide)
-                    Container(
-                      height: 88,
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      decoration: const BoxDecoration(
-                        color: AppTheme.surface,
-                        border: Border(
-                          bottom: BorderSide(color: AppTheme.border),
+      body: SelectionArea(
+        child: SafeArea(
+          bottom: false,
+          child: Row(
+            children: [
+              if (isWide) ...[
+                _buildSidebar(isDrawer: false),
+                const VerticalDivider(width: 1),
+              ],
+              Expanded(
+                child: Column(
+                  children: [
+                    if (isWide)
+                      Container(
+                        height: 88,
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        decoration: const BoxDecoration(
+                          color: AppTheme.surface,
+                          border: Border(
+                            bottom: BorderSide(color: AppTheme.border),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    _section.label,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.headlineLarge,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Administrator console',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _buildBell(),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _section.label,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.headlineLarge,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Administrator console',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                          _buildBell(),
-                        ],
-                      ),
-                    ),
-                  Expanded(child: _buildBody()),
-                ],
+                    Expanded(child: _buildBody()),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

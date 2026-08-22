@@ -39,7 +39,13 @@ Future<T?> showAppDialog<T>({
             maxWidth: math.min(maxWidth, size.width * 0.9),
             maxHeight: size.height * 0.85,
           ),
-          child: SingleChildScrollView(child: builder(dialogContext)),
+          // Its own, because `showDialog` pushes a route into the overlay: a
+          // SelectionArea around a shell's body is not an ancestor of anything
+          // shown here. Dialogs are where the values worth copying live — a
+          // generated password, an account's credentials.
+          child: SelectionArea(
+            child: SingleChildScrollView(child: builder(dialogContext)),
+          ),
         ),
       );
     },

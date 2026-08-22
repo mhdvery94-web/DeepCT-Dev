@@ -307,58 +307,67 @@ class _UserShellState extends State<UserShell> {
             ),
       // The wide layout has no AppBar, so nothing reserves room for the system
       // status bar. See fe/README.md.
-      body: SafeArea(
-        bottom: false,
-        child: Row(
-          children: [
-            if (isWide) ...[
-              _buildSidebar(isDrawer: false),
-              const VerticalDivider(width: 1),
-            ],
-            Expanded(
-              child: Column(
-                children: [
-                  if (isWide)
-                    Container(
-                      height: 88,
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      decoration: const BoxDecoration(
-                        color: AppTheme.surface,
-                        border: Border(
-                          bottom: BorderSide(color: AppTheme.border),
+      // One SelectionArea over the whole body rather than a SelectableText
+      // per label: selection then runs across widgets, so a block spanning
+      // several rows can be swept in one gesture. Text fields are unaffected
+      // — SelectionArea skips EditableText — and there is no onLongPress
+      // anywhere in the app for it to fight with.
+      body: SelectionArea(
+        child: SafeArea(
+          bottom: false,
+          child: Row(
+            children: [
+              if (isWide) ...[
+                _buildSidebar(isDrawer: false),
+                const VerticalDivider(width: 1),
+              ],
+              Expanded(
+                child: Column(
+                  children: [
+                    if (isWide)
+                      Container(
+                        height: 88,
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        decoration: const BoxDecoration(
+                          color: AppTheme.surface,
+                          border: Border(
+                            bottom: BorderSide(color: AppTheme.border),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    _section.label,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.headlineLarge,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Researcher console',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _buildBell(),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _section.label,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.headlineLarge,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Researcher console',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                          _buildBell(),
-                        ],
-                      ),
-                    ),
-                  Expanded(child: _buildBody()),
-                ],
+                    Expanded(child: _buildBody()),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -173,51 +173,58 @@ class _LandingPageState extends State<LandingPage> {
       // This page draws its own fixed header inside a Stack instead of using
       // an AppBar, so nothing was reserving room for the system status bar and
       // the header rendered underneath the clock and battery icons.
-      body: SafeArea(
-        bottom: false,
-        child: Stack(
-          children: [
-            // Scrollable content
-            SingleChildScrollView(
-              controller: _scrollController,
-              child: Column(
-                children: [
-                  // Spacer untuk header (agar content tidak tertutup header)
-                  const SizedBox(height: 64),
+      body: SelectionArea(
+        child: SafeArea(
+          bottom: false,
+          child: Stack(
+            children: [
+              // Scrollable content
+              SingleChildScrollView(
+                controller: _scrollController,
+                child: Column(
+                  children: [
+                    // Spacer untuk header (agar content tidak tertutup header)
+                    const SizedBox(height: 64),
 
-                  // Hero Section (Home)
-                  Container(
-                    key: _sectionKeys['home'],
-                    child: _buildHeroSection(context),
-                  ),
+                    // Hero Section (Home)
+                    Container(
+                      key: _sectionKeys['home'],
+                      child: _buildHeroSection(context),
+                    ),
 
-                  // About Section
-                  Container(
-                    key: _sectionKeys['about'],
-                    child: _buildAboutSection(context),
-                  ),
+                    // About Section
+                    Container(
+                      key: _sectionKeys['about'],
+                      child: _buildAboutSection(context),
+                    ),
 
-                  // Research Section
-                  Container(
-                    key: _sectionKeys['research'],
-                    child: _buildResearchSection(context),
-                  ),
+                    // Research Section
+                    Container(
+                      key: _sectionKeys['research'],
+                      child: _buildResearchSection(context),
+                    ),
 
-                  // Join Section
-                  Container(
-                    key: _sectionKeys['join'],
-                    child: _buildJoinSection(context),
-                  ),
+                    // Join Section
+                    Container(
+                      key: _sectionKeys['join'],
+                      child: _buildJoinSection(context),
+                    ),
 
-                  // Footer
-                  _buildFooter(context),
-                ],
+                    // Footer
+                    _buildFooter(context),
+                  ],
+                ),
               ),
-            ),
 
-            // Fixed Header di atas
-            Positioned(top: 0, left: 0, right: 0, child: _buildHeader(context)),
-          ],
+              // Fixed Header di atas
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: _buildHeader(context),
+              ),
+            ],
+          ),
         ),
       ),
     );
