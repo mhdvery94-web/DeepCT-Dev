@@ -22,7 +22,6 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
-        'username',
         'phone',
         'email',
         'password',
@@ -129,7 +128,6 @@ class User extends Authenticatable
     {
         return [
             'id' => $this->id,
-            'username' => $this->username,
             'phone' => $this->phone,
             'name' => $this->name,
             'email' => $this->email,

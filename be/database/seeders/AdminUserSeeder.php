@@ -46,11 +46,10 @@ class AdminUserSeeder extends Seeder
         }
 
         // Keyed on the unique email so re-seeding is idempotent instead of
-        // failing on the unique username/email constraints.
+        // failing on the unique email constraint.
         $admin = User::updateOrCreate(
             ['email' => env('SEED_ADMIN_EMAIL') ?: config('app.seed_admin_email', 'admin@brin.go.id')],
             [
-                'username' => 'admin',
                 'name' => 'Administrator',
                 'password' => Hash::make($password),
                 'role' => 'admin',
@@ -81,7 +80,6 @@ class AdminUserSeeder extends Seeder
         User::updateOrCreate(
             ['email' => 'researcher@brin.go.id'],
             [
-                'username' => 'researcher',
                 'name' => 'Dr. Sample Researcher',
                 'password' => Hash::make($password),
                 'role' => 'user',
