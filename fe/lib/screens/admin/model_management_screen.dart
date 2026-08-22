@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/model_info.dart';
+import '../../models/model_status_message.dart';
 import '../../models/pagination.dart';
 import '../../services/admin_model_service.dart';
 import '../../services/api_client.dart';
@@ -407,15 +408,36 @@ class _ModelCard extends StatelessWidget {
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(8),
-                      color: AppTheme.errorLight,
-                      child: Text(
-                        model.healthCheckError!,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.error,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      color: model.isTrouble
+                          ? AppTheme.warningLight
+                          : AppTheme.errorLight,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            modelStatusMessage(model.healthCheckReason),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: model.isTrouble
+                                  ? AppTheme.warning
+                                  : AppTheme.error,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          // The checker's own words, kept only here. The
+                          // administrator is the one who restarts the Kaggle
+                          // session, and ERR_NGROK_3200 is the only thing
+                          // that says which failure this is.
+                          Text(
+                            model.healthCheckError!,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppTheme.textMuted,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
                   ],
