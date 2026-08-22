@@ -20,10 +20,14 @@ class AvailableModel {
   /// is: without it, a stalled scheduler looks exactly like a healthy model.
   final DateTime? lastHealthCheck;
 
-  /// Why it is down, in the checker's own words — "Tunnel is not running
-  /// (ERR_NGROK_3200)" tells a researcher to go restart the Kaggle session,
-  /// where "offline" alone does not.
-  final String? healthCheckError;
+  /// Why it cannot be used, as a code rather than a sentence — `tunnel_down`,
+  /// `unreachable`, `no_endpoint`, `slow`. Turned into words by
+  /// [modelStatusMessage].
+  ///
+  /// The checker's raw message is deliberately not sent to this endpoint: it
+  /// carries the worker's hostname, which `/api/me/models` withholds on
+  /// purpose.
+  final String? healthCheckReason;
 
   const AvailableModel({
     required this.id,
@@ -34,7 +38,7 @@ class AvailableModel {
     this.accuracy,
     required this.isAvailable,
     this.lastHealthCheck,
-    this.healthCheckError,
+    this.healthCheckReason,
   });
 
   factory AvailableModel.fromJson(Map<String, dynamic> json) {
@@ -54,11 +58,15 @@ class AvailableModel {
       lastHealthCheck: json['last_health_check'] == null
           ? null
           : DateTime.tryParse(json['last_health_check'].toString()),
-      healthCheckError: json['health_check_error']?.toString(),
+      healthCheckReason: json['health_check_reason']?.toString(),
     );
   }
 
   String get label => version.isEmpty ? name : '$name $version';
+
+  /// Answering, and answering promptly. [isAvailable] is wider: it also
+  /// covers a worker that answers slowly, which can still take work.
+  bool get isOnline => status == 'online';
 }
 
 /// Wraps the self-service endpoints under `/api/me`.

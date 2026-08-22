@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/model_status_message.dart';
 import '../services/me_service.dart';
 import '../theme/app_theme.dart';
 
@@ -115,17 +116,36 @@ class _ModelStatusStripState extends State<ModelStatusStrip> {
       );
     }
 
-    final online = _models.where((m) => m.isAvailable).toList();
+    // Split three ways, not two. `isAvailable` also covers a worker that
+    // answers slowly, and summarising that as "online" would hide the only
+    // thing worth saying about it.
+    final healthy = _models.where((m) => m.isOnline).toList();
+    final usable = _models.where((m) => m.isAvailable).toList();
 
-    if (online.isNotEmpty) {
+    if (healthy.isNotEmpty) {
       return _Bar(
         color: AppTheme.success,
         icon: Icons.check_circle_outline,
-        title: online.length == _models.length
+        title: healthy.length == _models.length
             ? 'Model online'
-            : '${online.length} of ${_models.length} models online',
-        detail: '${online.first.label} · checked '
-            '${_ago(online.first.lastHealthCheck)}',
+            : '${healthy.length} of ${_models.length} models online',
+        detail: '${healthy.first.label} · checked '
+            '${_ago(healthy.first.lastHealthCheck)}',
+      );
+    }
+
+    // Nothing is fully healthy, but something still answers. Amber rather
+    // than red, because the work can go ahead — it will just take longer,
+    // which is what the message says.
+    if (usable.isNotEmpty) {
+      final slow = usable.first;
+
+      return _Bar(
+        color: AppTheme.warning,
+        icon: Icons.hourglass_empty,
+        title: 'Model slow',
+        detail: '${modelStatusMessage(slow.healthCheckReason)} · checked '
+            '${_ago(slow.lastHealthCheck)}',
       );
     }
 
@@ -135,8 +155,10 @@ class _ModelStatusStripState extends State<ModelStatusStrip> {
       color: AppTheme.error,
       icon: Icons.error_outline,
       title: 'Model offline',
-      // The checker's own message, because it is the one that says what to do.
-      detail: '${first.healthCheckError ?? 'The worker is not responding'} · '
+      // The reason code turned into words. The checker's own message names
+      // the tunnel and the HTTP status; that belongs to the administrator who
+      // restarts the worker, and stays on the model management screen.
+      detail: '${modelStatusMessage(first.healthCheckReason)} · '
           'checked ${_ago(first.lastHealthCheck)}',
     );
   }

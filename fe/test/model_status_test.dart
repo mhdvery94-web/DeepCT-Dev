@@ -9,16 +9,17 @@ Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
 AvailableModel _model({
   int id = 1,
   String status = 'online',
-  String? error,
+  String? reason,
   DateTime? checkedAt,
 }) => AvailableModel(
   id: id,
   name: 'deepCT TC-D',
   version: 'v1.0',
   status: status,
-  isAvailable: status == 'online',
+  // Matches the server: a slow worker answered, so it can still take work.
+  isAvailable: status == 'online' || status == 'trouble',
   lastHealthCheck: checkedAt ?? DateTime.now(),
-  healthCheckError: error,
+  healthCheckReason: reason,
 );
 
 void main() {
@@ -47,26 +48,58 @@ void main() {
     expect(find.textContaining('checked just now'), findsOneWidget);
   });
 
-  testWidgets('shows the checker\'s own words when the model is down', (
+  testWidgets('tells a researcher what to do without naming the tunnel', (
     tester,
   ) async {
-    // "Tunnel is not running" tells a researcher to restart the Kaggle
-    // session. "Offline" alone does not.
+    // The old copy said "Tunnel is not running (ERR_NGROK_3200)". It was
+    // right that a researcher needs to be told what to do, and wrong about
+    // who does it: they have no access to the tunnel. The administrator does,
+    // and still sees the raw code on the model management screen.
     ModelStatusStrip.debugLoader = () async => [
-      _model(
-        status: 'offline',
-        error: 'Tunnel is not running (ERR_NGROK_3200)',
-      ),
+      _model(status: 'offline', reason: 'tunnel_down'),
     ];
 
     await tester.pumpWidget(_host(const ModelStatusStrip()));
     await tester.pumpAndSettle();
 
     expect(find.text('Model offline'), findsOneWidget);
-    expect(
-      find.textContaining('ERR_NGROK_3200'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Ask an administrator'), findsOneWidget);
+    expect(find.textContaining('ERR_NGROK'), findsNothing);
+    expect(find.textContaining('Tunnel'), findsNothing);
+  });
+
+  testWidgets('a slow worker is amber and is not called offline', (
+    tester,
+  ) async {
+    // The GPU sits in a Kaggle session behind a tunnel, so a probe past five
+    // seconds is ordinary. Painting it red said the model was dead when it
+    // was answering.
+    ModelStatusStrip.debugLoader = () async => [
+      _model(status: 'trouble', reason: 'slow'),
+    ];
+
+    await tester.pumpWidget(_host(const ModelStatusStrip()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Model offline'), findsNothing);
+    expect(find.text('Model slow'), findsOneWidget);
+    expect(find.textContaining('take longer'), findsOneWidget);
+  });
+
+  testWidgets('one healthy worker outranks a slow one in the summary', (
+    tester,
+  ) async {
+    ModelStatusStrip.debugLoader = () async => [
+      _model(id: 1, status: 'online'),
+      _model(id: 2, status: 'trouble', reason: 'slow'),
+    ];
+
+    await tester.pumpWidget(_host(const ModelStatusStrip()));
+    await tester.pumpAndSettle();
+
+    // Counted against healthy, not against available: two of two "available"
+    // would hide the fact that one of them is limping.
+    expect(find.text('1 of 2 models online'), findsOneWidget);
   });
 
   testWidgets('distinguishes no registered model from an offline one', (
@@ -83,7 +116,7 @@ void main() {
   testWidgets('counts a partial outage', (tester) async {
     ModelStatusStrip.debugLoader = () async => [
       _model(id: 1),
-      _model(id: 2, status: 'offline'),
+      _model(id: 2, status: 'offline', reason: 'tunnel_down'),
     ];
 
     await tester.pumpWidget(_host(const ModelStatusStrip()));

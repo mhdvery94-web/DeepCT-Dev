@@ -15,6 +15,12 @@ class ModelInfo {
   final bool isActive;
   final DateTime? lastHealthCheck;
   final String? healthCheckError;
+
+  /// The same failure as [healthCheckError], as a code the client can branch
+  /// on. The admin screen shows both: the sentence, and the checker's own
+  /// words underneath it.
+  final String? healthCheckReason;
+
   final int maxConcurrentJobs;
   final int currentJobsCount;
   final int totalPredictions;
@@ -33,6 +39,7 @@ class ModelInfo {
     required this.isActive,
     this.lastHealthCheck,
     this.healthCheckError,
+    this.healthCheckReason,
     required this.maxConcurrentJobs,
     required this.currentJobsCount,
     required this.totalPredictions,
@@ -75,6 +82,7 @@ class ModelInfo {
       isActive: _toBool(json['is_active']),
       lastHealthCheck: _toDate(json['last_health_check']),
       healthCheckError: json['health_check_error']?.toString(),
+      healthCheckReason: json['health_check_reason']?.toString(),
       maxConcurrentJobs: _toInt(json['max_concurrent_jobs'], 1),
       currentJobsCount: _toInt(json['current_jobs_count']),
       totalPredictions: _toInt(json['total_predictions']),
