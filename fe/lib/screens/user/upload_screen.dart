@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/model_status_message.dart';
 import '../../models/prediction.dart';
 import '../../services/api_client.dart';
 import '../../services/me_service.dart';
@@ -682,22 +683,41 @@ class _ModelOption extends StatelessWidget {
                         'Accuracy ${model.accuracy!.toStringAsFixed(1)}%',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
+                    // Anything short of healthy gets a sentence. For a slow
+                    // worker that is not a refusal — it is selectable, and
+                    // this says why it will feel sluggish before anyone
+                    // presses the button and wonders.
+                    if (!model.isOnline) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        modelStatusMessage(model.healthCheckReason),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: model.isAvailable
+                              ? AppTheme.warning
+                              : AppTheme.error,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                color: model.isAvailable
+                color: model.isOnline
                     ? AppTheme.successLight
-                    : AppTheme.errorLight,
+                    : (model.isAvailable
+                          ? AppTheme.warningLight
+                          : AppTheme.errorLight),
                 child: Text(
                   model.status.toUpperCase(),
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: model.isAvailable
+                    color: model.isOnline
                         ? AppTheme.success
-                        : AppTheme.error,
+                        : (model.isAvailable
+                              ? AppTheme.warning
+                              : AppTheme.error),
                   ),
                 ),
               ),
