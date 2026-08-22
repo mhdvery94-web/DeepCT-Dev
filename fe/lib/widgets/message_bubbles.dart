@@ -1,3 +1,4 @@
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 
 import '../models/chat_message.dart';
@@ -43,7 +44,8 @@ class MessageBubbleList extends StatelessWidget {
           mine: message.isMine(viewerIsAdmin: viewerIsAdmin),
           // Only the first of a run carries the name and the picture; a wall
           // of repeated headers is harder to read than the messages are.
-          showHeader: previous == null || previous.fromAdmin != message.fromAdmin,
+          showHeader:
+              previous == null || previous.fromAdmin != message.fromAdmin,
           showDayDivider: _startsNewDay(previous, message),
         );
       },
@@ -90,12 +92,24 @@ class _Bubble extends StatelessWidget {
     if (at == null) return '';
 
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
 
     final today = DateTime.now();
-    if (at.year == today.year && at.month == today.month && at.day == today.day) {
+    if (at.year == today.year &&
+        at.month == today.month &&
+        at.day == today.day) {
       return 'Today';
     }
 
@@ -112,7 +126,10 @@ class _Bubble extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 3,
+                ),
                 color: AppTheme.background,
                 child: Text(
                   _day,
@@ -124,8 +141,9 @@ class _Bubble extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Row(
-            mainAxisAlignment:
-                mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+            mainAxisAlignment: mine
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (!mine) ...[
@@ -144,8 +162,9 @@ class _Bubble extends StatelessWidget {
               ],
               Flexible(
                 child: Column(
-                  crossAxisAlignment:
-                      mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  crossAxisAlignment: mine
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
                   children: [
                     if (showHeader && !mine)
                       Padding(
@@ -228,12 +247,49 @@ class _MessageComposerState extends State<MessageComposer> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focus = FocusNode();
   bool _sending = false;
+  bool _emojiOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Typing means you want the keyboard, so the panel gets out of the way.
+    _focus.addListener(() {
+      if (_focus.hasFocus && _emojiOpen) setState(() => _emojiOpen = false);
+    });
+  }
 
   @override
   void dispose() {
     _controller.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  /// Insert at the cursor, not at the end. People put emoji in the middle of
+  /// a sentence.
+  void _insert(String emoji) {
+    final text = _controller.text;
+    final selection = _controller.selection;
+
+    final start = selection.start < 0 ? text.length : selection.start;
+    final end = selection.end < 0 ? start : selection.end;
+
+    _controller.value = TextEditingValue(
+      text: text.replaceRange(start, end, emoji),
+      selection: TextSelection.collapsed(offset: start + emoji.length),
+    );
+  }
+
+  void _toggleEmoji() {
+    setState(() => _emojiOpen = !_emojiOpen);
+
+    // The panel replaces the keyboard rather than fighting it for the bottom
+    // of the screen.
+    if (_emojiOpen) {
+      FocusScope.of(context).unfocus();
+    } else {
+      _focus.requestFocus();
+    }
   }
 
   Future<void> _send() async {
@@ -268,42 +324,66 @@ class _MessageComposerState extends State<MessageComposer> {
       ),
       child: SafeArea(
         top: false,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _controller,
-                focusNode: _focus,
-                enabled: widget.enabled && !_sending,
-                minLines: 1,
-                maxLines: 5,
-                textInputAction: TextInputAction.newline,
-                decoration: InputDecoration(
-                  hintText: widget.hint,
-                  isDense: true,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    _emojiOpen
+                        ? Icons.keyboard_outlined
+                        : Icons.emoji_emotions_outlined,
+                  ),
+                  color: AppTheme.textMuted,
+                  onPressed: (widget.enabled && !_sending)
+                      ? _toggleEmoji
+                      : null,
+                  tooltip: _emojiOpen ? 'Keyboard' : 'Emoji',
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focus,
+                    enabled: widget.enabled && !_sending,
+                    minLines: 1,
+                    maxLines: 5,
+                    textInputAction: TextInputAction.newline,
+                    decoration: InputDecoration(
+                      hintText: widget.hint,
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 44,
+                  width: 52,
+                  child: ElevatedButton(
+                    onPressed: (widget.enabled && !_sending) ? _send : null,
+                    style: ElevatedButton.styleFrom(padding: EdgeInsets.zero),
+                    child: _sending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.send, size: 18),
+                  ),
+                ),
+              ],
+            ),
+            if (_emojiOpen)
+              SizedBox(
+                height: 280,
+                child: EmojiPicker(
+                  onEmojiSelected: (category, emoji) => _insert(emoji.emoji),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              height: 44,
-              width: 52,
-              child: ElevatedButton(
-                onPressed: (widget.enabled && !_sending) ? _send : null,
-                style: ElevatedButton.styleFrom(padding: EdgeInsets.zero),
-                child: _sending
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.send, size: 18),
-              ),
-            ),
           ],
         ),
       ),

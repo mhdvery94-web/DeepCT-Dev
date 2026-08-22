@@ -72,6 +72,30 @@ class MessagingTest extends TestCase
         $this->assertSame(1, $conversation->messages()->count());
     }
 
+    /**
+     * Emoji survive the round trip.
+     *
+     * config/database.php sets utf8mb4, but a table's collation can differ
+     * from the connection's, and a four-byte character silently becoming "?"
+     * is exactly the kind of thing nobody notices until a researcher sends
+     * one. Written before the emoji button, so the button is not the thing
+     * that discovers it.
+     */
+    public function test_an_emoji_survives_being_sent_and_read_back(): void
+    {
+        $body = 'Terima kasih 🙏 hasilnya bagus 🎉';
+
+        $this->apiAs($this->tokenAs($this->researcher))
+            ->postJson('/api/messages', ['body' => $body])
+            ->assertCreated()
+            ->assertJsonPath('data.body', $body);
+
+        $this->assertSame(
+            $body,
+            Conversation::firstOrFail()->messages()->first()->body
+        );
+    }
+
     public function test_writing_twice_keeps_one_thread(): void
     {
         // The whole point of dropping tickets: a second problem is not a second
