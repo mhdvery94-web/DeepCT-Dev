@@ -431,6 +431,13 @@ class _PostEditorState extends State<_PostEditor> {
 
   Uint8List? _imageBytes;
   String? _imageName;
+
+  Uint8List? _videoBytes;
+  String? _videoName;
+
+  /// 0..1 while a video is going up, null when none is. A 50 MB upload over
+  /// a tunnel is slow enough that silence reads as a hang.
+  double? _videoProgress;
   bool _removeImage = false;
 
   bool _saving = false;
@@ -487,6 +494,40 @@ class _PostEditorState extends State<_PostEditor> {
     });
   }
 
+  Future<void> _pickVideo() async {
+    // FileType.any, never FileType.custom: an extension list means three
+    // different things across desktop, Android and mobile web, and on mobile
+    // web a file reported as application/octet-stream simply greys out and
+    // cannot be selected. The name is checked below instead.
+    final result = await FilePicker.pickFiles(
+      type: FileType.any,
+      withData: true,
+    );
+
+    final file = result?.files.firstOrNull;
+    if (file?.bytes == null) return;
+
+    if (!mounted) return;
+
+    if (!hasExtension(file!.name, const ['mp4', 'webm'])) {
+      setState(() => _error = 'Choose an MP4 or WebM video.');
+      return;
+    }
+
+    // Checked here as well as server-side, so nobody spends minutes uploading
+    // something that will be refused at the end.
+    if (file.bytes!.length > 50 * 1024 * 1024) {
+      setState(() => _error = 'That video is larger than 50 MB.');
+      return;
+    }
+
+    setState(() {
+      _videoBytes = file.bytes;
+      _videoName = file.name;
+      _error = null;
+    });
+  }
+
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -496,7 +537,7 @@ class _PostEditorState extends State<_PostEditor> {
     });
 
     try {
-      await _service.save(
+      final saved = await _service.save(
         id: widget.post?.id,
         title: _title.text.trim(),
         summary: _summary.text.trim(),
@@ -507,12 +548,26 @@ class _PostEditorState extends State<_PostEditor> {
         removeImage: _removeImage,
       );
 
+      // After the post, not with it: a new post has no id until it is saved,
+      // and the video is attached to an id.
+      if (_videoBytes != null) {
+        await _service.uploadVideo(
+          postId: saved.id,
+          bytes: _videoBytes!,
+          filename: _videoName ?? 'video.mp4',
+          onProgress: (p) {
+            if (mounted) setState(() => _videoProgress = p);
+          },
+        );
+      }
+
       if (!mounted) return;
       Navigator.pop(context, true);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;
+        _videoProgress = null;
         _error = e.message;
       });
     }
@@ -581,6 +636,8 @@ class _PostEditorState extends State<_PostEditor> {
                 const SizedBox(height: 20),
 
                 _buildImagePicker(context),
+                const SizedBox(height: 20),
+                _buildVideoPicker(context),
 
                 if (_error != null) ...[
                   const SizedBox(height: 16),
@@ -688,6 +745,57 @@ class _PostEditorState extends State<_PostEditor> {
         Text(
           'JPEG, PNG or WebP, up to 4 MB. Images are stored as uploaded — '
           'nothing on the server can resize them.',
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVideoPicker(BuildContext context) {
+    final chosen = _videoBytes != null;
+    final existing = widget.post?.hasVideo ?? false;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Video', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: _saving ? null : _pickVideo,
+              icon: const Icon(Icons.movie_outlined, size: 16),
+              label: Text(chosen || existing ? 'REPLACE' : 'CHOOSE'),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                chosen
+                    ? _videoName!
+                    : (existing
+                          ? 'A video is already attached.'
+                          : 'No video attached.'),
+                style: Theme.of(context).textTheme.labelSmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        // Shown only while bytes are moving. 50 MB over a tunnel is slow
+        // enough that silence reads as a hang.
+        if (_videoProgress != null) ...[
+          const SizedBox(height: 8),
+          LinearProgressIndicator(value: _videoProgress),
+          const SizedBox(height: 4),
+          Text(
+            'Uploading video ${(_videoProgress! * 100).toStringAsFixed(0)}%',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          'MP4 or WebM, up to 50 MB. Sent in pieces, because a file that big '
+          'cannot arrive in one request.',
           style: Theme.of(context).textTheme.labelSmall,
         ),
       ],

@@ -111,4 +111,111 @@ class NewsService {
     await _api.delete('${ApiConfig.adminNews}/$id');
     AuthedImageCache.invalidate('${ApiConfig.news}/$id/image');
   }
+
+  /// How many times one chunk is retried before the upload gives up.
+  ///
+  /// Matches ResearcherTrainingService: three attempts with a growing pause,
+  /// and a re-sync with the server in between, because a request that failed
+  /// may still have landed.
+  static const int _chunkAttempts = 3;
+
+  /// Attach a video to a post.
+  ///
+  /// Goes through the chunked uploader rather than a plain POST because
+  /// post_max_size is 8 MB — a 25 MB multipart POST is refused with HTTP 413
+  /// by Laravel's ValidatePostSize, which is what sent a 50 MB video down the
+  /// same path as prediction archives.
+  ///
+  /// The loop is the third copy of this shape in the app, after
+  /// PredictionService and ResearcherTrainingService. ROADMAP already records
+  /// that the first two are worth unifying; this adds to that debt rather than
+  /// paying it, deliberately, because unifying while adding a third caller
+  /// would mix two changes in one commit range.
+  ///
+  /// Returns the post's relative video path, e.g. `/news/7/video`.
+  Future<String> uploadVideo({
+    required int postId,
+    required Uint8List bytes,
+    required String filename,
+    void Function(double progress)? onProgress,
+  }) async {
+    final started = await _api.post(
+      ApiConfig.predictionUploads,
+      data: {
+        'purpose': 'news_video',
+        'news_post_id': postId,
+        'total_size': bytes.length,
+        'filename': filename,
+      },
+    );
+
+    final session = Map<String, dynamic>.from(started['data'] as Map);
+    final uploadId = session['upload_id'].toString();
+    final chunkSize = (session['chunk_size'] as num?)?.toInt() ?? 1 << 20;
+
+    var offset = 0;
+
+    while (offset < bytes.length) {
+      final end = (offset + chunkSize).clamp(0, bytes.length);
+      final slice = Uint8List.sublistView(bytes, offset, end);
+
+      // Whether the server took this chunk. On the other path — a retry that
+      // found the server further along than we thought — `offset` has already
+      // moved there, and assuming `end` would skip what sits in between.
+      var accepted = false;
+
+      for (var attempt = 1; ; attempt++) {
+        try {
+          await _api.sendMultipart(
+            '${ApiConfig.predictionUploads}/$uploadId',
+            method: 'PATCH',
+            data: FormData.fromMap({
+              'offset': offset,
+              'chunk': MultipartFile.fromBytes(slice, filename: 'chunk'),
+            }),
+            onSendProgress: (sent, total) {
+              if (total <= 0) return;
+              final done = offset + (sent / total) * slice.length;
+              onProgress?.call((done / bytes.length).clamp(0.0, 1.0));
+            },
+          );
+          accepted = true;
+          break;
+        } on ApiException {
+          if (attempt >= _chunkAttempts) rethrow;
+
+          await Future<void>.delayed(Duration(seconds: attempt));
+
+          // The failed request may have landed anyway. The server is the
+          // authority on how much it holds, and re-sending from a stale
+          // offset earns a 409.
+          final synced = await _receivedSoFar(uploadId);
+          if (synced != null && synced != offset) {
+            offset = synced;
+            break;
+          }
+        }
+      }
+
+      if (accepted) offset = end;
+      onProgress?.call(offset / bytes.length);
+    }
+
+    final body = await _api.post(
+      '${ApiConfig.predictionUploads}/$uploadId/finalize',
+    );
+
+    return ((body['data'] as Map)['video_url']).toString();
+  }
+
+  /// How many bytes the server has, or null if even that call failed.
+  Future<int?> _receivedSoFar(String uploadId) async {
+    try {
+      final status = await _api.get('${ApiConfig.predictionUploads}/$uploadId');
+      final received = (status['data'] as Map)['received'];
+      return received is num ? received.toInt() : null;
+    } catch (_) {
+      return null;
+    }
+  }
 }
