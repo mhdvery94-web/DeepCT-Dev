@@ -29,6 +29,12 @@ class NewsController extends Controller
             'has_image' => $post->hasImage(),
             // Relative to the API root; the client prefixes its base URL.
             'image_url' => $post->hasImage() ? "/news/{$post->id}/image" : null,
+            'has_video' => $post->hasVideo(),
+            'video_url' => $post->hasVideo() ? "/news/{$post->id}/video" : null,
+            // Shown beside the play button. 50 MB on a slow connection is
+            // worth knowing about before you start it, which is why this has
+            // no counterpart on the image.
+            'video_size_bytes' => $post->video_size_bytes,
             'published_at' => $post->published_at?->toIso8601String(),
             'sort_order' => $post->sort_order,
         ];
@@ -94,6 +100,42 @@ class NewsController extends Controller
             'Content-Type' => $post->image_mime ?? 'application/octet-stream',
             // Safe to cache: replacing a photo writes a new filename, so the
             // URL for a *changed* image is never the same one.
+            'Cache-Control' => 'public, max-age=3600',
+        ]);
+    }
+
+    /**
+     * GET /api/news/{id}/video — the clip itself.
+     *
+     * Same visibility rule as the photo: public for a published post, admin
+     * only for a draft, so a draft cannot be found by guessing ids.
+     *
+     * `response()->file()` returns a Symfony BinaryFileResponse, which
+     * answers Range requests on its own — verified: a `Range: bytes=0-99`
+     * against the image endpoint returns 206 with a correct Content-Range.
+     * That is what lets a player seek, and it is why there is no range
+     * handling written here.
+     */
+    public function video(Request $request, $id)
+    {
+        $post = NewsPost::findOrFail($id);
+
+        if (!$post->is_published) {
+            $user = $request->user() ?? auth('sanctum')->user();
+
+            if (!$user || $user->role !== 'admin') {
+                abort(404);
+            }
+        }
+
+        if (!$post->hasVideo() || !Storage::exists($post->video_path)) {
+            abort(404);
+        }
+
+        return response()->file(Storage::path($post->video_path), [
+            'Content-Type' => $post->video_mime ?? 'application/octet-stream',
+            // Same reasoning as the photo: replacing a video writes a new
+            // filename, so a changed video is never the same URL.
             'Cache-Control' => 'public, max-age=3600',
         ]);
     }
@@ -237,6 +279,7 @@ class NewsController extends Controller
         $post = NewsPost::findOrFail($id);
 
         $this->deleteImage($post);
+        $this->deleteVideo($post);
         $post->delete();
 
         return response()->json(['success' => true, 'message' => 'Post deleted.']);
@@ -300,6 +343,13 @@ class NewsController extends Controller
     {
         if ($post->image_path && Storage::exists($post->image_path)) {
             Storage::delete($post->image_path);
+        }
+    }
+
+    private function deleteVideo(NewsPost $post): void
+    {
+        if ($post->video_path && Storage::exists($post->video_path)) {
+            Storage::delete($post->video_path);
         }
     }
 }

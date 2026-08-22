@@ -17,6 +17,9 @@ class NewsPost extends EloquentModel
         'body',
         'image_path',
         'image_mime',
+        'video_path',
+        'video_mime',
+        'video_size_bytes',
         'is_published',
         'published_at',
         'sort_order',
@@ -37,6 +40,20 @@ class NewsPost extends EloquentModel
     /** 4 MB. A landing-page slide does not need more, and nothing on this
      * machine can shrink an oversized upload. */
     public const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+
+    /**
+     * Video types accepted on upload.
+     *
+     * Two, and `video/quicktime` deliberately not among them: Chrome on
+     * Android will not play a `.mov` without transcoding, and nothing on this
+     * machine can transcode. Same reason the image list is narrow.
+     */
+    public const VIDEO_MIMES = ['video/mp4', 'video/webm'];
+
+    /** 50 MB. Roughly three to four minutes — long enough for an activity
+     * clip, short enough that fifty viewers is 2.5 GB of VPS bandwidth
+     * rather than five. */
+    public const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
     public function author(): BelongsTo
     {
@@ -66,5 +83,10 @@ class NewsPost extends EloquentModel
     public function hasImage(): bool
     {
         return $this->image_path !== null;
+    }
+
+    public function hasVideo(): bool
+    {
+        return $this->video_path !== null;
     }
 }

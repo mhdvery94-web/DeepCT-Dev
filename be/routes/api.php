@@ -54,6 +54,7 @@ Route::post('/messages/public', [MessageController::class, 'storePublic'])
 // the token itself rather than sitting behind auth middleware.
 Route::get('/news', [NewsController::class, 'index'])->name('api.news.index');
 Route::get('/news/{id}/image', [NewsController::class, 'image'])->name('api.news.image');
+Route::get('/news/{id}/video', [NewsController::class, 'video'])->name('api.news.video');
 
 // GPU training workers. Outside `auth:sanctum` on purpose: a worker is a
 // machine with a long-lived shared secret, not a person with an account, and
