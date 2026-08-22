@@ -192,9 +192,22 @@ Tabelnya polimorfik, jadi **tidak punya foreign key** ke `users`. Karena itu
 dihapus — tanpa itu barisnya hidup selamanya tanpa ada yang bisa membacanya.
 
 ### `news_posts` — berita riset di landing page
-`title`, `summary`, `body`, `image_path`, `image_mime`, `is_published`,
-`published_at`, `sort_order`, `created_by`. `published_at` hanya diisi saat
-pertama kali terbit.
+`title`, `summary`, `body`, `image_path`, `image_mime`, `video_path`,
+`video_mime`, `video_size_bytes`, `is_published`, `published_at`,
+`sort_order`, `created_by`. `published_at` hanya diisi saat pertama kali
+terbit.
+
+Gambar dan video keduanya opsional dan berdiri sendiri: sebuah post boleh
+punya keduanya, salah satu, atau tidak sama sekali. Gambar dibatasi 4 MB dan
+tiba dalam satu permintaan; **video dibatasi 50 MB dan tidak bisa** —
+`post_max_size` PHP adalah 8M, dan satu POST multipart 25 MB ditolak HTTP 413
+oleh `ValidatePostSize` Laravel. Karena itu video menempuh mesin unggah
+berpotongan di `PredictionUploadController` sebagai `purpose: news_video`,
+tujuan ketiganya di samping `prediction` dan `training`.
+
+`video_size_bytes` tidak punya pasangan di sisi gambar dengan sengaja: 4 MB
+tidak perlu diumumkan, 50 MB perlu, dan angkanya ditampilkan di sebelah
+tombol putar.
 
 ### Tabel lain
 `personal_access_tokens` (Sanctum), `cache`, `cache_locks`, `jobs`,

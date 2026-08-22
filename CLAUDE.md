@@ -76,6 +76,24 @@ Confirm you are on a new process by comparing its start time to the file you
 edited. `php artisan route:list` runs in its own short-lived process and will
 happily show a route the running server has never loaded.
 
+### A cached route table hides a new route completely
+
+`npm run preserve:all` runs `php artisan route:cache`, which writes
+`bootstrap/cache/routes-v7.php`. While that file exists, **`routes/api.php` is
+not read at all** — by the server, by `route:list`, or by the test suite.
+
+So a route you just added is absent everywhere, and the symptom is a plain
+404 with nothing to suggest a cache is involved. `route:list` not showing it
+is the giveaway: the file says one thing and the framework another.
+
+```bash
+php artisan route:clear
+```
+
+This is the twin of the Octane note above. There, `route:list` shows a route
+the server has not loaded; here, the server and `route:list` agree with each
+other and both disagree with the file.
+
 ### On a deployed machine, `config:cache` has already frozen `env()`
 
 Every deploy runs `php artisan config:cache`. From that moment `config/*.php` is

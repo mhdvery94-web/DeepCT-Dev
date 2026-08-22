@@ -362,10 +362,35 @@ C sebelum D karena D memakai widget yang lahir di C.
       **Rollback bersifat merusak:** seluruh nilai `username` hilang, dan
       `down()` mengisi ulang dengan `user{id}` semata agar batasan `unique`
       bisa dipasang kembali.
-- [ ] **B2 — Video News dan Messages.** Unggah video (maks 50 MB) lewat mesin
-      unggah berpotongan yang sudah ada (`purpose` baru `news_video`), ditambah
-      tombol pemilih emoji dan status *pending* saat pesan dikirim. Rancangan:
+- [x] **B2 — Video News dan Messages** — kode selesai, **tiga hal belum**.
+      Unggah video (maks 50 MB) lewat mesin unggah berpotongan yang sudah ada
+      (`purpose` baru `news_video`), ditambah tombol pemilih emoji dan status
+      *pending* saat pesan dikirim. Rancangan:
       [docs/superpowers/specs/2026-08-22-b2-video-and-messages-design.md](docs/superpowers/specs/2026-08-22-b2-video-and-messages-design.md).
+
+      Terverifikasi 22 Agustus 2026: backend 270 test (dari 256), Flutter 153
+      test (dari 147), `flutter analyze` bersih, APK release terbangun pada
+      60,5 MB dengan dua paket baru.
+
+      Tidak ada satu baris kode Range yang ditulis: `BinaryFileResponse` sudah
+      menjawabnya, dibuktikan dengan `Range: bytes=0-99` yang dijawab `206`.
+
+      **Yang belum dilakukan:**
+
+      - **Memutar video sungguhan di aplikasi berjalan dan menggesernya.**
+        `curl` membuktikan server menjawab `206`; itu tidak membuktikan
+        pemutarnya memintanya. Begitu juga panel emoji dan gelembung pending
+        di perangkat sentuh.
+      - **Migrasi belum dijalankan di VPS.**
+      - **Unggah video tidak bisa melanjutkan sesi yang terputus**, dan seluruh
+        berkas dimuat ke RAM sebelum dikirim — keterbatasan yang sama dengan
+        dataset training di no. 11. 50 MB jauh di bawah 2 GB yang jadi
+        kekhawatiran di sana, jadi B2 tidak memperbaikinya.
+
+      Loop unggah berpotongan kini ada di **tiga** layanan Flutter. No. 10
+      sudah mencatat dua yang pertama layak disatukan; hutang ini bertambah
+      dengan sadar, karena menyatukan sambil menambah pemakai ketiga akan
+      mencampur dua perubahan dalam satu rangkaian commit.
 
       Kendalanya sudah diukur, bukan diduga: `post_max_size` PHP adalah **8M**,
       dan satu POST multipart 25 MB ditolak **HTTP 413** oleh

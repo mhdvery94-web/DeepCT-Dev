@@ -35,6 +35,7 @@ login · 403 bukan haknya · 404 tidak ada · 409 konflik · 410 sudah kedaluwar
 | `POST` | `/messages/public` | Pesan dari halaman login. 5/jam/IP. |
 | `GET` | `/news` | Berita riset yang sudah terbit, urut slide. |
 | `GET` | `/news/{id}/image` | Fotonya. **404 untuk draf**, kecuali pemanggilnya admin. |
+| `GET` | `/news/{id}/video` | Videonya. Aturan yang sama. Menjawab Range, jadi bisa digeser. |
 
 **`POST /login`** — body `{ "email", "password" }`.
 
@@ -72,6 +73,7 @@ berpaginasi: landing page menampilkan semuanya dalam satu carousel.
 ```json
 { "id": 1, "title": "…", "summary": "…", "body": "…",
   "has_image": true, "image_url": "/news/1/image",
+  "has_video": true, "video_url": "/news/1/video", "video_size_bytes": 12582912,
   "published_at": "2026-08-15T12:32:34+00:00", "sort_order": 1 }
 ```
 
@@ -82,6 +84,19 @@ dari server akan salah di dua di antaranya.
 Urutan slide: `sort_order` menaik, lalu `published_at` menurun.
 
 **`GET /news/{id}/image`** — foto apa adanya beserta mime type aslinya.
+
+**`GET /news/{id}/video`** — video apa adanya, MP4 atau WebM. Dilayani
+`BinaryFileResponse`, yang menjawab `Range` sendiri: sebuah permintaan
+`Range: bytes=0-99` dijawab `206` dengan `Content-Range`, dan itulah yang
+membuat pemutar bisa menggeser tanpa mengunduh seluruh berkas.
+
+Mengunggahnya **bukan** lewat endpoint ini melainkan lewat
+`POST /predictions/uploads` dengan `purpose: news_video` dan
+`news_post_id`. Rutenya terbuka untuk setiap pengguna terautentikasi —
+mengunggah prediksi memang pekerjaan periset — tetapi tujuan `news_video`
+khusus admin, dan ditolak 403 untuk yang lain baik saat `start` maupun
+saat `finalize`. Batasnya 50 MB, diperiksa sebelum satu byte pun dikirim,
+dan tipe berkasnya dibaca dari byte hasil rakitan, bukan dari namanya.
 Draf **404** kecuali request-nya membawa token admin, jadi hasil riset yang
 belum diumumkan tidak bisa ditemukan dengan menebak id.
 

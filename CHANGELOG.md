@@ -33,6 +33,118 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.22.0] - 2026-08-22
+
+### Bagian B2: video di berita riset, emoji, dan pesan yang terlihat sedang dikirim
+
+Bagian ketiga dari sepuluh permintaan perubahan. Rancangan dan rencananya ada di
+`docs/superpowers/specs/2026-08-22-b2-video-and-messages-design.md` dan
+`docs/superpowers/plans/2026-08-22-b2-video-and-messages.md`.
+
+#### Video tidak bisa tiba dalam satu permintaan, dan itu diukur
+
+`post_max_size` PHP adalah **8M**. Satu POST multipart 25 MB ditolak
+**HTTP 413** oleh `ValidatePostSize` Laravel — bukan oleh RoadRunner, dan bukan
+oleh `upload_max_filesize` yang catatan CLAUDE.md sebut tidak berlaku di bawah
+Octane. Diuji langsung terhadap server yang berjalan sebelum satu baris kode
+ditulis.
+
+Jadi video 50 MB menempuh mesin unggah berpotongan yang sudah ada, sebagai
+tujuan ketiga di samping `prediction` dan `training`. Komentar controller itu
+sendiri yang memutuskan bentuknya: *"a second copy of it for training datasets
+would drift from this one the first time either was touched"* — dan itu berlaku
+sama untuk salinan ketiga.
+
+Pemeriksaan peran ada di dalam cabangnya, bukan di rutenya. Mengunggah prediksi
+memang pekerjaan periset dan rutenya terbuka untuk mereka; melampirkan video ke
+berita bukan. Diperiksa saat `start` dan lagi saat `finalize`, karena keduanya
+permintaan terpisah dan peran bisa berubah di antaranya.
+
+#### Satu klaim yang salah, dan koreksinya
+
+Dalam sesi ini sempat dinyatakan bahwa video tidak akan bisa digeser karena
+`response()->file()` tidak mengirim `Accept-Ranges`. Itu keliru. Ia
+mengembalikan `BinaryFileResponse` Symfony, yang menangani Range sendiri —
+dibuktikan terhadap endpoint gambar: `Range: bytes=0-99` dijawab `206` dengan
+`Content-Range: bytes 0-99/594`. Proyek ini bahkan sudah mengandalkannya untuk
+unduhan ZIP yang bisa dilanjutkan. **Tidak ada satu baris pun kode Range yang
+ditulis**; menggeser video bekerja karena kode yang sudah ada di sini.
+
+#### Pemutar, dan tempat yang tidak bisa memutarnya
+
+`video_player` tidak punya implementasi Windows maupun Linux. Di sana
+pemutarnya diganti tautan yang menyerahkan URL ke sistem lewat `url_launcher`,
+dideteksi dengan `defaultTargetPlatform` di awal alih-alih ditangkap sebagai
+pengecualian — sebuah pengecualian yang tertangkap setelah layar dibangun sudah
+terlambat untuk mengubah apa yang digambar.
+
+Pemutarnya ada di dialog detail, bukan di dalam slide: slide punya tinggi tetap
+dan ringkasan ber-`maxLines`, dan pemutar di sana akan bertengkar dengan
+keduanya. Tombolnya kini juga muncul untuk post bervideo tanpa body — jika
+tidak, klip pada berita satu baris tidak akan bisa dijangkau sama sekali.
+
+#### Emoji, dan sebuah test yang lulus sejak awal
+
+Tombol pemilih emoji di `MessageComposer`, yang sudah dipakai bersama oleh layar
+periset dan kotak masuk admin. Emoji disisipkan di posisi kursor, bukan
+ditempel di akhir.
+
+Test round-trip emoji ditulis lebih dulu dan **lulus tanpa perbaikan apa pun**:
+koleksi `utf8mb4` memang sudah benar. Ia tetap tinggal sebagai penjaga —
+koleksi tabel bisa menyimpang dari koleksi koneksi, dan emoji yang diam-diam
+jadi `?` adalah hal yang tidak ada yang menyadarinya sampai seorang periset
+mengirimkannya.
+
+#### Status pending, tanpa menyentuh basis data
+
+Gelembung muncul seketika dengan ikon jam, diganti salinan server saat berhasil,
+dan jadi merah saat gagal. "Terkirim" dan "terbaca" sudah bekerja sejak dulu
+lewat `messages.read_at`. Tidak ada kolom baru.
+
+Pesan optimistik dicocokkan dengan `identical`, bukan lewat `id`: ia ber-`id` 0,
+dan dua bisa terbang bersamaan bila seseorang mengetik cepat.
+
+#### Tiga hal yang rencana salah dan test menangkapnya
+
+Potongan dikirim sebagai multipart POST dengan `_method: PATCH` dan byte sebagai
+berkas, bukan PATCH dengan body mentah. Memberi array server eksplisit ke
+`call()` menimpa header `Authorization` yang dipasang `apiAs()`, sehingga
+permintaan tiba tanpa autentikasi. Dan `model_id` beraturan
+`required_unless:purpose,training`, sehingga `news_video` — yang bukan
+`training` — tetap dimintai model.
+
+Satu lagi yang ditemukan dan bukan salah rencana: **rute baru tidak muncul sama
+sekali** di `route:list` maupun di test sampai `php artisan route:clear`
+dijalankan. `bootstrap/cache/routes-v7.php` basi, dan tabel rute yang di-cache
+menyembunyikan rute baru sepenuhnya. Bentuknya sama dengan jebakan Octane yang
+sudah dicatat CLAUDE.md.
+
+#### Terverifikasi
+
+Backend **270 test** (dari 256 sebelum B2), Flutter **153 test** (dari 147),
+`flutter analyze` bersih, `flutter build apk --release` berhasil pada 60,5 MB —
+naik dari 54,1 MB karena `video_player` dan `emoji_picker_flutter`, dan
+keduanya lolos kompilasi Java yang CLAUDE.md catat sebagai tempat paket salah
+versi biasanya patah.
+
+**Belum terverifikasi:** memutar video sungguhan di aplikasi berjalan dan
+menggesernya ke tengah. `curl` sudah membuktikan server menjawab `206`; itu
+tidak membuktikan pemutarnya memintanya. Begitu juga panel emoji dan gelembung
+pending di perangkat sentuh, dan migrasi belum dijalankan di VPS.
+
+#### Dua hutang yang diambil dengan sadar
+
+Loop unggah berpotongan kini ada di **tiga** layanan Flutter. ROADMAP §10 sudah
+mencatat dua yang pertama layak disatukan; menyatukannya sambil menambah
+pemakai ketiga akan mencampur dua perubahan dalam satu rangkaian commit, jadi
+hutangnya dicatat alih-alih dibayar.
+
+Dan unggah video mewarisi keterbatasan yang sama dengan dataset training:
+sesi yang terputus harus diulang dari nol, dan seluruh berkas dimuat ke RAM
+sebelum sepotong pun dikirim (ROADMAP §11). 50 MB jauh lebih kecil daripada
+2 GB yang jadi kekhawatiran di sana, jadi B2 tidak memperbaikinya — tapi juga
+tidak berpura-pura masalahnya tidak ada.
+
 ## [1.21.0] - 2026-08-22
 
 ### Bagian B1: `username` diganti nomor telepon, dan satu kolom yang tidak melakukan apa pun dihapus
