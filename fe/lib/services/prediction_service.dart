@@ -81,6 +81,14 @@ class PredictionService {
   }
 
   /// DELETE /predictions/{id}
+  /// POST /predictions/{id}/start — queue an upload that is waiting.
+  ///
+  /// Uploading no longer queues anything on its own: the frames land first so
+  /// they can be looked at, and this is what commits them to a GPU slot.
+  Future<void> start(int id) async {
+    await _api.post('${ApiConfig.predictions}/$id/start');
+  }
+
   Future<void> delete(int id) async {
     await _api.delete('${ApiConfig.predictions}/$id');
   }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/model_status_message.dart';
 import '../../models/prediction.dart';
+import '../../models/prediction_frame.dart';
 import '../../services/api_client.dart';
 import '../../services/me_service.dart';
 import '../../services/prediction_service.dart';
@@ -12,7 +13,9 @@ import '../../services/upload_resume_store.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/file_extension.dart';
 import '../../utils/frame_bundle.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
+import '../../widgets/frame_stack_viewer.dart';
 import '../../widgets/model_status_strip.dart';
 
 /// Start a new interpolation job: pick a model, pick a ZIP, upload.
@@ -44,6 +47,15 @@ class _UploadScreenState extends State<UploadScreen> {
   String? _fileName;
 
   bool _uploading = false;
+
+  /// Set once bytes have landed and nothing is queued yet.
+  ///
+  /// This is the whole point of splitting upload from analysis: the frames
+  /// exist and can be looked at, and the GPU slot is not spent until someone
+  /// says so.
+  Prediction? _uploaded;
+  List<PredictionFrame> _uploadedFrames = const [];
+  bool _starting = false;
   double _progress = 0;
   String? _uploadError;
 
@@ -204,6 +216,104 @@ class _UploadScreenState extends State<UploadScreen> {
     });
   }
 
+  Future<void> _loadUploadedFrames(int id) async {
+    try {
+      final frames = await _service.frames(id);
+      if (mounted) setState(() => _uploadedFrames = frames);
+    } on ApiException {
+      // A preview that will not load is not a reason to block the analysis.
+      // The frames are on the server either way, and the button below still
+      // works.
+      if (mounted) setState(() => _uploadedFrames = const []);
+    }
+  }
+
+  void _openUploadedPreview() {
+    final id = _uploaded?.id;
+    if (id == null || _uploadedFrames.isEmpty) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FrameStackViewer(
+          frames: _uploadedFrames,
+          initialIndex: 0,
+          loader: (name) => _service.framePreview(id: id, name: name),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startAnalysis() async {
+    final prediction = _uploaded;
+    if (prediction == null || _starting) return;
+
+    setState(() => _starting = true);
+
+    try {
+      await _service.start(prediction.id);
+      if (!mounted) return;
+
+      setState(() {
+        _starting = false;
+        _uploaded = null;
+        _uploadedFrames = const [];
+      });
+
+      widget.onQueued?.call(prediction);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _starting = false;
+        _uploadError = e.message;
+      });
+    }
+  }
+
+  /// Throw the upload away without running it.
+  ///
+  /// Without this the only way out of a wrong file is to leave it hanging
+  /// until it expires, and picking the wrong folder must not mean being made
+  /// to analyse it.
+  Future<void> _discardUpload() async {
+    final prediction = _uploaded;
+    if (prediction == null) return;
+
+    final confirmed = await showAppAlertDialog<bool>(
+      context: context,
+      title: 'Discard upload',
+      content: const Text(
+        'The frames you just uploaded will be deleted and nothing will be '
+        'analysed.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('KEEP'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+          child: const Text('DISCARD'),
+        ),
+      ],
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _service.delete(prediction.id);
+    } on ApiException {
+      // Already gone, or the network went. Either way the screen should not
+      // keep offering to analyse something the user has finished with.
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _uploaded = null;
+      _uploadedFrames = const [];
+    });
+  }
+
   Future<void> _submit({bool resuming = false}) async {
     final bytes = _fileBytes;
     final model = _selectedModel;
@@ -243,20 +353,12 @@ class _UploadScreenState extends State<UploadScreen> {
         _fileName = null;
         _progress = 0;
         _pending = null;
+        _uploaded = queued;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Queued: ${queued.inputFilesCount} frames, '
-            'position ${queued.queuePosition ?? 1} in the queue.',
-          ),
-          backgroundColor: AppTheme.success,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-
-      widget.onQueued?.call(queued);
+      // Nothing is queued yet. The frames are fetched so they can be looked
+      // at before a GPU slot is spent on them.
+      await _loadUploadedFrames(queued.id);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -456,10 +558,20 @@ class _UploadScreenState extends State<UploadScreen> {
                 const SizedBox(height: 16),
               ],
 
+              // Once bytes have landed the screen stops being an upload form
+              // and becomes a confirmation: look at what arrived, then commit
+              // it to a GPU slot.
+              if (_uploaded != null) ...[
+                _buildUploadedPanel(context),
+                const SizedBox(height: 16),
+              ],
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _canSubmit ? () => _submit(resuming: _isResume) : null,
+                  onPressed: (_canSubmit && _uploaded == null)
+                      ? () => _submit(resuming: _isResume)
+                      : null,
                   icon: Icon(
                     _isResume ? Icons.play_circle_outline : Icons.play_arrow,
                     size: 18,
@@ -467,7 +579,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   label: Text(
                     _uploading
                         ? 'UPLOADING...'
-                        : (_isResume ? 'CONTINUE UPLOAD' : 'START ANALYSIS'),
+                        : (_isResume ? 'CONTINUE UPLOAD' : 'UPLOAD FRAMES'),
                   ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 18),
@@ -596,6 +708,82 @@ class _UploadScreenState extends State<UploadScreen> {
       return '${(bytes / 1048576).toStringAsFixed(1)} MB';
     }
     return '${(bytes / 1073741824).toStringAsFixed(2)} GB';
+  }
+
+  /// Shown between the upload landing and the analysis starting.
+  Widget _buildUploadedPanel(BuildContext context) {
+    final prediction = _uploaded!;
+    final count = _uploadedFrames.length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.successLight,
+        border: Border.all(color: AppTheme.success),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.check_circle_outline,
+                color: AppTheme.success,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '${prediction.inputFilesCount} frame(s) uploaded',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Nothing is running yet. Look through the frames, then start the '
+            'analysis when they are the ones you meant to send.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          if (count > 0)
+            OutlinedButton.icon(
+              onPressed: _openUploadedPreview,
+              icon: const Icon(Icons.image_outlined, size: 18),
+              label: Text('PREVIEW $count FRAME(S)'),
+            ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _starting ? null : _startAnalysis,
+                  icon: _starting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.play_arrow, size: 18),
+                  label: Text(_starting ? 'STARTING...' : 'START ANALYSIS'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: _starting ? null : _discardUpload,
+                style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+                child: const Text('DISCARD'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

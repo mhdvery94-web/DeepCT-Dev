@@ -104,6 +104,10 @@ class Prediction {
     );
   }
 
+  /// Files are on the server and nothing is queued yet — the state a
+  /// prediction sits in while the researcher looks at what they just sent.
+  bool get isUploaded => status == 'uploaded';
+
   bool get isPending => status == 'pending';
   bool get isProcessing => status == 'processing';
   bool get isCompleted => status == 'completed';

@@ -384,6 +384,9 @@ class _PredictionCard extends StatelessWidget {
             runSpacing: 4,
             children: [
               _fact(context, '${prediction.inputFilesCount} frames in'),
+              // "Ready to analyse" rather than "Uploaded": what is useful is
+              // what the researcher can do next, not what just happened.
+              if (prediction.isUploaded) _fact(context, 'Ready to analyse'),
               if (prediction.isCompleted)
                 _fact(context, '${prediction.outputFilesCount} generated'),
               if (prediction.isPending && prediction.queuePosition != null)
