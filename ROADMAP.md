@@ -386,9 +386,29 @@ C sebelum D karena D memakai widget yang lahir di C.
       MAE/MSE. Dibangun di atas jalur yang belum pernah dijalani (no. 10 di
       atas), jadi akan ditandai belum terverifikasi sampai ada run nyata.
 
----
+### 13. Perbaikan tambahan
 
-## Sudah selesai
+Diajukan 22 Agustus 2026, di luar sepuluh permintaan di no. 12.
+
+- [ ] **Navigasi swipe di ponsel, dan konfirmasi sebelum keluar.** Dua hal yang
+      berhubungan, keduanya soal gestur di perangkat sentuh.
+
+      **Yang pertama:** menggeser jari ke kiri atau kanan tidak melakukan apa
+      pun hari ini. Ia seharusnya berpindah antar tab, dan dari tab mana pun
+      satu geseran membawa kembali ke Dashboard.
+
+      **Yang kedua, dan ini bug:** di Dashboard, gestur kembali langsung
+      melempar pengguna ke landing page **tanpa bertanya apa pun** — yang
+      berarti keluar dari konsol karena salah geser, tanpa peringatan. Sudah
+      diperiksa: tidak ada `PopScope`, `WillPopScope`, maupun penangan gestur
+      sama sekali di `user_shell.dart` atau `admin_shell.dart`, jadi gestur
+      kembali Android tidak dicegat oleh apa pun. Di Dashboard ia harus
+      memunculkan konfirmasi keluar yang sama dengan tombol Sign out, yang
+      sudah ada sebagai `_confirmLogout()` di kedua shell.
+
+      Keduanya menyentuh `user_shell.dart` dan `admin_shell.dart`, dan
+      keduanya hanya bisa dibuktikan di perangkat sentuh sungguhan — test
+      widget tidak menjangkau gestur tepi layar.
 
 - [x] Pipeline prediksi FASE 3 (upload, interpolasi rekursif, unduh, retensi)
 - [x] **Pipeline prediksi diuji ujung-ke-ujung di VPS terhadap GPU sungguhan**
