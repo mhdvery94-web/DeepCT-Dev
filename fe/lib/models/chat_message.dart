@@ -1,3 +1,10 @@
+/// Where a message is between being typed and being read.
+///
+/// Client-side only: there is no column for this. `sent` and `read` are the
+/// server's business — `messages.read_at` already carries the second — and
+/// `pending` exists only while a POST is in flight.
+enum MessageDelivery { pending, sent, failed }
+
 /// One message in a support conversation.
 class ChatMessage {
   final int id;
@@ -15,6 +22,10 @@ class ChatMessage {
 
   final DateTime? createdAt;
 
+  /// Defaults to [MessageDelivery.sent]: anything the server handed us has,
+  /// by definition, arrived.
+  final MessageDelivery delivery;
+
   const ChatMessage({
     required this.id,
     required this.body,
@@ -23,6 +34,7 @@ class ChatMessage {
     this.authorAvatarPath,
     this.readAt,
     this.createdAt,
+    this.delivery = MessageDelivery.sent,
   });
 
   static int _int(dynamic v) => v is int
@@ -43,6 +55,32 @@ class ChatMessage {
       createdAt: _date(json['created_at']),
     );
   }
+
+  /// A bubble to show immediately, before the server has answered.
+  ///
+  /// `id` is 0 because nothing on the server corresponds to it yet; it is
+  /// replaced wholesale by the real message when the POST returns.
+  factory ChatMessage.pending({
+    required String body,
+    required bool fromAdmin,
+  }) => ChatMessage(
+    id: 0,
+    body: body,
+    fromAdmin: fromAdmin,
+    createdAt: DateTime.now(),
+    delivery: MessageDelivery.pending,
+  );
+
+  ChatMessage copyWith({MessageDelivery? delivery}) => ChatMessage(
+    id: id,
+    body: body,
+    fromAdmin: fromAdmin,
+    author: author,
+    authorAvatarPath: authorAvatarPath,
+    readAt: readAt,
+    createdAt: createdAt,
+    delivery: delivery ?? this.delivery,
+  );
 
   bool get isRead => readAt != null;
 

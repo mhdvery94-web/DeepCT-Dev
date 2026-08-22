@@ -206,11 +206,21 @@ class _Bubble extends StatelessWidget {
                         if (mine) ...[
                           const SizedBox(width: 4),
                           Icon(
-                            message.isRead ? Icons.done_all : Icons.done,
+                            switch (message.delivery) {
+                              MessageDelivery.pending => Icons.schedule,
+                              MessageDelivery.failed => Icons.error_outline,
+                              MessageDelivery.sent => message.isRead
+                                  ? Icons.done_all
+                                  : Icons.done,
+                            },
                             size: 13,
-                            color: message.isRead
-                                ? AppTheme.accent
-                                : AppTheme.textMuted,
+                            color: switch (message.delivery) {
+                              MessageDelivery.pending => AppTheme.textMuted,
+                              MessageDelivery.failed => AppTheme.error,
+                              MessageDelivery.sent => message.isRead
+                                  ? AppTheme.accent
+                                  : AppTheme.textMuted,
+                            },
                           ),
                         ],
                       ],

@@ -94,32 +94,67 @@ class _AdminConversationScreenState extends State<AdminConversationScreen> {
     });
   }
 
+  /// Rebuild the thread around a new message list.
+  ///
+  /// `Conversation` is immutable and holds its own messages, so every change
+  /// to the list means rebuilding it. Collected here rather than written out
+  /// three times in `_send`.
+  void _withMessages(List<ChatMessage> messages) {
+    final current = _conversation;
+    if (current == null) return;
+
+    setState(() {
+      _conversation = Conversation(
+        id: current.id,
+        name: current.name,
+        isGuest: current.isGuest,
+        guestEmail: current.guestEmail,
+        isArchived: current.isArchived,
+        unread: 0,
+        lastMessageAt: DateTime.now(),
+        userAvatarPath: current.userAvatarPath,
+        userEmail: current.userEmail,
+        messages: messages,
+      );
+      _dirty = true;
+    });
+  }
+
   Future<void> _send(String body) async {
+    final current = _conversation;
+    if (current == null) return;
+
+    // The bubble appears before the round trip, so the thread reacts to
+    // typing rather than to the network.
+    final optimistic = ChatMessage.pending(body: body, fromAdmin: true);
+    _withMessages([...current.messages, optimistic]);
+    _scrollToEnd();
+
     try {
       final message = await _service.reply(widget.conversationId, body);
       if (!mounted) return;
 
-      final current = _conversation;
-      if (current == null) return;
-
-      setState(() {
-        _conversation = Conversation(
-          id: current.id,
-          name: current.name,
-          isGuest: current.isGuest,
-          guestEmail: current.guestEmail,
-          isArchived: current.isArchived,
-          unread: 0,
-          lastMessageAt: DateTime.now(),
-          userAvatarPath: current.userAvatarPath,
-          userEmail: current.userEmail,
-          messages: [...current.messages, message],
-        );
-        _dirty = true;
-      });
+      // Replaced wholesale: the server's copy carries the id, the timestamp
+      // and the author this one only guessed at. `identical` and not an id
+      // comparison — a pending message has id 0, and two can be in flight at
+      // once if someone types fast.
+      _withMessages([
+        for (final m in _conversation?.messages ?? const <ChatMessage>[])
+          if (identical(m, optimistic)) message else m,
+      ]);
 
       _scrollToEnd();
     } on ApiException catch (e) {
+      if (mounted) {
+        _withMessages([
+          for (final m in _conversation?.messages ?? const <ChatMessage>[])
+            if (identical(m, optimistic))
+              m.copyWith(delivery: MessageDelivery.failed)
+            else
+              m,
+        ]);
+      }
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(

@@ -102,14 +102,41 @@ class _MessageThreadScreenState extends State<MessageThreadScreen> {
   }
 
   Future<void> _send(String body) async {
+    // The bubble appears before the round trip, so the thread reacts to
+    // typing rather than to the network.
+    final optimistic = ChatMessage.pending(body: body, fromAdmin: false);
+
+    setState(() => _messages = [..._messages, optimistic]);
+    _scrollToEnd();
+
     try {
       final message = await _service.send(body);
       if (!mounted) return;
 
-      setState(() => _messages = [..._messages, message]);
+      // Replaced wholesale rather than patched: the server's copy carries the
+      // id, the timestamp and the author this one only guessed at.
+      //
+      // `identical` and not an id comparison — a pending message has id 0,
+      // and two of them can be in flight at once if someone types fast.
+      setState(() {
+        _messages = [
+          for (final m in _messages)
+            if (identical(m, optimistic)) message else m,
+        ];
+      });
       _scrollToEnd();
     } on ApiException catch (e) {
       if (!mounted) return;
+
+      setState(() {
+        _messages = [
+          for (final m in _messages)
+            if (identical(m, optimistic))
+              m.copyWith(delivery: MessageDelivery.failed)
+            else
+              m,
+        ];
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message), backgroundColor: AppTheme.error),
