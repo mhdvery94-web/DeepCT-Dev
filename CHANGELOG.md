@@ -33,6 +33,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.20.0] - 2026-08-22
+
+### Bagian A dari sepuluh permintaan perubahan: bersih-bersih UI
+
+Sepuluh perubahan diajukan sekaligus dan dipecah jadi empat, karena satu
+rencana yang memuat semuanya tidak akan bisa direview. Ini yang pertama —
+dipilih lebih dulu justru karena ia satu-satunya yang bisa diverifikasi
+sepenuhnya dari mesin pengembangan. Rancangan dan rencananya ada di
+`docs/superpowers/specs/2026-08-22-ui-cleanup-design.md` dan
+`docs/superpowers/plans/2026-08-22-ui-cleanup.md`; sisanya di ROADMAP.md §12.
+
+#### Model yang lambat berhenti dilaporkan mati
+
+Keluhan aslinya berbunyi "bar-nya merah padahal model online, jadi rancu".
+Ternyata itu bukan soal pilihan warna melainkan bug.
+
+`ModelHealthChecker` memasang **tiga** status, bukan dua. Yang ketiga,
+`trouble`, dipasang ketika worker **menjawab tetapi lebih lambat** dari
+`SLOW_THRESHOLD_MS` (5000 ms). `MeController::models()` menghitung
+`is_available` sebagai `status === 'online'` persis, sehingga worker yang
+jelas-jelas hidup dilaporkan tidak tersedia — dicat merah dengan judul
+"Model offline", dan **tidak bisa dipilih sama sekali** di layar unggah,
+karena `onTap` di sana bergantung pada `isAvailable`.
+
+Untuk GPU Kaggle di balik terowongan ngrok, lambat adalah keadaan normal,
+bukan pengecualian. Jadi selama ini kondisi paling biasa di platform ini
+mengeluarkan model yang berfungsi dari daftar pilihan.
+
+Sekarang `trouble` dihitung tersedia: kuning, bisa dipilih, dengan kalimat
+yang mengatakan pekerjaannya akan lebih lama.
+
+Urutannya harus ikut diperbaiki. `orderByDesc('status')` menempatkan
+`online` di atas `offline` hanya karena kebetulan urutan abjad — dan begitu
+`trouble` ikut dianggap tersedia, abjad terbalik justru melemparkannya ke
+posisi teratas, sehingga pemilihan otomatis akan selalu jatuh ke worker
+paling lambat. Sekarang `CASE` yang eksplisit; `CASE` dan bukan `FIELD()`
+supaya tetap berjalan di SQLite.
+
+#### Jargon diganti kalimat yang bisa ditindaklanjuti
+
+`"Tunnel is not running (ERR_NGROK_3200)"` dulu ditampilkan apa adanya
+kepada periset. Niatnya benar dan tertulis di test lama: seseorang perlu
+diberi tahu **apa yang harus dilakukan**, bukan sekadar bahwa sesuatu mati.
+Yang salah adalah sasarannya — periset tidak punya akses ke terowongan itu.
+Admin yang punya.
+
+Kolom baru `models.health_check_reason` menyimpan kode di samping pesan
+mentah yang tidak berubah: `no_endpoint`, `tunnel_down`, `unreachable`,
+`slow`. `no_endpoint` sengaja dipisah dari `unreachable` — model tanpa
+alamat adalah pendaftaran yang belum selesai, bukan server yang mati, dan
+menyuruh orang menyalakan ulang sesuatu yang belum pernah dikonfigurasi
+mengirim mereka mencari mesin yang tidak ada.
+
+Klien memetakannya lewat satu fungsi, `modelStatusMessage()`, sehingga strip
+status dan layar unggah tidak bisa berbeda kata. Layar admin menampilkan
+keduanya: kalimatnya, dengan kode mentah lebih kecil di bawahnya, karena
+admin-lah yang menyalakan ulang sesi Kaggle dan `ERR_NGROK_3200` melawan
+`HTTP 502` adalah bedanya terowongan mati dengan proses yang hidup tapi
+gagal.
+
+#### Sebuah kebocoran yang ditemukan di sepanjang jalan
+
+`cleanMessage()` mengaku membuang URL dari pesan Guzzle; sebenarnya ia hanya
+memotong panjangnya. Jadi `cURL error 7: Failed to connect to
+abc123.ngrok-free.dev port 443` dikirim utuh ke `/api/me/models` — endpoint
+yang **sengaja** menyembunyikan `endpoint_url` supaya tidak ada yang bisa
+memanggil worker GPU langsung tanpa melewati platform.
+
+`health_check_error` kini tidak dikirim ke periset sama sekali. Kode
+alasannya tidak membawa alamat apa pun.
+
+#### Teks bisa disalin, dan daftar aktivitas berhenti memanjangkan halaman
+
+`SelectionArea` di empat tempat, bukan tiga: badan kedua shell, landing
+page, dan `app_dialog.dart` — yang terakhir mudah terlewat karena
+`showDialog` membuat route sendiri di overlay, sehingga tidak berada di
+bawah shell mana pun. Dialog justru tempat nilai-nilai yang layak disalin
+berada, seperti kata sandi hasil reset admin.
+
+Daftar aktivitas terbaru di kedua dasbor dulu memakai `shrinkWrap` bersama
+`NeverScrollableScrollPhysics`, jadi ia membentang setinggi seluruh isinya
+dan ikut menggulung bersama halaman. `shrinkWrap` **dipertahankan** dan
+hanya `physics` yang dibuang, di bawah batas 320px: tanpa `shrinkWrap`,
+`ListView` yang diberi batas tinggi akan mengisi penuh 320px sekalipun
+isinya dua baris.
+
+#### Terverifikasi
+
+Backend 250 test (dari 242), Flutter 144 test (dari 129), `flutter analyze`
+bersih, `flutter build apk --release` berhasil (54,1 MB). Selain itu satu
+probe sungguhan terhadap endpoint ngrok yang memang mati menulis
+`health_check_reason: "tunnel_down"`, dan respons `/api/me/models`
+terbukti tidak membawa nama host — diuji terhadap endpoint asli, bukan
+`Http::fake`.
+
+**Belum terverifikasi:** seleksi teks di ponsel fisik, dan tampilan kedua
+perubahan tata letak di aplikasi berjalan. Tidak ada perangkat Android
+tersambung saat ini. `REASON_SLOW` juga tidak punya test otomatis — ia
+dipicu waktu berjalan yang melewati 5000 ms sementara `Http::fake` menjawab
+seketika; perilaku yang benar-benar penting, worker lambat tetap ditawarkan,
+diuji di tempat keputusannya diambil.
+
+---
+
 ## [1.19.19] - 2026-08-18
 
 ### Pipeline prediksi dijalankan ujung-ke-ujung di VPS, terhadap GPU sungguhan

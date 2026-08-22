@@ -6,7 +6,7 @@ berjalan — centang diisi hanya setelah **diverifikasi**, bukan setelah ditulis
 Ini bukan dokumen status. Jangan buat `*_PLAN.md` atau `*_SUMMARY.md` baru;
 perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
-**Terakhir diperbarui:** 18 Agustus 2026
+**Terakhir diperbarui:** 22 Agustus 2026
 
 ---
 
@@ -290,6 +290,63 @@ sebelum ini.
       `upload_screen.dart` berbentuk sama, tapi ZIP prediksi jauh lebih kecil.
       Di native ada jalan keluar (`file.path` + `RandomAccessFile`, dibaca per
       potong); di web tidak semudah itu.
+
+### 12. Sepuluh permintaan perubahan, 22 Agustus 2026
+
+Diajukan sekaligus, dipecah jadi empat karena tidak muat dalam satu rencana yang
+bisa direview. Urutannya B → C → D setelah A; B lebih dulu karena migrasinya
+menyentuh banyak test dan lebih baik mendarat saat pohon test masih stabil,
+C sebelum D karena D memakai widget yang lahir di C.
+
+- [x] **A — Bersih-bersih UI** — kode selesai, **tiga pemeriksaan mata belum**.
+      Teks bisa disalin (`SelectionArea` di empat tempat, termasuk
+      `app_dialog.dart` yang berada di luar pohon shell), recent activity punya
+      area scroll sendiri berbatas 320px, model berstatus `trouble` diperlakukan
+      sebagai tersedia alih-alih tampak mati, dan jargon `ERR_NGROK_3200`
+      diganti kalimat yang bisa ditindaklanjuti bagi periset — dengan
+      diagnostiknya tetap utuh untuk admin. Rancangan lengkapnya:
+      [docs/superpowers/specs/2026-08-22-ui-cleanup-design.md](docs/superpowers/specs/2026-08-22-ui-cleanup-design.md).
+
+      Terverifikasi 22 Agustus 2026: backend 250 test (dari 242), Flutter 144
+      test (dari 129), `flutter analyze` bersih, APK release terbangun. Satu
+      probe nyata terhadap endpoint ngrok yang mati menulis
+      `health_check_reason: "tunnel_down"` dan responsnya tidak membawa nama
+      host — diuji terhadap endpoint asli, bukan `Http::fake`.
+
+      **Yang belum dilakukan, dan kenapa:**
+
+      - **Seleksi teks di ponsel fisik.** Tidak ada perangkat Android
+        tersambung. Perilaku tekan-lama tidak terlihat dari test widget, dan
+        justru dari perangkat keluhan ini berasal. APK-nya sudah ada di
+        `fe/build/app/outputs/flutter-apk/app-release.apk`.
+      - **Tampilan dua perubahan tata letak di aplikasi berjalan** — kotak
+        aktivitas di kedua dasbor, dan kotak error dua baris di Model
+        Management.
+      - **`REASON_SLOW` tidak punya test otomatis.** Ia dipicu waktu berjalan
+        yang melewati `SLOW_THRESHOLD_MS`, sementara `Http::fake()` menjawab
+        seketika; mengujinya menuntut penyuntik waktu di `ModelHealthChecker`
+        demi satu asersi. Perilaku yang benar-benar penting — worker lambat
+        tetap ditawarkan — diuji di `ModelAvailabilityTest`.
+      - **Migrasi belum dijalankan di VPS.** `health_check_reason` baru ada di
+        basis data pengembangan.
+
+      Satu hal yang ditemukan tapi sengaja tidak diubah: lencana status di
+      layar unggah menampilkan `model.status.toUpperCase()`, sehingga worker
+      lambat berlabel **"TROUBLE"** tepat di sebelah kalimat "answering
+      slowly". Itu jargon yang bentuknya sama dengan yang baru saja dibuang,
+      tapi ia di luar cakupan yang disetujui — layak jadi satu baris di
+      bagian B.
+- [ ] **B — Perubahan skema.** `username` diganti nomor telepon (opsional,
+      tidak unik), unggah video di News, `max_concurrent_jobs` dihapus, status
+      *pending* pada pesan.
+- [ ] **C — Penelusur tumpukan frame ala ImageJ.** Satu widget dipakai di layar
+      unggah dan di hasil/riwayat, menggabungkan frame input dan hasil prediksi
+      dengan penanda. Termasuk unggah beberapa `.tif` sekaligus yang dibungkus
+      ZIP di sisi klien.
+- [ ] **D — Training periset.** Tab Training sisi admin dihapus; tab sisi
+      periset dikembangkan dengan unggah, viewer dari C, dan metrik PSNR/SSIM/
+      MAE/MSE. Dibangun di atas jalur yang belum pernah dijalani (no. 10 di
+      atas), jadi akan ditandai belum terverifikasi sampai ada run nyata.
 
 ---
 
