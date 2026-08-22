@@ -66,11 +66,18 @@ class MeController extends Controller
     {
         $models = Model::inference()
             ->where('is_active', true)
-            ->orderByDesc('status') // online sorts before offline
+            // Explicit, because the picker selects the first available model
+            // and the order therefore decides where work goes. This used to be
+            // `orderByDesc('status')`, which put `online` above `offline` by
+            // an accident of the alphabet — and would put `trouble` above both
+            // now that a slow worker counts as available.
+            ->orderByRaw(
+                "CASE status WHEN 'online' THEN 0 WHEN 'trouble' THEN 1 ELSE 2 END"
+            )
             ->orderBy('name')
             ->get([
                 'id', 'name', 'version', 'status', 'description', 'accuracy',
-                'last_health_check', 'health_check_error',
+                'last_health_check', 'health_check_reason',
             ]);
 
         return response()->json([
@@ -82,17 +89,23 @@ class MeController extends Controller
                 'status' => $m->status,
                 'description' => $m->description,
                 'accuracy' => $m->accuracy,
-                'is_available' => $m->status === 'online',
+                // `trouble` means the worker answered, only slowly. It is a
+                // live endpoint, and refusing it took a working model out of
+                // the picker for the most ordinary condition this platform
+                // has: a Kaggle GPU behind a tunnel.
+                'is_available' => in_array($m->status, ['online', 'trouble'], true),
                 // The client polls this every 10 seconds and shows how fresh
                 // the answer is. Without the timestamp a stale scheduler looks
                 // identical to a healthy model.
                 'last_health_check' => $m->last_health_check?->toIso8601String(),
-                // Why it is down, in the worker's own words — "Tunnel is not
-                // running (ERR_NGROK_3200)" tells a researcher to go restart
-                // Kaggle, where "offline" alone does not.
-                'health_check_error' => $m->status === 'online'
+                // A code, not a sentence, and deliberately not the raw
+                // message: `cleanMessage()` trims a Guzzle failure's length
+                // but leaves the host in it, and this endpoint withholds
+                // `endpoint_url` precisely so nobody can call the GPU worker
+                // directly. The admin screen still shows the raw words.
+                'health_check_reason' => $m->status === 'online'
                     ? null
-                    : $m->health_check_error,
+                    : $m->health_check_reason,
             ]),
         ]);
     }
