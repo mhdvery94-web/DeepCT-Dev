@@ -42,3 +42,14 @@ String modelStatusMessage(String? reason) {
           'Ask an administrator to bring it back.';
   }
 }
+
+/// The word shown on a model's status badge.
+///
+/// `trouble` is the database's word and a poor one for a badge: it sits
+/// beside a sentence explaining the worker is merely answering slowly, and
+/// reads as something far worse. The other two need no translation.
+///
+/// Anything unrecognised is upper-cased and shown as-is. A status this build
+/// has not heard of is worth seeing rather than swallowing.
+String modelStatusLabel(String status) =>
+    status == 'trouble' ? 'SLOW' : status.toUpperCase();

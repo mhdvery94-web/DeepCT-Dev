@@ -709,7 +709,7 @@ class _ModelOption extends StatelessWidget {
                           ? AppTheme.warningLight
                           : AppTheme.errorLight),
                 child: Text(
-                  model.status.toUpperCase(),
+                  modelStatusLabel(model.status),
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,

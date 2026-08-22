@@ -53,4 +53,21 @@ void main() {
       );
     }
   });
+
+  test('a slow worker is labelled SLOW, not TROUBLE', () {
+    // The badge rendered status.toUpperCase(), so a worker answering slowly
+    // read "TROUBLE" right beside a sentence saying "answering slowly" —
+    // the same shape of jargon part A removed from the copy.
+    expect(modelStatusLabel('trouble'), 'SLOW');
+  });
+
+  test('the other two statuses keep the words people already know', () {
+    expect(modelStatusLabel('online'), 'ONLINE');
+    expect(modelStatusLabel('offline'), 'OFFLINE');
+  });
+
+  test('an unknown status is shown as given rather than hidden', () {
+    // A status this build has not heard of is worth seeing, not swallowing.
+    expect(modelStatusLabel('quarantined'), 'QUARANTINED');
+  });
 }
