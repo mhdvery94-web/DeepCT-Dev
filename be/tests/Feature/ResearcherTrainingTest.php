@@ -85,7 +85,6 @@ class ResearcherTrainingTest extends TestCase
             'endpoint_url' => 'https://trainer.example/train',
             'status' => 'online',
             'is_active' => true,
-            'max_concurrent_jobs' => 1,
         ]);
     }
 
@@ -267,7 +266,7 @@ class ResearcherTrainingTest extends TestCase
         Model::create([
             'name' => 'deepCT', 'version' => 'v1',
             'endpoint_url' => 'https://model.example/predict',
-            'status' => 'online', 'is_active' => true, 'max_concurrent_jobs' => 1,
+            'status' => 'online', 'is_active' => true,
         ]);
 
         $response = $this->apiAs($this->token($this->researcher))

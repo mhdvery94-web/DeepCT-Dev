@@ -18,7 +18,6 @@ class Model extends EloquentModel
         'file_path',
         'status',
         'last_health_check',
-        'max_concurrent_jobs',
         'current_jobs_count',
         'accuracy',
         'description',

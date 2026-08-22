@@ -389,11 +389,9 @@ class _ModelCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   _kv(context, 'Endpoint', model.endpointUrl ?? 'Not set'),
-                  _kv(
-                    context,
-                    'Jobs',
-                    '${model.currentJobsCount} / ${model.maxConcurrentJobs}',
-                  ),
+                  // Was "2 / 5". That read as a fraction of a limit, and the
+                  // limit is gone — it never enforced anything.
+                  _kv(context, 'Jobs running', '${model.currentJobsCount}'),
                   _kv(context, 'Predictions', '${model.totalPredictions}'),
                   _kv(
                     context,
@@ -557,7 +555,6 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
   late final TextEditingController _version;
   late final TextEditingController _endpoint;
   late final TextEditingController _description;
-  late final TextEditingController _maxJobs;
 
   bool _isSaving = false;
   String? _error;
@@ -581,7 +578,6 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
     _version = TextEditingController(text: m?.version ?? '');
     _endpoint = TextEditingController(text: m?.endpointUrl ?? '');
     _description = TextEditingController(text: m?.description ?? '');
-    _maxJobs = TextEditingController(text: '${m?.maxConcurrentJobs ?? 1}');
   }
 
   @override
@@ -590,7 +586,6 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
     _version.dispose();
     _endpoint.dispose();
     _description.dispose();
-    _maxJobs.dispose();
     super.dispose();
   }
 
@@ -610,7 +605,6 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
           version: _version.text.trim(),
           endpointUrl: _endpoint.text.trim(),
           description: _description.text.trim(),
-          maxConcurrentJobs: int.tryParse(_maxJobs.text.trim()) ?? 1,
         );
       } else {
         await widget.service.create(
@@ -619,7 +613,6 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
           kind: _kind,
           endpointUrl: _endpoint.text.trim(),
           description: _description.text.trim(),
-          maxConcurrentJobs: int.tryParse(_maxJobs.text.trim()) ?? 1,
         );
       }
 
@@ -731,21 +724,6 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
                     final uri = Uri.tryParse(value);
                     if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
                       return 'Enter a full URL including https://';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _maxJobs,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'MAX CONCURRENT JOBS',
-                  ),
-                  validator: (v) {
-                    final n = int.tryParse(v?.trim() ?? '');
-                    if (n == null || n < 1 || n > 10) {
-                      return 'Enter a number between 1 and 10';
                     }
                     return null;
                   },

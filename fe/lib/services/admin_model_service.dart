@@ -89,7 +89,6 @@ class AdminModelService {
     required String endpointUrl,
     String kind = 'inference',
     String? description,
-    int maxConcurrentJobs = 1,
   }) async {
     final body = await _api.post(
       ApiConfig.adminModels,
@@ -100,7 +99,6 @@ class AdminModelService {
         'endpoint_url': endpointUrl,
         if (description != null && description.isNotEmpty)
           'description': description,
-        'max_concurrent_jobs': maxConcurrentJobs,
       },
     );
 
@@ -120,7 +118,6 @@ class AdminModelService {
     String? version,
     String? endpointUrl,
     String? description,
-    int? maxConcurrentJobs,
   }) async {
     // Build the payload explicitly so we only send fields the caller changed.
     final data = <String, dynamic>{};
@@ -128,9 +125,6 @@ class AdminModelService {
     if (version != null) data['version'] = version;
     if (endpointUrl != null) data['endpoint_url'] = endpointUrl;
     if (description != null) data['description'] = description;
-    if (maxConcurrentJobs != null) {
-      data['max_concurrent_jobs'] = maxConcurrentJobs;
-    }
 
     final body = await _api.put('${ApiConfig.adminModels}/$id', data: data);
 

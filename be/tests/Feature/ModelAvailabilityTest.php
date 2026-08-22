@@ -45,7 +45,6 @@ class ModelAvailabilityTest extends TestCase
             'endpoint_url' => 'https://worker.example/predict',
             'status' => 'online',
             'is_active' => true,
-            'max_concurrent_jobs' => 1,
         ], $overrides));
     }
 

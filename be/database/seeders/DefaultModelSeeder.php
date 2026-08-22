@@ -34,7 +34,6 @@ class DefaultModelSeeder extends Seeder
                 'status' => 'offline',
                 'is_active' => true,
                 'last_health_check' => null,
-                'max_concurrent_jobs' => 1,
                 'current_jobs_count' => 0,
                 'accuracy' => 94.20,
                 'description' => 'Deep learning model for Neutron CT frame interpolation using recursive interpolation method at t=0.5',

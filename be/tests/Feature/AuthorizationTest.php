@@ -157,7 +157,6 @@ class AuthorizationTest extends TestCase
             'endpoint_url' => 'https://secret-worker.example/predict',
             'status' => 'online',
             'is_active' => true,
-            'max_concurrent_jobs' => 1,
         ]);
 
         $token = $this->tokenAs($this->researcher);
@@ -175,7 +174,7 @@ class AuthorizationTest extends TestCase
         Model::create([
             'name' => 'Retired', 'version' => 'v0',
             'endpoint_url' => 'https://x.example/predict',
-            'status' => 'offline', 'is_active' => false, 'max_concurrent_jobs' => 1,
+            'status' => 'offline', 'is_active' => false,
         ]);
 
         $token = $this->tokenAs($this->researcher);
@@ -201,7 +200,7 @@ class AuthorizationTest extends TestCase
         $model = Model::create([
             'name' => 'Test Model', 'version' => 'v1',
             'endpoint_url' => 'https://worker.example/predict',
-            'status' => 'offline', 'is_active' => true, 'max_concurrent_jobs' => 1,
+            'status' => 'offline', 'is_active' => true,
             'last_health_check' => now()->subMinutes(5),
         ]);
 
@@ -226,7 +225,7 @@ class AuthorizationTest extends TestCase
         Model::create([
             'name' => 'Test Model', 'version' => 'v1',
             'endpoint_url' => 'https://worker.example/predict',
-            'status' => 'offline', 'is_active' => true, 'max_concurrent_jobs' => 1,
+            'status' => 'offline', 'is_active' => true,
             'last_health_check' => now()->subMinutes(5),
         ]);
 

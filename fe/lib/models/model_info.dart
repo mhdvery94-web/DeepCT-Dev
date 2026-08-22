@@ -21,7 +21,6 @@ class ModelInfo {
   /// words underneath it.
   final String? healthCheckReason;
 
-  final int maxConcurrentJobs;
   final int currentJobsCount;
   final int totalPredictions;
   final double? accuracy;
@@ -40,7 +39,6 @@ class ModelInfo {
     this.lastHealthCheck,
     this.healthCheckError,
     this.healthCheckReason,
-    required this.maxConcurrentJobs,
     required this.currentJobsCount,
     required this.totalPredictions,
     this.accuracy,
@@ -83,7 +81,6 @@ class ModelInfo {
       lastHealthCheck: _toDate(json['last_health_check']),
       healthCheckError: json['health_check_error']?.toString(),
       healthCheckReason: json['health_check_reason']?.toString(),
-      maxConcurrentJobs: _toInt(json['max_concurrent_jobs'], 1),
       currentJobsCount: _toInt(json['current_jobs_count']),
       totalPredictions: _toInt(json['total_predictions']),
       accuracy: _toDouble(json['accuracy']),
@@ -95,9 +92,6 @@ class ModelInfo {
   bool get isOnline => status == 'online';
   bool get isTrouble => status == 'trouble';
   bool get isOffline => status == 'offline';
-
-  /// True when the model is busy at its configured concurrency limit.
-  bool get isAtCapacity => currentJobsCount >= maxConcurrentJobs;
 
   String get displayName => '$name $version';
 }

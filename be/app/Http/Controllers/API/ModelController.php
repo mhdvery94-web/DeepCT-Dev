@@ -62,7 +62,6 @@ class ModelController extends Controller
             'kind' => 'nullable|in:inference,trainer',
             'endpoint_url' => 'required|url|max:500',
             'description' => 'nullable|string',
-            'max_concurrent_jobs' => 'nullable|integer|min:1|max:10',
             'file_path' => 'nullable|string|max:255',
         ]);
 
@@ -79,7 +78,6 @@ class ModelController extends Controller
             'kind' => $request->input('kind', 'inference'),
             'endpoint_url' => $request->endpoint_url,
             'description' => $request->description,
-            'max_concurrent_jobs' => $request->input('max_concurrent_jobs', 1),
             // Models are deployed remotely (Kaggle/Colab) and reached via
             // endpoint_url, so there is no local weights file to reference.
             'file_path' => $request->input('file_path'),
@@ -139,7 +137,6 @@ class ModelController extends Controller
             'version' => 'sometimes|required|string|max:50',
             'endpoint_url' => 'sometimes|required|url|max:500',
             'description' => 'nullable|string',
-            'max_concurrent_jobs' => 'nullable|integer|min:1|max:10',
         ]);
 
         if ($validator->fails()) {
@@ -149,8 +146,8 @@ class ModelController extends Controller
             ], 422);
         }
 
-        $oldData = $model->only(['name', 'version', 'endpoint_url', 'max_concurrent_jobs']);
-        $model->update($request->only(['name', 'version', 'endpoint_url', 'description', 'max_concurrent_jobs']));
+        $oldData = $model->only(['name', 'version', 'endpoint_url']);
+        $model->update($request->only(['name', 'version', 'endpoint_url', 'description']));
 
         // Log activity
         UserActivity::create([
@@ -163,7 +160,7 @@ class ModelController extends Controller
             'metadata' => [
                 'model_id' => $model->id,
                 'old_data' => $oldData,
-                'new_data' => $model->only(['name', 'version', 'endpoint_url', 'max_concurrent_jobs']),
+                'new_data' => $model->only(['name', 'version', 'endpoint_url']),
             ],
         ]);
 
