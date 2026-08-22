@@ -362,9 +362,10 @@ C sebelum D karena D memakai widget yang lahir di C.
       **Rollback bersifat merusak:** seluruh nilai `username` hilang, dan
       `down()` mengisi ulang dengan `user{id}` semata agar batasan `unique`
       bisa dipasang kembali.
-- [ ] **B2 — Video News dan Messages.** Unggah video lewat mesin unggah
-      berpotongan yang sudah ada (`purpose` baru `news_video`), ditambah tombol
-      pemilih emoji dan status *pending* saat pesan dikirim.
+- [ ] **B2 — Video News dan Messages.** Unggah video (maks 50 MB) lewat mesin
+      unggah berpotongan yang sudah ada (`purpose` baru `news_video`), ditambah
+      tombol pemilih emoji dan status *pending* saat pesan dikirim. Rancangan:
+      [docs/superpowers/specs/2026-08-22-b2-video-and-messages-design.md](docs/superpowers/specs/2026-08-22-b2-video-and-messages-design.md).
 
       Kendalanya sudah diukur, bukan diduga: `post_max_size` PHP adalah **8M**,
       dan satu POST multipart 25 MB ditolak **HTTP 413** oleh
