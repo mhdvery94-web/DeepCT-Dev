@@ -402,10 +402,24 @@ C sebelum D karena D memakai widget yang lahir di C.
       Status *pending* tidak butuh migrasi: ia keadaan selama `send()` masih
       menunggu jawaban. "Terkirim" dan "terbaca" sudah bekerja hari ini
       (`messages.read_at`, `message_bubbles.dart:190`).
-- [ ] **C — Penelusur tumpukan frame ala ImageJ.** Satu widget dipakai di layar
-      unggah dan di hasil/riwayat, menggabungkan frame input dan hasil prediksi
-      dengan penanda. Termasuk unggah beberapa `.tif` sekaligus yang dibungkus
-      ZIP di sisi klien.
+- [ ] **C — Penelusur tumpukan frame, dan unggah dua langkah.** Satu widget
+      dipakai di layar unggah dan di hasil/riwayat, menggabungkan frame input
+      dan hasil prediksi dengan penanda. Termasuk unggah beberapa `.tif`
+      sekaligus yang dibungkus ZIP di sisi klien. Rancangan:
+      [docs/superpowers/specs/2026-08-23-c-frame-viewer-design.md](docs/superpowers/specs/2026-08-23-c-frame-viewer-design.md).
+
+      Lebih kecil dari bunyinya: `frames()` sudah menggabungkan input dan
+      output, galeri sudah menampilkan gabungan itu (`_generatedOnly` default
+      `false`), dan `_FrameViewer` sudah punya pan/zoom serta perpindahan
+      frame. Yang benar-benar baru cuma slider, tick penanda, badge, dan
+      pengangkatannya jadi widget bersama.
+
+      Yang **tidak** kecil: unggah dipecah dari analisis, dengan status baru
+      `uploaded` sebelum `pending`, supaya preview bisa muncul sebelum
+      pekerjaan diantrikan. Itu menyentuh `PredictionIntake` — satu-satunya
+      jalur yang pernah dibuktikan ujung-ke-ujung terhadap GPU sungguhan (no. 2
+      di "Sudah selesai"), jadi C ditutup dengan satu run nyata, bukan dengan
+      suite yang hijau.
 - [ ] **D — Training periset.** Tab Training sisi admin dihapus; tab sisi
       periset dikembangkan dengan unggah, viewer dari C, dan metrik PSNR/SSIM/
       MAE/MSE. Dibangun di atas jalur yang belum pernah dijalani (no. 10 di
