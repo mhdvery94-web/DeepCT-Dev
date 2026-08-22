@@ -114,9 +114,15 @@ sungguhan hanya untuk mengecek denyut.
 18 tabel di `db_aict`. Yang relevan:
 
 ### `users`
-`username`, `name`, `email`, `password`, `role` (enum admin/user), `is_active`,
+`name`, `email`, `phone`, `password`, `role` (enum admin/user), `is_active`,
 `last_login_at`, `avatar_path`, `avatar_mime`. Tidak ada registrasi mandiri —
 admin yang membuat akun, atau menyetujui permintaan di `access_requests`.
+
+`phone` **opsional dan tidak unik**. Ia menggantikan `username`, yang dulu
+`NOT NULL` dan `unique` sehingga setiap pembuatan akun harus mengarang satu —
+padahal login memakai email dan setiap akun sudah punya `name`. Nomor telepon
+menjawab pertanyaan yang benar-benar muncul, dan menyingkir saat belum ada
+jawabannya.
 
 `avatar_path` disembunyikan dari semua payload; klien hanya menerima
 `avatar_url` (null kalau belum ada foto, yang jadi sinyal untuk menggambar
@@ -124,8 +130,15 @@ bingkai inisial).
 
 ### `models` — registry model AI
 `name`, `version`, `endpoint_url`, `status` (enum online/offline/trouble),
-`is_active`, `last_health_check`, `health_check_error`, `max_concurrent_jobs`,
+`is_active`, `last_health_check`, `health_check_error`, `health_check_reason`,
 `current_jobs_count`, `total_predictions`, `accuracy`, `deployed_at`.
+
+`health_check_error` menyimpan kata-kata pemeriksa apa adanya —
+`"Tunnel is not running (ERR_NGROK_3200)"` — dan **hanya terlihat admin**,
+karena dialah yang menyalakan ulang worker. `health_check_reason` adalah
+kegagalan yang sama sebagai kode (`no_endpoint`, `tunnel_down`, `unreachable`,
+`slow`), dan itulah yang diterima periset: klien memetakannya jadi kalimat
+yang bisa ditindaklanjuti, dan kodenya tidak membawa nama host.
 
 `endpoint_url` **hanya boleh terlihat admin**. Mengetahuinya berarti bisa
 melewati platform dan menembak worker GPU langsung, jadi `/api/me/models`

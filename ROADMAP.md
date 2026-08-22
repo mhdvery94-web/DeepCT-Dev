@@ -336,10 +336,32 @@ C sebelum D karena D memakai widget yang lahir di C.
       slowly". Itu jargon yang bentuknya sama dengan yang baru saja dibuang,
       tapi ia di luar cakupan yang disetujui — layak jadi satu baris di
       bagian B.
-- [ ] **B1 — Pembersihan skema.** `username` diganti nomor telepon (opsional,
-      tidak unik) dan `max_concurrent_jobs` dihapus — kolom yang tidak pernah
-      dibandingkan dengan apa pun. Rancangan:
+- [x] **B1 — Pembersihan skema** — kode selesai, **dua hal belum**.
+      `username` diganti nomor telepon (opsional, tidak unik) dan
+      `max_concurrent_jobs` dihapus — kolom yang tidak pernah dibandingkan
+      dengan apa pun. Lencana status ikut dibereskan: worker lambat berlabel
+      `SLOW`, bukan `TROUBLE`. Rancangan:
       [docs/superpowers/specs/2026-08-22-b1-schema-cleanup-design.md](docs/superpowers/specs/2026-08-22-b1-schema-cleanup-design.md).
+
+      Terverifikasi 22 Agustus 2026: backend 256 test (dari 250), Flutter 147
+      test (dari 144), `flutter analyze` bersih, APK release terbangun. Payload
+      `/api/admin/users` diperiksa langsung terhadap server yang berjalan.
+
+      Dikerjakan dengan tiga migrasi berurutan, bukan satu: tambah `phone` dan
+      longgarkan `username`, pindahkan penulis, pindahkan pembaca, pindahkan
+      klien, baru jatuhkan kolomnya. Setiap langkah berakhir hijau.
+
+      **Yang belum dilakukan:**
+
+      - **Tampilan kolom telepon di aplikasi berjalan.** Formulir dan kolom
+        tabel belum dilihat mata; tidak ada perangkat Android tersambung, dan
+        pemeriksaan tertunda dari bagian A juga masih berlaku.
+      - **Migrasi belum dijalankan di VPS.** Ketiganya baru ada di basis data
+        pengembangan. Ingat `php artisan config:cache` sesudahnya.
+
+      **Rollback bersifat merusak:** seluruh nilai `username` hilang, dan
+      `down()` mengisi ulang dengan `user{id}` semata agar batasan `unique`
+      bisa dipasang kembali.
 - [ ] **B2 — Video News dan Messages.** Unggah video lewat mesin unggah
       berpotongan yang sudah ada (`purpose` baru `news_video`), ditambah tombol
       pemilih emoji dan status *pending* saat pesan dikirim.

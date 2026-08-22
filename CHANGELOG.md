@@ -33,6 +33,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.21.0] - 2026-08-22
+
+### Bagian B1: `username` diganti nomor telepon, dan satu kolom yang tidak melakukan apa pun dihapus
+
+Bagian kedua dari sepuluh permintaan perubahan. Rancangan dan rencananya ada di
+`docs/superpowers/specs/2026-08-22-b1-schema-cleanup-design.md` dan
+`docs/superpowers/plans/2026-08-22-b1-schema-cleanup.md`.
+
+#### Kenapa `username` pergi
+
+Login memakai email, dan setiap akun sudah punya `name`. `username` adalah
+kolom ketiga yang tidak mengidentifikasi apa pun yang belum teridentifikasi —
+tetapi ia `NOT NULL` dan `unique`, jadi setiap pembuatan akun harus mengarang
+satu. `AccessRequestController` bahkan punya dua metode yang tugasnya cuma itu:
+`suggestedUsername()` memotong bagian depan email, `uniqueUsername()` menempel
+angka sampai bebas bentrok. Keduanya sekarang tidak ada.
+
+Penggantinya, `phone`, **opsional dan tidak unik**. Dua periset yang berbagi
+satu nomor kantor adalah kasus yang dulu ditolak mentah-mentah oleh batasan
+`unique`. Tidak ada validasi format: nomor Indonesia ditulis dengan `+62`, `62`
+dan `0` bergantian, dan menolak salah satunya hanya membuat admin bertengkar
+dengan formulir.
+
+#### Empat "fallback" yang ternyata tidak pernah berjalan
+
+Empat tempat menulis `$user->name ?? $user->username`. Karena `users.name`
+**tidak nullable**, cabang keduanya tidak pernah dieksekusi sekali pun.
+Keempatnya dihapus, bukan diarahkan ke `phone` — mengganti fallback mati dengan
+fallback mati yang lain hanya memindahkan kesalahpahamannya.
+`Conversation.php` adalah pengecualian dan tetap punya fallback, karena di sana
+akun-nya sendiri bisa null: percakapan tamu tidak punya akun.
+
+#### Dikerjakan bertahap, bukan sekali tebas
+
+Tiga migrasi, bukan satu. Menjatuhkan `username` di langkah pertama akan
+merusak tiga belas berkas test berbarengan di commit yang sama dengan yang
+menambahkan penggantinya, sehingga tidak ada satu titik pun di tengah pekerjaan
+yang suite-nya hijau dan kegagalan menunjuk satu hal. Jadi: kolom baru muncul
+dan yang lama dilonggarkan, penulis pindah, pembaca pindah, klien pindah, baru
+kolomnya dijatuhkan.
+
+Satu hal luput dari jaring: `AdminUserSeeder` masih menulis `username`, dan
+grep verifikasi yang seharusnya menangkapnya berakhir dengan `grep -vi
+userName` — `-i` membuatnya membuang setiap baris yang mengandung "username"
+apa pun kapitalisasinya, jadi ia menyaring persis apa yang dicarinya. Suite yang
+menangkapnya, dengan empat `QueryException`.
+
+#### `max_concurrent_jobs` dihapus
+
+Kolom itu tidak pernah dibandingkan dengan apa pun, di mana pun dalam `app/`.
+Ia muncul di aturan validasi, `$fillable`, seeder dan test — dan hanya itu.
+Niatnya terbaca jelas (jangan kirim lebih dari N pekerjaan serentak ke satu
+worker) tetapi pembatasnya tidak pernah ditulis, sehingga yang benar-benar
+dilakukan kolom itu adalah menjanjikan kendali yang tidak ada. Kartu admin dulu
+menampilkan `Jobs: 2 / 5`, sebuah pecahan dari batas yang tidak eksis; sekarang
+`Jobs running: 2`.
+
+Saudaranya, `current_jobs_count`, tetap tinggal — ia bekerja sungguhan.
+
+#### Lencana status ikut dibereskan
+
+Bagian A mengganti jargon di kalimatnya tapi meninggalkan lencana yang merender
+`status.toUpperCase()`, sehingga worker lambat berlabel **"TROUBLE"** persis di
+sebelah kalimat "answering slowly". Sekarang `SLOW`.
+
+#### Terverifikasi
+
+Backend 256 test (dari 250), Flutter 147 test (dari 144), `flutter analyze`
+bersih, APK release terbangun. Payload `/api/admin/users` diperiksa langsung
+terhadap server yang berjalan: `phone` ada di setiap baris, `username` tidak ada
+di mana pun.
+
+Jumlah test backend naik 6, bukan 7: tujuh ditambahkan dan satu dihapus.
+Yang dihapus menegaskan bahwa tabrakan username terselesaikan jadi
+`siti.rahayu2` — dan tidak ada lagi yang mengarang username untuk bertabrakan.
+Membuang asersinya sambil menyimpan test-nya akan meninggalkan test yang tidak
+menguji apa pun.
+
+**Rollback bersifat merusak.** Seluruh nilai `username` hilang; `down()` bisa
+mengembalikan kolomnya tetapi mengisinya dengan `user{id}`, semata agar batasan
+`unique` bisa dipasang kembali.
+
+**Belum terverifikasi:** tampilan kolom telepon di aplikasi berjalan, dan
+migrasi belum dijalankan di VPS.
+
+---
+
 ## [1.20.0] - 2026-08-22
 
 ### Bagian A dari sepuluh permintaan perubahan: bersih-bersih UI
