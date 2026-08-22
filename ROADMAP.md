@@ -336,9 +336,24 @@ C sebelum D karena D memakai widget yang lahir di C.
       slowly". Itu jargon yang bentuknya sama dengan yang baru saja dibuang,
       tapi ia di luar cakupan yang disetujui — layak jadi satu baris di
       bagian B.
-- [ ] **B — Perubahan skema.** `username` diganti nomor telepon (opsional,
-      tidak unik), unggah video di News, `max_concurrent_jobs` dihapus, status
-      *pending* pada pesan.
+- [ ] **B1 — Pembersihan skema.** `username` diganti nomor telepon (opsional,
+      tidak unik) dan `max_concurrent_jobs` dihapus — kolom yang tidak pernah
+      dibandingkan dengan apa pun. Rancangan:
+      [docs/superpowers/specs/2026-08-22-b1-schema-cleanup-design.md](docs/superpowers/specs/2026-08-22-b1-schema-cleanup-design.md).
+- [ ] **B2 — Video News dan Messages.** Unggah video lewat mesin unggah
+      berpotongan yang sudah ada (`purpose` baru `news_video`), ditambah tombol
+      pemilih emoji dan status *pending* saat pesan dikirim.
+
+      Kendalanya sudah diukur, bukan diduga: `post_max_size` PHP adalah **8M**,
+      dan satu POST multipart 25 MB ditolak **HTTP 413** oleh
+      `ValidatePostSize` Laravel — diuji langsung terhadap server yang berjalan,
+      22 Agustus 2026. Karena itu video memakai unggah berpotongan alih-alih
+      satu POST, sehingga tidak ada konfigurasi PHP yang harus disamakan antara
+      mesin pengembangan dan VPS.
+
+      Status *pending* tidak butuh migrasi: ia keadaan selama `send()` masih
+      menunggu jawaban. "Terkirim" dan "terbaca" sudah bekerja hari ini
+      (`messages.read_at`, `message_bubbles.dart:190`).
 - [ ] **C — Penelusur tumpukan frame ala ImageJ.** Satu widget dipakai di layar
       unggah dan di hasil/riwayat, menggabungkan frame input dan hasil prediksi
       dengan penanda. Termasuk unggah beberapa `.tif` sekaligus yang dibungkus
