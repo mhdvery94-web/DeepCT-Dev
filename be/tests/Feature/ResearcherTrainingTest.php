@@ -44,11 +44,10 @@ class ResearcherTrainingTest extends TestCase
         $this->other = $this->makeUser('someone', 'someone@brin.go.id');
     }
 
-    private function makeUser(string $username, string $email): User
+    private function makeUser(string $name, string $email): User
     {
         return User::create([
-            'username' => $username,
-            'name' => ucfirst($username),
+            'name' => ucfirst($name),
             'email' => $email,
             'password' => Hash::make('password123'),
             'role' => 'user',

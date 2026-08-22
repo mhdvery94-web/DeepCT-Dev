@@ -56,16 +56,4 @@ class AccessRequest extends EloquentModel
         return trim("{$this->first_name} {$this->last_name}");
     }
 
-    /**
-     * Username suggested for the account, derived from the email local part.
-     *
-     * Only a starting point — the controller must still make it unique.
-     */
-    public function suggestedUsername(): string
-    {
-        $base = strtolower(strstr($this->email, '@', true) ?: $this->email);
-        $base = preg_replace('/[^a-z0-9_.]/', '', $base) ?: 'researcher';
-
-        return substr($base, 0, 40);
-    }
 }

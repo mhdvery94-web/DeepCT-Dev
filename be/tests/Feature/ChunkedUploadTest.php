@@ -39,7 +39,7 @@ class ChunkedUploadTest extends TestCase
         Storage::fake('local');
 
         $this->user = User::create([
-            'username' => 'researcher', 'name' => 'Researcher',
+            'name' => 'Researcher',
             'email' => 'researcher@brin.go.id', 'password' => Hash::make('password123'),
             'role' => 'user', 'is_active' => true,
         ]);
@@ -236,7 +236,7 @@ class ChunkedUploadTest extends TestCase
         $uploadId = $this->start();
 
         User::create([
-            'username' => 'other', 'name' => 'Other', 'email' => 'other@brin.go.id',
+            'name' => 'Other', 'email' => 'other@brin.go.id',
             'password' => Hash::make('password123'), 'role' => 'user', 'is_active' => true,
         ]);
         $otherToken = $this->tokenFor('other@brin.go.id', 'password123');

@@ -38,7 +38,7 @@ class NewsController extends Controller
             $data['created_at'] = $post->created_at?->toIso8601String();
             $data['updated_at'] = $post->updated_at?->toIso8601String();
             $data['author'] = $post->relationLoaded('author') && $post->author
-                ? $post->author->name ?? $post->author->username
+                ? $post->author->name
                 : null;
         }
 
@@ -105,7 +105,7 @@ class NewsController extends Controller
     {
         $perPage = max(1, min((int) $request->input('per_page', 15), 100));
 
-        $query = NewsPost::with('author:id,username,name');
+        $query = NewsPost::with('author:id,name');
 
         if ($request->filled('status')) {
             $query->where('is_published', $request->input('status') === 'published');
@@ -165,7 +165,7 @@ class NewsController extends Controller
     /** GET /api/admin/news/{id} */
     public function show($id)
     {
-        $post = NewsPost::with('author:id,username,name')->findOrFail($id);
+        $post = NewsPost::with('author:id,name')->findOrFail($id);
 
         return response()->json([
             'success' => true,

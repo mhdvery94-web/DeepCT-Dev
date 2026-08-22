@@ -15,7 +15,6 @@ class AuthTest extends TestCase
     private function makeUser(array $overrides = []): User
     {
         return User::create(array_merge([
-            'username' => 'researcher',
             'name' => 'Dr. Sample Researcher',
             'email' => 'researcher@brin.go.id',
             'password' => Hash::make('user123'),
@@ -92,7 +91,6 @@ class AuthTest extends TestCase
     public function test_an_admin_can_also_hold_several_sessions(): void
     {
         $admin = $this->makeUser([
-            'username' => 'admin',
             'email' => 'admin@brin.go.id',
             'role' => 'admin',
         ]);

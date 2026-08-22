@@ -29,7 +29,7 @@ class TrainingController extends Controller
     /** GET /api/admin/training/datasets */
     public function datasets(Request $request)
     {
-        $datasets = TrainingDataset::with('uploader:id,username,name')
+        $datasets = TrainingDataset::with('uploader:id,name')
             ->withCount('jobs')
             ->orderByDesc('id')
             ->get();
@@ -128,7 +128,7 @@ class TrainingController extends Controller
         $query = TrainingJob::with([
             'dataset:id,name,source_type',
             'baseModel:id,name,version',
-            'creator:id,username,name',
+            'creator:id,name',
         ]);
 
         if ($status = $request->input('status')) {
@@ -162,7 +162,7 @@ class TrainingController extends Controller
     public function showJob($id)
     {
         $job = TrainingJob::with([
-            'dataset', 'baseModel:id,name,version', 'creator:id,username,name',
+            'dataset', 'baseModel:id,name,version', 'creator:id,name',
             'resultingModel:id,name,version',
         ])->findOrFail($id);
 
@@ -388,7 +388,7 @@ class TrainingController extends Controller
             'checksum' => $dataset->checksum,
             'jobs_count' => $dataset->jobs_count ?? $dataset->jobs()->count(),
             'uploaded_by' => $dataset->relationLoaded('uploader') && $dataset->uploader
-                ? $dataset->uploader->name ?? $dataset->uploader->username
+                ? $dataset->uploader->name
                 : null,
             'created_at' => $dataset->created_at?->toIso8601String(),
         ];
@@ -430,7 +430,7 @@ class TrainingController extends Controller
         if ($detailed) {
             $data['hyperparameters'] = $job->hyperparameters;
             $data['created_by'] = $job->relationLoaded('creator') && $job->creator
-                ? $job->creator->name ?? $job->creator->username
+                ? $job->creator->name
                 : null;
         }
 

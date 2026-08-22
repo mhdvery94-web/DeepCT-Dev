@@ -34,7 +34,6 @@ class MessageController extends Controller
             // A guest message has no author row, so fall back to the name they
             // gave — otherwise an administrator sees an unattributed message.
             'author' => $message->author?->name
-                ?? $message->author?->username
                 ?? ($message->from_admin ? 'Support' : $conversation->guest_name),
             'author_avatar_url' => $message->author?->avatarUrl(),
             'read_at' => $message->read_at?->toIso8601String(),
@@ -60,7 +59,6 @@ class MessageController extends Controller
             'user' => $conversation->relationLoaded('user') && $conversation->user
                 ? [
                     'id' => $conversation->user->id,
-                    'username' => $conversation->user->username,
                     'name' => $conversation->user->name,
                     'email' => $conversation->user->email,
                     'avatar_url' => $conversation->user->avatarUrl(),
@@ -101,8 +99,8 @@ class MessageController extends Controller
     public function index(Request $request)
     {
         $conversation = Conversation::with([
-            'user:id,username,name,email,avatar_path',
-            'messages.author:id,username,name,avatar_path',
+            'user:id,name,email,avatar_path',
+            'messages.author:id,name,avatar_path',
         ])->where('user_id', $request->user()->id)->first();
 
         if (!$conversation) {
@@ -244,7 +242,7 @@ class MessageController extends Controller
         $perPage = max(1, min((int) $request->input('per_page', 20), 100));
 
         $query = Conversation::with([
-            'user:id,username,name,email,avatar_path',
+            'user:id,name,email,avatar_path',
             'latestMessage',
         ]);
 
@@ -265,7 +263,7 @@ class MessageController extends Controller
                     ->orWhere('guest_email', 'like', "%{$search}%")
                     ->orWhereHas('user', fn($u) => $u
                         ->where('name', 'like', "%{$search}%")
-                        ->orWhere('username', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%"));
             });
         }
@@ -298,8 +296,8 @@ class MessageController extends Controller
     public function adminShow($id)
     {
         $conversation = Conversation::with([
-            'user:id,username,name,email,avatar_path',
-            'messages.author:id,username,name,avatar_path',
+            'user:id,name,email,avatar_path',
+            'messages.author:id,name,avatar_path',
         ])->findOrFail($id);
 
         return response()->json([

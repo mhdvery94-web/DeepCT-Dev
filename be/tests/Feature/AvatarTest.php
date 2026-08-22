@@ -35,11 +35,10 @@ class AvatarTest extends TestCase
         $this->otherResearcher = $this->makeUser('other', 'other@brin.go.id', 'user');
     }
 
-    private function makeUser(string $username, string $email, string $role): User
+    private function makeUser(string $name, string $email, string $role): User
     {
         return User::create([
-            'username' => $username,
-            'name' => ucfirst($username),
+            'name' => ucfirst($name),
             'email' => $email,
             'password' => Hash::make('password123'),
             'role' => $role,

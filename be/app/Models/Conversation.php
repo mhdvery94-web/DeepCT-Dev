@@ -62,7 +62,7 @@ class Conversation extends EloquentModel
             return $this->guest_name ?: 'Guest';
         }
 
-        return $this->user?->name ?? $this->user?->username ?? "User #{$this->user_id}";
+        return $this->user?->name ?? "User #{$this->user_id}";
     }
 
     /** Messages from the person, still unread by an administrator. */

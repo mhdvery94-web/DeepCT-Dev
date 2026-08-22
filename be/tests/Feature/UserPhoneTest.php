@@ -57,4 +57,87 @@ class UserPhoneTest extends TestCase
         $this->assertArrayHasKey('phone', $user->toPublicArray());
         $this->assertSame('08123456789', $user->toPublicArray()['phone']);
     }
+
+    private function admin(): User
+    {
+        return $this->user([
+            'name' => 'Admin',
+            'email' => 'admin@brin.go.id',
+            'role' => 'admin',
+        ]);
+    }
+
+    public function test_an_administrator_can_create_an_account_with_a_phone(): void
+    {
+        $admin = $this->admin();
+        $token = $this->tokenFor($admin->email, 'password123');
+
+        $this->apiAs($token)->postJson('/api/admin/users', [
+            'name' => 'New Researcher',
+            'email' => 'new@brin.go.id',
+            'phone' => '0812 3456 7890',
+            'role' => 'user',
+        ])->assertCreated();
+
+        $this->assertSame(
+            '0812 3456 7890',
+            User::where('email', 'new@brin.go.id')->first()->phone
+        );
+    }
+
+    public function test_an_administrator_can_create_an_account_without_a_phone(): void
+    {
+        $admin = $this->admin();
+        $token = $this->tokenFor($admin->email, 'password123');
+
+        $this->apiAs($token)->postJson('/api/admin/users', [
+            'name' => 'No Phone',
+            'email' => 'nophone@brin.go.id',
+            'role' => 'user',
+        ])->assertCreated();
+
+        $this->assertNull(User::where('email', 'nophone@brin.go.id')->first()->phone);
+    }
+
+    public function test_users_can_be_searched_by_phone_number(): void
+    {
+        $admin = $this->admin();
+        $this->user(['name' => 'Findable', 'phone' => '081299998888']);
+        $this->user(['name' => 'Unrelated', 'phone' => '081200001111']);
+
+        $token = $this->tokenFor($admin->email, 'password123');
+
+        $this->apiAs($token)->getJson('/api/admin/users?search=99998888')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Findable');
+    }
+
+    /**
+     * Approving a request used to call `uniqueUsername(suggestedUsername())`,
+     * two methods whose only job was inventing a value for a column nobody
+     * read. Both are gone; this asserts the path still works without them.
+     */
+    public function test_approving_an_access_request_creates_an_account(): void
+    {
+        $admin = $this->admin();
+        $token = $this->tokenFor($admin->email, 'password123');
+
+        $request = \App\Models\AccessRequest::create([
+            'first_name' => 'Ayu',
+            'last_name' => 'Pratiwi',
+            'email' => 'ayu@brin.go.id',
+            'institution' => 'BRIN',
+            'reason' => 'Neutron CT research',
+            'status' => 'pending',
+        ]);
+
+        $this->apiAs($token)
+            ->postJson("/api/admin/access-requests/{$request->id}/approve", [])
+            ->assertOk();
+
+        $created = User::where('email', 'ayu@brin.go.id')->first();
+        $this->assertNotNull($created);
+        $this->assertNull($created->phone);
+    }
 }

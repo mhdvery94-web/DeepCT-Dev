@@ -88,8 +88,8 @@ class AccessRequestController extends Controller
         $perPage = max(1, min($perPage, 100));
 
         $query = AccessRequest::with([
-            'reviewer:id,username,name',
-            'createdUser:id,username,email',
+            'reviewer:id,name',
+            'createdUser:id,email',
         ]);
 
         if ($status = $request->input('status')) {
@@ -159,7 +159,6 @@ class AccessRequestController extends Controller
         ]);
 
         $user = User::create([
-            'username' => $this->uniqueUsername($accessRequest->suggestedUsername()),
             'name' => $accessRequest->fullName(),
             'email' => $accessRequest->email,
             'password' => Hash::make(self::DEFAULT_PASSWORD),
@@ -188,7 +187,7 @@ class AccessRequestController extends Controller
             'metadata' => [
                 'access_request_id' => $accessRequest->id,
                 'created_user_id' => $user->id,
-                'username' => $user->username,
+                'name' => $user->name,
             ],
         ]);
 
@@ -202,7 +201,7 @@ class AccessRequestController extends Controller
             'data' => [
                 'user' => [
                     'id' => $user->id,
-                    'username' => $user->username,
+                    'name' => $user->name,
                     'name' => $user->name,
                     'email' => $user->email,
                     'role' => $user->role,
@@ -265,18 +264,5 @@ class AccessRequestController extends Controller
             'success' => true,
             'message' => 'Request deleted.',
         ]);
-    }
-
-    /** Append a number until the username is free. */
-    private function uniqueUsername(string $base): string
-    {
-        $candidate = $base;
-        $suffix = 1;
-
-        while (User::where('username', $candidate)->exists()) {
-            $candidate = $base . ++$suffix;
-        }
-
-        return $candidate;
     }
 }

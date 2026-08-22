@@ -40,7 +40,6 @@ class PredictionPipelineTest extends TestCase
         Storage::fake('local');
 
         $this->user = User::create([
-            'username' => 'researcher',
             'name' => 'Researcher',
             'email' => 'researcher@brin.go.id',
             'password' => Hash::make('password123'),
@@ -367,7 +366,7 @@ class PredictionPipelineTest extends TestCase
         $this->upload();
 
         $other = User::create([
-            'username' => 'other', 'name' => 'Other', 'email' => 'other@brin.go.id',
+            'name' => 'Other', 'email' => 'other@brin.go.id',
             'password' => Hash::make('password123'), 'role' => 'user', 'is_active' => true,
         ]);
         $otherToken = $this->tokenFor('other@brin.go.id', 'password123');
@@ -506,7 +505,7 @@ class PredictionPipelineTest extends TestCase
         $this->upload();
 
         User::create([
-            'username' => 'other', 'name' => 'Other', 'email' => 'other@brin.go.id',
+            'name' => 'Other', 'email' => 'other@brin.go.id',
             'password' => Hash::make('password123'), 'role' => 'user', 'is_active' => true,
         ]);
         $otherToken = $this->tokenFor('other@brin.go.id', 'password123');

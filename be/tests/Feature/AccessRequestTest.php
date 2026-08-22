@@ -28,12 +28,12 @@ class AccessRequestTest extends TestCase
         parent::setUp();
 
         $this->admin = User::create([
-            'username' => 'admin', 'name' => 'Admin', 'email' => 'admin@brin.go.id',
+            'name' => 'Admin', 'email' => 'admin@brin.go.id',
             'password' => Hash::make('password123'), 'role' => 'admin', 'is_active' => true,
         ]);
 
         $this->researcher = User::create([
-            'username' => 'researcher', 'name' => 'Researcher',
+            'name' => 'Researcher',
             'email' => 'researcher@brin.go.id', 'password' => Hash::make('password123'),
             'role' => 'user', 'is_active' => true,
         ]);
@@ -158,7 +158,6 @@ class AccessRequestTest extends TestCase
         $email = $response->json('data.user.email');
 
         $this->assertSame('siti.rahayu@brin.go.id', $email);
-        $this->assertSame('siti.rahayu', $response->json('data.user.username'));
         $this->assertSame('Siti Rahayu', $response->json('data.user.name'));
 
         $request->refresh();
@@ -174,26 +173,6 @@ class AccessRequestTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('data.user.must_change_password', true);
-    }
-
-    public function test_a_username_collision_is_resolved(): void
-    {
-        User::create([
-            'username' => 'siti.rahayu', 'name' => 'Someone Else',
-            'email' => 'other@example.com', 'password' => Hash::make('password123'),
-            'role' => 'user', 'is_active' => true,
-        ]);
-
-        $this->postJson('/api/access-requests', $this->payload())->assertCreated();
-        $token = $this->tokenFor('admin@brin.go.id', 'password123');
-
-        $id = AccessRequest::first()->id;
-        $username = $this->apiAs($token)
-            ->postJson("/api/admin/access-requests/{$id}/approve")
-            ->assertOk()
-            ->json('data.user.username');
-
-        $this->assertSame('siti.rahayu2', $username);
     }
 
     public function test_approving_twice_is_refused(): void

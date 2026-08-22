@@ -35,7 +35,7 @@ class PredictionCleanupTest extends TestCase
         Storage::fake('local');
 
         $this->user = User::create([
-            'username' => 'researcher', 'name' => 'Researcher',
+            'name' => 'Researcher',
             'email' => 'researcher@brin.go.id', 'password' => Hash::make('password123'),
             'role' => 'user', 'is_active' => true,
         ]);

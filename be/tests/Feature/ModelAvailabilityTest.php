@@ -23,7 +23,6 @@ class ModelAvailabilityTest extends TestCase
         parent::setUp();
 
         $this->researcher = User::create([
-            'username' => 'researcher',
             'name' => 'Researcher',
             'email' => 'researcher@brin.go.id',
             'password' => Hash::make('password123'),
