@@ -478,12 +478,27 @@ C sebelum D karena D memakai widget yang lahir di C.
       Berbeda dari prediksi, ini tidak bisa dikerjakan dalam hitungan menit —
       training memakan berjam-jam.
 
+- [ ] **E — Preview dataset training.** Menutup separuh poin 10 yang terlewat
+      saat D dirancang: unggah dataset punya preview seperti unggah prediksi.
+      Rancangan:
+      [docs/superpowers/specs/2026-08-23-e-dataset-preview-design.md](docs/superpowers/specs/2026-08-23-e-dataset-preview-design.md).
+
+      Audit 23 Agustus menemukan tiga dari empat tempat preview sudah ada;
+      yang ini tidak. Bukan permintaan baru — kalimat aslinya meminta dua
+      preview di tab training, dan D hanya membangun yang kedua.
+
+      Jauh lebih kecil dari C: dataset duduk sebagai job `queued` sampai ada
+      worker yang mengklaimnya, jadi jendela untuk melihatnya sudah ada dan
+      tidak ada status baru yang perlu ditambahkan. Dibaca langsung dari dalam
+      ZIP lewat `ZipArchive`, tanpa satu byte disk tambahan.
+
 ### 13. Perbaikan tambahan
 
 Diajukan 22 Agustus 2026, di luar sepuluh permintaan di no. 12.
 
-- [ ] **Navigasi swipe di ponsel, dan konfirmasi sebelum keluar.** Dua hal yang
-      berhubungan, keduanya soal gestur di perangkat sentuh.
+- [ ] **F — Navigasi swipe di ponsel, dan konfirmasi sebelum keluar.** Dua hal
+      yang berhubungan, keduanya soal gestur di perangkat sentuh. Rancangan:
+      [docs/superpowers/specs/2026-08-23-f-swipe-navigation-design.md](docs/superpowers/specs/2026-08-23-f-swipe-navigation-design.md).
 
       **Yang pertama:** menggeser jari ke kiri atau kanan tidak melakukan apa
       pun hari ini. Ia seharusnya berpindah antar tab, dan dari tab mana pun
