@@ -33,6 +33,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.25.1] - 2026-08-23
+
+### Dua bug yang ditemukan saat menguji di perangkat
+
+Keduanya lahir dari pekerjaan sebelumnya di hari yang sama, dan keduanya
+ditemukan dengan menelusuri rantainya lapis demi lapis alih-alih menebak.
+
+#### "An unexpected error occurred" yang bukan tentang login sama sekali
+
+Aplikasi di ponsel tidak bisa masuk sementara web normal. Seluruh rantai
+backend diperiksa dan sehat: MySQL menyala, Octane menyala, ngrok menembus ke
+Octane, dan `curl` memperoleh token dengan kredensial yang benar.
+
+Login-nya memang **tidak pernah gagal**. Bagian B1 membuang `username` dari
+payload user; APK yang terpasang dibangun sebelum itu, dan versi tersebut
+membaca `json['username']` ke sebuah `String` yang tidak nullable. Server
+menjawab 200 beserta token, penguraiannya yang melempar, dan
+`auth_provider` melaporkannya sebagai "An unexpected error occurred".
+
+Kalimat itu yang mengirim orang menyusuri backend, terowongan dan basis data
+mencari kerusakan yang tidak ada. Sebuah `TypeError` kini berbunyi
+**"This version of the app cannot read what the server sent. Please install
+the latest build."**
+
+Ini juga catatan untuk deploy berikutnya: membuang sebuah field dari payload
+memutuskan setiap klien lama yang membacanya sebagai tipe non-nullable.
+
+#### Video yang ada, tersaji, dan tak terjangkau
+
+`GET /api/news/4/video` menjawab 200 dengan 19 MB `video/mp4` dan
+`Accept-Ranges`. Videonya tidak hilang — ia tidak bisa dicapai.
+
+Di bagian B2, label `WATCH VIDEO` hanya muncul ketika body post kosong. Sebuah
+klip yang dilampirkan pada artikel yang **juga** punya tulisan karenanya duduk
+di balik tombol berbunyi `READ MORE`, tanpa satu pun tanda di slide bahwa ada
+video di sana.
+
+Sekarang slide membawa badge dengan ikon putar dan ukuran videonya, dan
+tombolnya berbunyi `READ MORE & WATCH` ketika post punya keduanya.
+
+#### Terverifikasi
+
+Flutter 176 test (dari 174), `flutter analyze` bersih. Kedua akun uji
+diverifikasi masuk lewat terowongan sungguhan, bukan lewat test.
+
 ## [1.25.0] - 2026-08-23
 
 ### Bagian E dan F: preview yang terlewat, dan gestur yang tidak ada penanganannya
