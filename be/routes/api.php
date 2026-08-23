@@ -111,6 +111,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/jobs/{id}/cancel', [MeTrainingController::class, 'cancel'])->name('api.me.training.jobs.cancel');
             Route::get('/jobs/{id}/samples', [MeTrainingController::class, 'samples'])->name('api.me.training.samples');
             Route::get('/jobs/{id}/samples/{epoch}', [MeTrainingController::class, 'sampleImage'])->name('api.me.training.samples.show');
+            Route::get('/jobs/{id}/dataset/frames', [MeTrainingController::class, 'datasetFrames'])->name('api.me.training.dataset.frames');
+            Route::get('/jobs/{id}/dataset/frames/{name}/preview', [MeTrainingController::class, 'datasetFramePreview'])->name('api.me.training.dataset.preview');
         });
     });
 

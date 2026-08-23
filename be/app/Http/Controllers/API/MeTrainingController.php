@@ -8,8 +8,10 @@ use App\Models\TrainingJob;
 use App\Models\TrainingMetric;
 use App\Models\UserActivity;
 use App\Services\TrainerDispatcher;
+use App\Services\TiffPreview;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use ZipArchive;
 
 /**
  * Training, from the researcher's side.
@@ -236,6 +238,129 @@ class MeTrainingController extends Controller
             // A sample for a given epoch never changes once written.
             'Cache-Control' => 'private, max-age=3600',
         ]);
+    }
+
+    /**
+     * GET /api/me/training/jobs/{id}/dataset/frames
+     *
+     * Read from inside the archive rather than extracting it. A dataset is the
+     * largest thing this platform stores, and doubling it on disk to look at
+     * it would be absurd — ZipArchive reads the central directory at the end
+     * of the file, so listing costs the entry count and not the size.
+     */
+    public function datasetFrames(Request $request, $id)
+    {
+        $job = $this->ownedJob($request, $id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->archiveFrames($job)->values(),
+        ]);
+    }
+
+    /**
+     * GET /api/me/training/jobs/{id}/dataset/frames/{name}/preview
+     *
+     * The frames are 16-bit TIFFs, which neither a browser nor Flutter can
+     * decode, so TiffPreview renders them here — the same path a prediction
+     * frame takes.
+     */
+    public function datasetFramePreview(Request $request, $id, string $name, TiffPreview $preview)
+    {
+        $job = $this->ownedJob($request, $id);
+
+        $size = (int) $request->input('size', 512);
+        $size = max(64, min($size, 2048));
+
+        // Checked against the archive's own listing rather than sanitised. A
+        // name that reaches getFromName() unchecked reads whatever it points
+        // at, and basename() alone would still accept an entry this dataset
+        // does not have.
+        $known = $this->archiveFrames($job)->firstWhere('name', $name);
+
+        if ($known === null) {
+            abort(404);
+        }
+
+        $cachePath = "training/datasets/preview/{$job->training_dataset_id}/{$size}_{$name}.png";
+
+        if (!Storage::exists($cachePath)) {
+            $zip = new ZipArchive();
+
+            $archive = TrainingDataset::whereKey($job->training_dataset_id)
+                ->value('archive_path');
+
+            if ($zip->open(Storage::path($archive)) !== true) {
+                abort(404);
+            }
+
+            $tiff = $zip->getFromName($name);
+            $zip->close();
+
+            if ($tiff === false) {
+                abort(404);
+            }
+
+            Storage::put($cachePath, $preview->toPng($tiff, $size));
+        }
+
+        return response()->file(Storage::path($cachePath), [
+            'Content-Type' => 'image/png',
+            // An entry inside an archive never changes.
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
+    }
+
+    /**
+     * The `.tif` entries in a job's dataset archive, sorted by name.
+     *
+     * Sorted because the numbering in the names is the sequence — the same
+     * thing the trainer builds its triples from.
+     *
+     * @return \Illuminate\Support\Collection<int, array{name:string, size:int}>
+     */
+    private function archiveFrames(TrainingJob $job)
+    {
+        // Fetched rather than read off `$job->dataset`: ownedJob() eager-loads
+        // that relation as `id,name,size_bytes` on purpose, and widening it
+        // would put the storage path into every job payload. Where the archive
+        // sits on disk is nobody's business but this method's.
+        $path = TrainingDataset::whereKey($job->training_dataset_id)
+            ->value('archive_path');
+
+        if (!$path || !Storage::exists($path)) {
+            return collect();
+        }
+
+        $zip = new ZipArchive();
+
+        if ($zip->open(Storage::path($path)) !== true) {
+            return collect();
+        }
+
+        $entries = collect();
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $stat = $zip->statIndex($i);
+            $name = $stat['name'];
+
+            // Folder entries, and anything a researcher zipped in beside the
+            // frames — a README is not a frame.
+            if (str_ends_with($name, '/')) {
+                continue;
+            }
+
+            $lower = strtolower($name);
+            if (!str_ends_with($lower, '.tif') && !str_ends_with($lower, '.tiff')) {
+                continue;
+            }
+
+            $entries->push(['name' => $name, 'size' => (int) $stat['size']]);
+        }
+
+        $zip->close();
+
+        return $entries->sortBy('name')->values();
     }
 
     private function ownedJob(Request $request, $id): TrainingJob
