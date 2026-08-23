@@ -3,6 +3,48 @@
 /// Either an archive hosted by the platform, or a URL the GPU worker fetches
 /// for itself — a 20 GB dataset has no business travelling up a home tunnel
 /// and back down to Kaggle.
+/// Which metrics get a column, and in what order.
+///
+/// The table is built from whatever a notebook reports, so it survives one
+/// starting to measure something new without a change here. That freedom
+/// needs two rules to stay readable.
+///
+/// The four asked for lead, in a fixed order — otherwise the columns shuffle
+/// between runs depending on which key a notebook happened to report first.
+/// And `batches`, `samples` and their kind are dropped: they say how much work
+/// was done, not how well, and do not belong beside PSNR.
+///
+/// `loss` is hidden when `mae` is present. The trainer's loss is
+/// `tf.reduce_mean(tf.abs(prediction - target))` — mean absolute error by
+/// definition — so two columns would carry one number. Alone it survives,
+/// because runs recorded before the rename sent it only under that name and
+/// dropping it would empty their table.
+List<String> orderedMetricKeys(Map<String, dynamic> metrics) {
+  const leading = ['mae', 'mse', 'psnr', 'ssim'];
+  const bookkeeping = {'batches', 'samples', 'balanced_t'};
+
+  bool numeric(String key) {
+    final raw = metrics[key];
+    return raw is num || double.tryParse('${raw ?? ''}') != null;
+  }
+
+  final present = metrics.keys.where(numeric).toSet()..removeAll(bookkeeping);
+
+  if (present.contains('mae')) present.remove('loss');
+
+  return [
+    for (final key in leading)
+      // `loss` stands in for `mae` when that is all a run recorded, and takes
+      // its place in the order rather than trailing at the end: the column
+      // that means mean absolute error is always the first one.
+      if (present.remove(key))
+        key
+      else if (key == 'mae' && present.remove('loss'))
+        'loss',
+    ...present,
+  ];
+}
+
 class TrainingDataset {
   final int id;
   final String name;

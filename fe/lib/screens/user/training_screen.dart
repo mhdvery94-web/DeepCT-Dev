@@ -4,10 +4,14 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/prediction_frame.dart';
+import '../../models/training.dart';
 import '../../services/api_client.dart';
 import '../../services/researcher_training_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/file_extension.dart';
+import '../../utils/frame_bundle.dart';
+import '../../widgets/frame_stack_viewer.dart';
 
 /// Training, from the researcher's side.
 ///
@@ -113,21 +117,51 @@ class _TrainingScreenState extends State<TrainingScreen> {
     // and the archive ends up greyed out and unselectable.
     final result = await FilePicker.pickFiles(
       type: FileType.any,
+      // Several loose .tif frames are as valid a dataset as one archive, so a
+      // researcher no longer has to zip them first.
+      allowMultiple: true,
       withData: true,
     );
-    final file = result?.files.firstOrNull;
-    if (file?.bytes == null) return;
+
+    final picked = result?.files.where((f) => f.bytes != null).toList() ?? [];
+    if (picked.isEmpty) return;
     if (!mounted) return;
 
-    if (!hasExtension(file!.name, const ['zip'])) {
-      setState(() => _error = 'Choose a .zip archive.');
+    final tiffs = picked
+        .where((f) => hasExtension(f.name, const ['tif', 'tiff']))
+        .toList();
+
+    if (picked.length == 1 && hasExtension(picked.single.name, const ['zip'])) {
+      setState(() {
+        _bytes = picked.single.bytes;
+        _filename = picked.single.name;
+        _error = null;
+      });
+      return;
+    }
+
+    if (tiffs.length == picked.length) {
+      // Bundled here so the backend keeps one intake shape. The names travel
+      // unchanged; their numbering is what the trainer builds triples from.
+      final bundle = await bundleFrames([
+        for (final f in tiffs) (name: f.name, bytes: f.bytes!),
+      ]);
+
+      if (!mounted) return;
+
+      setState(() {
+        _bytes = bundle.bytes;
+        _filename = bundle.filename;
+        _error = null;
+      });
       return;
     }
 
     setState(() {
-      _bytes = file.bytes;
-      _filename = file.name;
-      _error = null;
+      _bytes = null;
+      _filename = null;
+      _error = 'Choose one .zip archive, or one or more numbered .tif frames '
+          '— not a mixture.';
     });
   }
 
@@ -399,7 +433,10 @@ class _TrainingScreenState extends State<TrainingScreen> {
           if (run.totalEpochs > 0)
             LinearProgressIndicator(value: run.progressPercent / 100),
 
-          if (open) _history(theme, run),
+          if (open) ...[
+            _sampleButton(run),
+            _history(theme, run),
+          ],
         ],
       ),
     );
@@ -429,8 +466,12 @@ class _TrainingScreenState extends State<TrainingScreen> {
     }
 
     // The union of every key reported, so a notebook that starts measuring
-    // something new needs no change here.
-    final keys = <String>{for (final p in run.history) ...p.metrics.keys}
+    // something new needs no change here — then ordered so the four that
+    // matter lead and the bookkeeping is dropped.
+    final reported = <String, dynamic>{
+      for (final p in run.history) ...p.metrics,
+    };
+    final keys = orderedMetricKeys(reported)
         .where((k) => run.history.any((p) => p.value(k) != null))
         .toList();
 
@@ -458,6 +499,67 @@ class _TrainingScreenState extends State<TrainingScreen> {
                 ],
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Scrub the rendered frames, one per epoch.
+  ///
+  /// The axis here is the epoch, not the frame number: what it shows is the
+  /// model getting better, which a single number in a table cannot.
+  Widget _sampleButton(TrainingRun run) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: OutlinedButton.icon(
+        onPressed: () => _openSamples(run),
+        icon: const Icon(Icons.image_outlined, size: 18),
+        label: const Text('VIEW EPOCH FRAMES'),
+      ),
+    ),
+  );
+
+  Future<void> _openSamples(TrainingRun run) async {
+    List<int> epochs;
+
+    try {
+      epochs = await _service.samples(run.id);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (epochs.isEmpty) {
+      setState(
+        () => _error = 'No frames yet. One is recorded as each epoch finishes.',
+      );
+      return;
+    }
+
+    // FrameStackViewer takes PredictionFrame, and reusing it beats a twin
+    // type differing by one field. This is the only place in the project
+    // where a PredictionFrame is not a prediction frame.
+    final frames = [
+      for (final e in epochs)
+        PredictionFrame(name: 'Epoch $e', kind: 'output', size: 0),
+    ];
+
+    if (!mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FrameStackViewer(
+          frames: frames,
+          // The last epoch first: what someone wants to see is where the
+          // model is now, not where it started.
+          initialIndex: frames.length - 1,
+          loader: (name) => _service.sampleImage(
+            run.id,
+            int.parse(name.split(' ').last),
+          ),
         ),
       ),
     );

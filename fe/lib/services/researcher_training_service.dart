@@ -117,6 +117,24 @@ class ResearcherTrainingService {
     return TrainingRun.fromJson(Map<String, dynamic>.from(body['data'] as Map));
   }
 
+  /// GET /me/training/jobs/{id}/samples — which epochs produced a frame.
+  Future<List<int>> samples(int id) async {
+    final body = await _api.get('${ApiConfig.meTrainingJobs}/$id/samples');
+
+    return (body['data'] as List? ?? const [])
+        .map((e) => ((e as Map)['epoch'] as num).toInt())
+        .toList();
+  }
+
+  /// GET /me/training/jobs/{id}/samples/{epoch} — the PNG itself.
+  Future<Uint8List> sampleImage(int id, int epoch) async {
+    final result = await _api.getBytes(
+      '${ApiConfig.meTrainingJobs}/$id/samples/$epoch',
+    );
+
+    return result.bytes;
+  }
+
   Future<void> cancel(int id) async {
     await _api.post('${ApiConfig.meTrainingJobs}/$id/cancel');
   }
