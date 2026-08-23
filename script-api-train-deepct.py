@@ -312,9 +312,50 @@ def prepare_model(learning_rate: float, checkpoint_path: str | None):
     return _model["generator"], _model["step"]
 
 
+def render_sample(generator, paths, samples) -> bytes | None:
+    """One PNG from a fixed triplet, so epochs are comparable.
+
+    The triplet is chosen by a fixed index rather than at random: comparing
+    epoch 3 against epoch 9 on different triplets says nothing about the
+    model, only about the triplets.
+    """
+    if not samples:
+        return None
+
+    pair, time_scalar, _ = batch_from(paths, samples, [len(samples) // 2])
+    prediction = generator([pair, time_scalar], training=False)
+
+    # Back to [0,255] from the model's [-1,1].
+    frame = ((prediction[0].numpy() + 1.0) / 2.0 * 255.0).clip(0, 255).astype("uint8")
+
+    if frame.ndim == 3 and frame.shape[-1] == 1:
+        frame = frame[:, :, 0]
+
+    buffer = io.BytesIO()
+    Image.fromarray(frame).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def send_sample(session: requests.Session, base: str, job_id: int,
+                epoch: int, png: bytes | None) -> None:
+    """Best effort. A missing preview must never fail a run."""
+    if not png:
+        return
+
+    try:
+        session.post(
+            f"{base}/training/worker/jobs/{job_id}/sample",
+            data={"epoch": str(epoch)},
+            files={"image": ("sample.png", png, "image/png")},
+            timeout=60,
+        )
+    except Exception as error:
+        print(f"[epoch {epoch}] sample upload failed, continuing: {error}")
+
+
 def train_one_epoch(request: TrainRequest, dataset_dir: str, epoch: int,
                     checkpoint_path: str | None):
-    """Train one epoch; return (weights_path, metrics)."""
+    """Train one epoch; return (weights_path, metrics, sample_png)."""
     hyper = request.hyperparameters or {}
     learning_rate = float(hyper.get("learning_rate", 1e-4))
     batch_size = int(hyper.get("batch_size", 1))
@@ -369,7 +410,10 @@ def train_one_epoch(request: TrainRequest, dataset_dir: str, epoch: int,
     written = save_generator(
         generator, os.path.join(WORK_DIR, f"job-{request.job_id}-epoch-{epoch}.h5")
     )
-    return written, metrics
+
+    # Rendered here where the generator is in hand; uploaded by the caller,
+    # which already holds the authenticated session.
+    return written, metrics, render_sample(generator, paths, samples)
 
 
 # ==========================================================================
@@ -504,12 +548,14 @@ def run_training(request: TrainRequest):
                 print(f"[job {job_id}] cancelled; stopping at epoch {epoch - 1}")
                 return
 
-            checkpoint_path, metrics = train_one_epoch(
+            checkpoint_path, metrics, sample_png = train_one_epoch(
                 request, dataset_dir, epoch, checkpoint_path
             )
 
             state["epoch"] = epoch
             state["metrics"] = metrics or {}
+
+            send_sample(session, base, job_id, epoch, sample_png)
 
             if epoch % CHECKPOINT_EVERY == 0 and epoch != request.total_epochs:
                 send_file(
