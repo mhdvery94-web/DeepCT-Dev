@@ -34,6 +34,18 @@ enum UserSection {
   final IconData icon;
 }
 
+/// One step along the section list, clamped at both ends.
+///
+/// Clamped rather than wrapped: a swipe from the last entry landing on the
+/// Dashboard reads as losing your place, not as moving.
+UserSection nextSection(UserSection from, int step) {
+  final index = UserSection.values.indexOf(from) + step;
+
+  if (index < 0 || index >= UserSection.values.length) return from;
+
+  return UserSection.values[index];
+}
+
 /// Researcher console shell: persistent sidebar on desktop, drawer on mobile.
 ///
 /// Deliberately mirrors [AdminShell] so both halves of the app navigate the
@@ -287,7 +299,28 @@ class _UserShellState extends State<UserShell> {
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= _mobileBreakpoint;
 
-    return Scaffold(
+    return PopScope(
+      // Always false: both branches handle the gesture themselves.
+      // Leaving it true on the Dashboard restores the bug this is
+      // fixing — a mis-swipe dropping someone onto the landing page
+      // with no warning at all.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+    
+        // From anywhere else, back means home — one step, the way
+        // Android has always behaved.
+        if (_section != UserSection.dashboard) {
+          setState(() => _section = UserSection.dashboard);
+          return;
+        }
+    
+        // From home it means leaving, and leaving is worth asking
+        // about. The same dialog the Sign out button opens, so the
+        // two cannot drift apart.
+        _confirmLogout();
+      },
+      child: Scaffold(
       backgroundColor: AppTheme.background,
       drawer: isWide
           ? null
@@ -313,6 +346,18 @@ class _UserShellState extends State<UserShell> {
       // — SelectionArea skips EditableText — and there is no onLongPress
       // anywhere in the app for it to fight with.
       body: SelectionArea(
+        // GestureDetector rather than a PageView: the metrics table and some
+        child: GestureDetector(
+          onHorizontalDragEnd: (details) {
+            final velocity = details.primaryVelocity ?? 0;
+      
+            // Below this it was a tap that wandered, not a swipe.
+            if (velocity.abs() < 200) return;
+      
+            // Dragging leftwards moves forward through the list.
+            final next = nextSection(_section, velocity < 0 ? 1 : -1);
+            if (next != _section) setState(() => _section = next);
+          },
         child: SafeArea(
           bottom: false,
           child: Row(
@@ -369,6 +414,8 @@ class _UserShellState extends State<UserShell> {
             ],
           ),
         ),
+        ),
+      ),
       ),
     );
   }
