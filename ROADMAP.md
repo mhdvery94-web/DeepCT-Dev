@@ -441,9 +441,25 @@ C sebelum D karena D memakai widget yang lahir di C.
         dengan backend dimatikan**: gelembungnya harus merah dan teksnya harus
         kembali ke kolom ketik.
 - [ ] **D — Training periset.** Tab Training sisi admin dihapus; tab sisi
-      periset dikembangkan dengan unggah, viewer dari C, dan metrik PSNR/SSIM/
-      MAE/MSE. Dibangun di atas jalur yang belum pernah dijalani (no. 10 di
-      atas), jadi akan ditandai belum terverifikasi sampai ada run nyata.
+      periset dikembangkan dengan unggah, viewer dari C, metrik PSNR/SSIM/
+      MAE/MSE, dan gambar contoh per epoch yang bisa digeser. Rancangan:
+      [docs/superpowers/specs/2026-08-23-d-researcher-training-design.md](docs/superpowers/specs/2026-08-23-d-researcher-training-design.md).
+
+      Menghapus tab admin **tidak** berarti membuang kemampuannya. Layar itu
+      memegang `_registerModel()` — satu-satunya cara bobot hasil training jadi
+      model yang bisa dipakai — beserta penghapusan dataset dan job, yang juga
+      satu-satunya rem terhadap disk penuh (lihat no. 11). Ketiganya pindah ke
+      Model Management, tempat model memang hidup. Yang benar-benar dicabut
+      cuma `dispatch`, karena job antre diklaim worker sendiri.
+
+      `script-api-train-deepct.py` ikut diubah: SSIM dan MSE ditambahkan di
+      samping PSNR, dan `loss` diberi nama kedua `mae` — ia memang
+      `tf.reduce_mean(tf.abs(...))`, yaitu MAE menurut definisi. `loss` tetap
+      dikirim supaya job lama tidak kehilangan grafiknya.
+
+      Dibangun di atas jalur yang belum pernah dijalani (no. 10), jadi akan
+      ditandai belum terverifikasi sampai ada run nyata di Kaggle dengan skrip
+      versi baru.
 
 ### 13. Perbaikan tambahan
 
