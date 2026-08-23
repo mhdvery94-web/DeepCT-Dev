@@ -508,17 +508,58 @@ class _TrainingScreenState extends State<TrainingScreen> {
   ///
   /// The axis here is the epoch, not the frame number: what it shows is the
   /// model getting better, which a single number in a table cannot.
+  /// Wrap, not Row: two full-width labels do not fit side by side on a phone,
+  /// and a Row would overflow rather than fold.
   Widget _sampleButton(TrainingRun run) => Padding(
     padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-    child: Align(
-      alignment: Alignment.centerLeft,
-      child: OutlinedButton.icon(
-        onPressed: () => _openSamples(run),
-        icon: const Icon(Icons.image_outlined, size: 18),
-        label: const Text('VIEW EPOCH FRAMES'),
-      ),
+    child: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OutlinedButton.icon(
+          onPressed: () => _openDataset(run),
+          icon: const Icon(Icons.folder_open_outlined, size: 18),
+          label: const Text('PREVIEW DATASET'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => _openSamples(run),
+          icon: const Icon(Icons.image_outlined, size: 18),
+          label: const Text('VIEW EPOCH FRAMES'),
+        ),
+      ],
     ),
   );
+
+  /// The frames going in, before a GPU spends hours on them.
+  Future<void> _openDataset(TrainingRun run) async {
+    List<PredictionFrame> frames;
+
+    try {
+      frames = await _service.datasetFrames(run.id);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (frames.isEmpty) {
+      setState(
+        () => _error = 'No .tif frames were found inside that archive.',
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FrameStackViewer(
+          frames: frames,
+          initialIndex: 0,
+          loader: (name) => _service.datasetFramePreview(run.id, name),
+        ),
+      ),
+    );
+  }
 
   Future<void> _openSamples(TrainingRun run) async {
     List<int> epochs;
