@@ -206,6 +206,38 @@ class MeTrainingController extends Controller
      * 404 rather than 403 on someone else's: telling an unauthorised caller
      * that a run exists is itself a leak.
      */
+    /** GET /api/me/training/jobs/{id}/samples — which epochs have one. */
+    public function samples(Request $request, $id)
+    {
+        $job = $this->ownedJob($request, $id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $job->samples()
+                ->get()
+                ->map(fn($s) => ['epoch' => $s->epoch])
+                ->values(),
+        ]);
+    }
+
+    /** GET /api/me/training/jobs/{id}/samples/{epoch} — the PNG itself. */
+    public function sampleImage(Request $request, $id, $epoch)
+    {
+        $job = $this->ownedJob($request, $id);
+
+        $sample = $job->samples()->where('epoch', (int) $epoch)->first();
+
+        if (!$sample || !Storage::exists($sample->path)) {
+            abort(404);
+        }
+
+        return response()->file(Storage::path($sample->path), [
+            'Content-Type' => 'image/png',
+            // A sample for a given epoch never changes once written.
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
+    }
+
     private function ownedJob(Request $request, $id): TrainingJob
     {
         return TrainingJob::with(['dataset:id,name,size_bytes', 'trainer:id,name,version,status'])

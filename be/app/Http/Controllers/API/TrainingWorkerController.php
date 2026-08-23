@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\TrainingJob;
+use App\Models\TrainingSample;
 use App\Models\TrainingMetric;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -281,6 +282,51 @@ class TrainingWorkerController extends Controller
      * the notebook. Distinct from going quiet, which is not a failure and is
      * handled by the reclaim sweep instead.
      */
+    /**
+     * POST /api/training/worker/jobs/{id}/sample — one rendered frame.
+     *
+     * Sent at the end of each epoch, from a fixed test triplet, so scrubbing
+     * through them shows the model improving rather than the triplets
+     * changing.
+     */
+    public function sample(Request $request, $id)
+    {
+        $job = TrainingJob::findOrFail($id);
+
+        $validated = $request->validate([
+            'epoch' => 'required|integer|min:0',
+            'image' => [
+                'required',
+                'file',
+                // 4 MB, matching the news photo. A sample PNG has no reason to
+                // be larger, and without a ceiling a confused worker could
+                // fill the disk over a run of hundreds of epochs.
+                'max:4096',
+                'mimetypes:image/png',
+            ],
+        ]);
+
+        // Deleted through Eloquent so the old file goes with the row. A worker
+        // repeating an epoch after losing its session is normal here.
+        TrainingSample::where('training_job_id', $job->id)
+            ->where('epoch', $validated['epoch'])
+            ->first()
+            ?->delete();
+
+        $path = $request->file('image')->store("training/samples/{$job->id}");
+
+        $sample = TrainingSample::create([
+            'training_job_id' => $job->id,
+            'epoch' => $validated['epoch'],
+            'path' => $path,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'data' => ['epoch' => $sample->epoch],
+        ]);
+    }
+
     public function fail(Request $request, $id)
     {
         $validated = $request->validate([

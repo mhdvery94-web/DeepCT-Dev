@@ -65,6 +65,7 @@ Route::middleware('training.worker')->prefix('training/worker')->group(function 
     Route::get('/jobs/{id}/dataset', [TrainingWorkerController::class, 'dataset'])->name('api.training.worker.dataset');
     Route::post('/jobs/{id}/heartbeat', [TrainingWorkerController::class, 'heartbeat'])->name('api.training.worker.heartbeat');
     Route::post('/jobs/{id}/checkpoint', [TrainingWorkerController::class, 'checkpoint'])->name('api.training.worker.checkpoint');
+    Route::post('/jobs/{id}/sample', [TrainingWorkerController::class, 'sample'])->name('api.training.worker.sample');
     Route::post('/jobs/{id}/complete', [TrainingWorkerController::class, 'complete'])->name('api.training.worker.complete');
     Route::post('/jobs/{id}/fail', [TrainingWorkerController::class, 'fail'])->name('api.training.worker.fail');
 });
@@ -108,6 +109,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/jobs', [MeTrainingController::class, 'store'])->name('api.me.training.jobs.store');
             Route::get('/jobs/{id}', [MeTrainingController::class, 'show'])->name('api.me.training.jobs.show');
             Route::post('/jobs/{id}/cancel', [MeTrainingController::class, 'cancel'])->name('api.me.training.jobs.cancel');
+            Route::get('/jobs/{id}/samples', [MeTrainingController::class, 'samples'])->name('api.me.training.samples');
+            Route::get('/jobs/{id}/samples/{epoch}', [MeTrainingController::class, 'sampleImage'])->name('api.me.training.samples.show');
         });
     });
 

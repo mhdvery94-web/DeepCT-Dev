@@ -101,6 +101,25 @@ class TrainingJob extends EloquentModel
         return $this->hasMany(TrainingMetric::class)->orderBy('epoch');
     }
 
+    public function samples()
+    {
+        return $this->hasMany(TrainingSample::class)->orderBy('epoch');
+    }
+
+    /**
+     * Delete samples through Eloquent so their files go too.
+     *
+     * The foreign key cascades the rows on its own, but a database cascade
+     * fires no model events, and the PNGs would sit on disk forever with
+     * nothing left pointing at them.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(function (self $job) {
+            $job->samples()->get()->each->delete();
+        });
+    }
+
     public function isFinished(): bool
     {
         return in_array($this->status, self::FINISHED, true);
