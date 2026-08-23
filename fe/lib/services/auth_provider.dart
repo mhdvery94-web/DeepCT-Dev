@@ -2,6 +2,24 @@ import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import 'auth_service.dart';
 
+/// What to tell someone when signing in threw rather than answered.
+///
+/// A TypeError here means the server sent a shape this build cannot read,
+/// which is what an app older than the API looks like from the inside: the
+/// login itself succeeded and parsing the reply is what fell over.
+///
+/// It used to say only "An unexpected error occurred". That sentence sent
+/// someone through the backend, the tunnel and the database looking for a
+/// fault that was not there, when the answer was to install a newer build.
+String loginFailureMessage(Object error) {
+  if (error is TypeError) {
+    return 'This version of the app cannot read what the server sent. '
+        'Please install the latest build.';
+  }
+
+  return 'An unexpected error occurred';
+}
+
 class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
 
@@ -37,7 +55,7 @@ class AuthProvider with ChangeNotifier {
         return false;
       }
     } catch (e) {
-      _errorMessage = 'An unexpected error occurred';
+      _errorMessage = loginFailureMessage(e);
       _isLoading = false;
       notifyListeners();
       return false;

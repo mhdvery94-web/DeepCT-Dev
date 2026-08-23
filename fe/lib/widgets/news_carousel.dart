@@ -205,9 +205,51 @@ class _NewsSlide extends StatelessWidget {
     // header, and the bearer token when there is one. A visitor has no token
     // and needs none — these posts are published — but an administrator
     // previewing the site gets the same code path.
-    return AuthedImage(
+    final image = AuthedImage(
       path: post.imagePath,
       placeholder: const _PhotoFrame(),
+    );
+
+    if (!post.hasVideo) return image;
+
+    // A clip attached to a post that also has a body was invisible: the
+    // button said READ MORE, nothing on the slide mentioned a video, and it
+    // sat behind a tap nobody had a reason to make. The badge is the reason.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        image,
+        Positioned(
+          left: 12,
+          bottom: 12,
+          child: Container(
+            key: const Key('news-video-badge'),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            color: Colors.black.withValues(alpha: 0.7),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.play_circle_outline,
+                  size: 16,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  post.videoSizeLabel == null
+                      ? 'VIDEO'
+                      : 'VIDEO · ${post.videoSizeLabel}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -248,9 +290,15 @@ class _NewsSlide extends StatelessWidget {
             TextButton(
               onPressed: () => _showFull(context),
               style: TextButton.styleFrom(padding: EdgeInsets.zero),
+              // Naming the video whenever there is one. It used to say
+              // WATCH VIDEO only when the body was empty, so a post with
+              // both hid the clip behind a READ MORE nobody would read as
+              // "there is a video in here".
               child: Text(
-                post.hasVideo && (post.body ?? '').isEmpty
-                    ? 'WATCH VIDEO'
+                post.hasVideo
+                    ? ((post.body ?? '').isEmpty
+                          ? 'WATCH VIDEO'
+                          : 'READ MORE & WATCH')
                     : 'READ MORE',
               ),
             ),
