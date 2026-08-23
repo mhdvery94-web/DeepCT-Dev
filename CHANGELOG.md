@@ -33,6 +33,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.25.0] - 2026-08-23
+
+### Bagian E dan F: preview yang terlewat, dan gestur yang tidak ada penanganannya
+
+#### E menutup separuh poin 10
+
+Audit terhadap sepuluh permintaan asli, dijalankan terhadap kode dan bukan
+terhadap ingatan, menemukan sembilan selesai dan satu setengah. Poin 10 meminta
+**dua** preview di tab training — satu untuk frame yang masuk, satu untuk hasil
+yang keluar. Bagian D membangun yang kedua; yang pertama terlewat saat D
+dirancang.
+
+E jauh lebih kecil daripada bagian C. C harus memecah unggah dari analisis
+karena `PredictionIntake` mengantrikan pekerjaan pada detik berkasnya selesai
+naik. Training tidak begitu: job duduk sebagai `queued` sampai ada worker yang
+mengklaimnya, jadi jendela untuk melihatnya sudah ada. **Tidak ada status baru
+dan tidak ada alur yang dipecah.**
+
+Arsipnya tidak pernah diekstrak. `ZipArchive` membaca satu entri dan
+`TiffPreview` sudah menerima byte mentah, jadi sebuah dataset 2 GB tidak
+digandakan hanya untuk dilihat.
+
+Satu hal yang ditemukan saat mengerjakannya: `ownedJob()` memuat relasi dataset
+dengan kolom terbatas — `id,name,size_bytes` — dan `archive_path` tidak
+termasuk. Memperlebarnya akan membuat jalur penyimpanan ikut terbawa ke setiap
+payload job, jadi path-nya diambil eksplisit di satu metode yang memang
+membutuhkannya.
+
+#### F, dan separuhnya adalah bug
+
+Menggeser jari tidak melakukan apa pun sebelum ini. Sekarang ia berpindah tab,
+berhenti di ujung alih-alih melingkar — melingkar berarti satu geseran dari
+entri terakhir mendarat di Dashboard, yang terasa seperti kehilangan tempat.
+
+Yang lebih penting: **tidak ada `PopScope`, `WillPopScope`, maupun penangan
+gestur sama sekali di kedua shell.** Gestur kembali Android tidak dicegat oleh
+apa pun, sehingga satu geseran yang meleset di Dashboard melempar orang ke
+landing page tanpa peringatan. Sekarang gestur kembali pulang ke Dashboard dari
+tab mana pun, dan dari Dashboard ia membuka dialog yang **sama persis** dengan
+yang dibuka tombol Sign out — bukan dialog kedua yang bisa menyimpang.
+
+`GestureDetector`, bukan `PageView`, dan itu keputusan yang menentukan. Tabel
+metrik training dan beberapa tabel admin menggulung horizontal juga; `PageView`
+akan merebut gestur sebelum anaknya sempat memintanya. Scrollable di dalam
+menang melawan `GestureDetector` di arena gestur Flutter, sehingga geseran di
+atas tabel menggulung tabelnya dan geseran di tempat lain sampai ke shell.
+
+#### Terverifikasi, dan yang tidak
+
+Backend **279 test** (dari 272), Flutter **174 test** (dari 168),
+`flutter analyze` bersih.
+
+**Yang tidak bisa diuji di sini:** gestur tepi layar Android sungguhan, dan
+apakah `SelectionArea` dari bagian A masih bisa menyeleksi teks di sebelah
+`GestureDetector` yang baru. Keduanya bekerja pada pohon widget yang sama dan
+hanya terlihat di perangkat.
+
+Test yang ada mengunci hal yang membuat gesturnya mendarat benar ketika ia
+memang sampai: daftar seksinya berurutan dengan Dashboard di depan, melangkah
+berhenti di ujung, dan tab Training admin yang dihapus di bagian D tetap
+hilang — sehingga sebuah geseran tidak bisa berjalan kembali ke sana.
+
 ## [1.24.0] - 2026-08-23
 
 ### Bagian D: training jadi milik periset

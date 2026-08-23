@@ -85,6 +85,26 @@ Urutan slide: `sort_order` menaik, lalu `published_at` menurun.
 
 **`GET /news/{id}/image`** — foto apa adanya beserta mime type aslinya.
 
+### Training: melihat dataset sebelum melatihnya
+
+| Metode | Rute | Untuk apa |
+|---|---|---|
+| `GET` | `/me/training/jobs/{id}/dataset/frames` | Nama entri `.tif` di dalam arsip, terurut |
+| `GET` | `/me/training/jobs/{id}/dataset/frames/{name}/preview` | Entri itu, dirender jadi PNG |
+
+**Arsipnya tidak pernah diekstrak.** Sebuah dataset adalah hal terbesar yang
+disimpan platform ini, dan menggandakannya di disk hanya untuk dilihat akan
+absurd. `ZipArchive` membaca direktori pusat di akhir berkas, jadi mendaftar
+isinya berbiaya sebanyak jumlah entri dan bukan ukurannya; `getFromName()`
+menarik satu entri saat sebuah frame benar-benar diminta.
+
+**Nama entri divalidasi terhadap daftar isi arsip**, bukan sekadar
+di-`basename()`. Sebuah nama yang lolos ke `getFromName()` tanpa diperiksa akan
+membaca apa pun yang ditunjuknya.
+
+Hasil render di-cache di samping dataset-nya, sama seperti preview frame
+prediksi, sehingga menggeser bolak-balik tidak membuka ulang ZIP setiap kali.
+
 ### Training: sampel per epoch
 
 | Metode | Rute | Untuk apa |

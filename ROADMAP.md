@@ -478,8 +478,11 @@ C sebelum D karena D memakai widget yang lahir di C.
       Berbeda dari prediksi, ini tidak bisa dikerjakan dalam hitungan menit —
       training memakan berjam-jam.
 
-- [ ] **E — Preview dataset training.** Menutup separuh poin 10 yang terlewat
-      saat D dirancang: unggah dataset punya preview seperti unggah prediksi.
+- [x] **E — Preview dataset training** — selesai dan terbukti, 23 Agustus 2026.
+      Backend 279 test (dari 272), Flutter 174 test, `flutter analyze` bersih.
+
+      Menutup separuh poin 10 yang terlewat saat D dirancang: unggah dataset
+      punya preview seperti unggah prediksi.
       Rancangan:
       [docs/superpowers/specs/2026-08-23-e-dataset-preview-design.md](docs/superpowers/specs/2026-08-23-e-dataset-preview-design.md).
 
@@ -492,12 +495,20 @@ C sebelum D karena D memakai widget yang lahir di C.
       tidak ada status baru yang perlu ditambahkan. Dibaca langsung dari dalam
       ZIP lewat `ZipArchive`, tanpa satu byte disk tambahan.
 
+      **Satu-satunya bagian sejak C yang selesai penuh tanpa GPU**, karena ia
+      membaca berkas yang sudah ada di disk dan merender dengan kode yang sudah
+      diuji. Yang tetap belum dilihat mata: tampilannya di perangkat.
+
 ### 13. Perbaikan tambahan
 
 Diajukan 22 Agustus 2026, di luar sepuluh permintaan di no. 12.
 
-- [ ] **F — Navigasi swipe di ponsel, dan konfirmasi sebelum keluar.** Dua hal
-      yang berhubungan, keduanya soal gestur di perangkat sentuh. Rancangan:
+- [x] **F — Navigasi swipe di ponsel, dan konfirmasi sebelum keluar** — kode
+      selesai 23 Agustus 2026, **gesturnya belum dicoba di perangkat**.
+      Flutter 174 test, `flutter analyze` bersih.
+
+      Dua hal yang berhubungan, keduanya soal gestur di perangkat sentuh.
+      Rancangan:
       [docs/superpowers/specs/2026-08-23-f-swipe-navigation-design.md](docs/superpowers/specs/2026-08-23-f-swipe-navigation-design.md).
 
       **Yang pertama:** menggeser jari ke kiri atau kanan tidak melakukan apa
@@ -516,6 +527,16 @@ Diajukan 22 Agustus 2026, di luar sepuluh permintaan di no. 12.
       Keduanya menyentuh `user_shell.dart` dan `admin_shell.dart`, dan
       keduanya hanya bisa dibuktikan di perangkat sentuh sungguhan — test
       widget tidak menjangkau gestur tepi layar.
+
+      **Yang masih harus dilihat di perangkat:** apakah gestur tepi layar
+      Android sungguhan sampai ke `PopScope`, dan apakah `SelectionArea` dari
+      bagian A masih bisa menyeleksi teks di sebelah `GestureDetector` yang
+      baru. Keduanya bekerja pada pohon widget yang sama.
+
+      Test yang ada mengunci apa yang membuat gesturnya mendarat benar ketika
+      ia sampai: urutan seksi dengan Dashboard di depan, melangkah yang
+      berhenti di ujung, dan tab Training admin yang dihapus di bagian D tetap
+      hilang.
 
 - [x] Pipeline prediksi FASE 3 (upload, interpolasi rekursif, unduh, retensi)
 - [x] **Pipeline prediksi diuji ujung-ke-ujung di VPS terhadap GPU sungguhan**
