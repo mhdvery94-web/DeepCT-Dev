@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/model_info.dart';
+import '../../models/training.dart';
 import '../../models/model_status_message.dart';
 import '../../models/pagination.dart';
 import '../../services/admin_model_service.dart';
@@ -9,7 +10,9 @@ import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
+import '../../services/training_service.dart';
 import '../../widgets/pagination_bar.dart';
+import '../../widgets/register_model_form.dart';
 import '../../widgets/model_status_strip.dart';
 import '../../widgets/status_badge.dart';
 
@@ -28,6 +31,16 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
   final AdminModelService _service = AdminModelService();
 
   List<ModelInfo> _models = [];
+
+  final TrainingService _training = TrainingService();
+
+  /// Finished runs whose weights are not a model yet.
+  ///
+  /// This screen inherited the job when the admin Training tab was deleted:
+  /// registering weights *is* creating a model version, and models live here.
+  /// It was the one thing that tab could do that nothing else could — without
+  /// it a finished run has no way out of the training pipeline at all.
+  List<TrainingJob> _finishedJobs = const [];
   Pagination _pagination = const Pagination.empty();
 
   bool _isLoading = true;
@@ -58,12 +71,73 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
         _pagination = result.pagination;
         _isLoading = false;
       });
+
+      await _loadFinishedJobs();
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.message;
         _isLoading = false;
       });
+    }
+  }
+
+  /// Failures here are silent on purpose: this is a secondary panel, and a
+  /// training service that is unreachable must not take the model list with
+  /// it.
+  Future<void> _loadFinishedJobs() async {
+    try {
+      final result = await _training.jobs(status: 'completed');
+      if (!mounted) return;
+      setState(() {
+        _finishedJobs = result.page.items
+            .where((j) => j.resultingModelId == null)
+            .toList();
+      });
+    } on ApiException {
+      if (mounted) setState(() => _finishedJobs = const []);
+    }
+  }
+
+  Future<void> _registerModel(TrainingJob job) async {
+    final message = await showAppDialog<String>(
+      context: context,
+      maxWidth: 480,
+      builder: (_) => RegisterModelForm(job: job),
+    );
+
+    if (message == null) return;
+
+    _showMessage(message);
+    await _load();
+  }
+
+  Future<void> _deleteTrainingJob(TrainingJob job) async {
+    final confirmed = await showAppAlertDialog<bool>(
+      context: context,
+      title: 'Delete training run',
+      content: Text('Delete "${job.name}"? This cannot be undone.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('DELETE'),
+        ),
+      ],
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _training.deleteJob(job.id);
+      _showMessage('Training run deleted.');
+      await _load();
+    } on ApiException catch (e) {
+      _showMessage(e.message, isError: true);
     }
   }
 
@@ -201,6 +275,7 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
           ModelStatusStrip(onChanged: (_) => _load()),
           const SizedBox(height: 16),
           Expanded(child: _buildContent()),
+          _buildTrainingHandoff(context),
           PaginationBar(
             pagination: _pagination,
             onPageChanged: (p) {
@@ -305,6 +380,65 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
       },
     );
   }
+
+  /// Finished training runs waiting to become model versions.
+  ///
+  /// Hidden entirely when there are none, so the screen does not carry an
+  /// empty heading for a state that is the normal one.
+  Widget _buildTrainingHandoff(BuildContext context) {
+    if (_finishedJobs.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        Text(
+          'Training runs ready to register',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        for (final job in _finishedJobs)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        job.name,
+                        style: Theme.of(context).textTheme.titleSmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        '${job.currentEpoch} epochs trained',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _registerModel(job),
+                  child: const Text('REGISTER AS MODEL'),
+                ),
+                TextButton(
+                  onPressed: () => _deleteTrainingJob(job),
+                  style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+                  child: const Text('DELETE'),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
 }
 
 class _ModelCard extends StatelessWidget {

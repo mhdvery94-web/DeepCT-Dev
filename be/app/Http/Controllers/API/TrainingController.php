@@ -7,7 +7,6 @@ use App\Models\Model;
 use App\Models\TrainingDataset;
 use App\Models\TrainingJob;
 use App\Models\UserActivity;
-use App\Services\TrainerDispatcher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -172,60 +171,6 @@ class TrainingController extends Controller
         ]);
     }
 
-    /**
-     * POST /api/admin/training/jobs/{id}/dispatch
-     *
-     * Push the job to a trainer, the same way a prediction is pushed to a model
-     * endpoint: the GPU host exposes a URL, the platform posts the job to it,
-     * and the notebook starts training.
-     *
-     * The alternative — a worker polling `claim` — still exists and is still
-     * the safety net after a session dies. This is simply the button an
-     * administrator expects: register a URL, press start.
-     *
-     * Two things make this work where a naive version would not:
-     *
-     *  - The request only asks the trainer to **accept** the job, with a short
-     *    timeout. A notebook that held the connection open for the length of a
-     *    multi-day training would time out on any network in the world.
-     *  - The payload carries the callback base and the worker token, so the
-     *    trainer reports progress through exactly the same protocol a polling
-     *    worker uses. Heartbeats, checkpoints and resume-after-death are not
-     *    bypassed by pushing — they are the reason a pushed job survives its
-     *    session expiring.
-     */
-    public function dispatchJob(Request $request, $id)
-    {
-        $validated = $request->validate([
-            'trainer_url' => 'nullable|url|max:500',
-        ]);
-
-        $job = TrainingJob::with('dataset')->findOrFail($id);
-
-        // The dispatch itself lives in a service: a researcher starting their
-        // own run needs exactly the same thing to happen, and two copies of
-        // this would drift the moment either was touched.
-        $result = app(TrainerDispatcher::class)
-            ->dispatch($job, $validated['trainer_url'] ?? null);
-
-        if (! $result['ok']) {
-            return response()->json([
-                'success' => false,
-                'message' => $result['message'],
-            ], $result['status']);
-        }
-
-        $this->record($request, 'training_job_dispatched',
-            "Dispatched training job #{$job->id} to a trainer", [
-                'job_id' => $job->id,
-            ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => $result['message'],
-            'data' => $this->serialiseJob($job->fresh()->load('dataset')),
-        ]);
-    }
 
     /** POST /api/admin/training/jobs/{id}/cancel */
     public function cancelJob(Request $request, $id)
