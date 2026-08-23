@@ -457,9 +457,26 @@ C sebelum D karena D memakai widget yang lahir di C.
       `tf.reduce_mean(tf.abs(...))`, yaitu MAE menurut definisi. `loss` tetap
       dikirim supaya job lama tidak kehilangan grafiknya.
 
-      Dibangun di atas jalur yang belum pernah dijalani (no. 10), jadi akan
-      ditandai belum terverifikasi sampai ada run nyata di Kaggle dengan skrip
-      versi baru.
+      **Kode selesai 23 Agustus 2026, dan sengaja belum dicentang.** Backend
+      272 test, Flutter 168 test (dari 162), `flutter analyze` bersih. Jumlah
+      backend turun dari 281 karena sembilan test dispatch dihapus bersama
+      rutenya, bukan karena ada yang rusak.
+
+      **Tidak satu pun dari bagian D pernah bertemu GPU.** Jalur training belum
+      pernah dijalankan sekali pun terhadap perangkat keras sungguhan (no. 10),
+      dan D menambahkan tiga hal baru di atasnya: metrik, endpoint sampel, dan
+      tabel `training_samples`. Perubahan pada `script-api-train-deepct.py`
+      hanya lolos `python -m py_compile` — itu membuktikan berkasnya terurai,
+      bukan bahwa `tf.image.ssim` dipanggil dengan benar.
+
+      **Yang dibutuhkan untuk mencentangnya:** sesi Kaggle menjalankan
+      `script-api-train-deepct.py` **versi baru**, sebuah dataset, dan satu
+      training yang berjalan sampai selesai. Yang harus terlihat: empat metrik
+      di tabel per epoch, dan gambar contoh yang bisa digeser dari epoch
+      pertama sampai terakhir.
+
+      Berbeda dari prediksi, ini tidak bisa dikerjakan dalam hitungan menit —
+      training memakan berjam-jam.
 
 ### 13. Perbaikan tambahan
 

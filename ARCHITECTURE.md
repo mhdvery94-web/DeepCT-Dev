@@ -230,6 +230,17 @@ tujuan ketiganya di samping `prediction` dan `training`.
 tidak perlu diumumkan, 50 MB perlu, dan angkanya ditampilkan di sebelah
 tombol putar.
 
+### `training_samples` — satu frame per epoch
+
+`training_job_id`, `epoch`, `path`. Unik pada pasangan `(job, epoch)`: worker
+yang mengulang sebuah epoch setelah sesi Kaggle-nya mati harus menimpa, bukan
+menggandakan.
+
+Dihapus bersama job-nya — tetapi **lewat Eloquent, bukan lewat foreign key**.
+Cascade di database menghapus barisnya dengan sempurna dan tidak memicu event
+model sama sekali, sehingga setiap PNG akan tertinggal di disk tanpa ada yang
+menunjuknya. `TrainingJob::booted()` menghapusnya lebih dulu justru karena itu.
+
 ### Tabel lain
 `personal_access_tokens` (Sanctum), `cache`, `cache_locks`, `jobs`,
 `job_batches`, `failed_jobs`, `migrations`, `sessions`,

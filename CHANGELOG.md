@@ -33,6 +33,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.24.0] - 2026-08-23
+
+### Bagian D: training jadi milik periset
+
+Bagian terakhir dari sepuluh permintaan perubahan. Rancangan dan rencananya ada
+di `docs/superpowers/specs/2026-08-23-d-researcher-training-design.md` dan
+`docs/superpowers/plans/2026-08-23-d-researcher-training.md`.
+
+#### Tab admin dihapus, kemampuannya tidak
+
+Poin 6 benar bahwa layar itu mengulang apa yang ada di tempat lain — daftar job
+dan daftar dataset. Tapi ia juga memegang `_registerModel()`, satu-satunya cara
+bobot hasil training berubah jadi model yang bisa dipakai siapa pun, dan
+satu-satunya penghapusan dataset dan job yang ada — yang menurut ROADMAP §11
+juga satu-satunya rem terhadap disk yang terisi.
+
+Menghapus layarnya tanpa memindahkan ketiganya akan membuat training jadi jalan
+buntu: bobot ada di disk dan tidak ada yang bisa memakainya.
+
+Ketiganya pindah ke Model Management, karena mendaftarkan bobot **adalah**
+membuat versi model, dan model memang hidup di sana. Formulirnya dibawa utuh
+alih-alih ditulis ulang — ia sudah bekerja, dan menulis ulang satu-satunya
+jalan keluar dari pipeline training hanya menambah risiko.
+
+Yang benar-benar dicabut cuma `dispatch`, beserta sembilan test-nya. Ia lahir
+ketika admin yang memulai run; sekarang periset yang memulai, dan job antre
+diklaim worker sendiri. Test-nya dihapus alih-alih ditulis ulang jadi tentang
+`claim`: itu perilaku berbeda yang sudah punya testnya sendiri, dan memindahkan
+asersi ke tempat yang salah menyembunyikan cakupan yang hilang.
+
+#### MAE ternyata sudah ada sejak awal
+
+Tiga dari empat metrik yang diminta tidak punya sumber — trainer hanya
+mengirim `loss` dan `psnr`.
+
+Tetapi `loss` di trainer adalah `tf.reduce_mean(tf.abs(prediction - target))`,
+yang **adalah** mean absolute error menurut definisi. Ia sekarang dikirim
+dengan dua nama, dan `loss` tetap ada supaya run yang sudah tercatat tidak
+kehilangan grafiknya. SSIM dan MSE masing-masing satu baris, berdampingan
+dengan PSNR yang sudah dihitung.
+
+#### Tabel metrik butuh lebih sedikit daripada dugaan, dan hal yang berbeda
+
+Tabelnya sudah membangun kolom dari gabungan setiap kunci yang pernah
+dilaporkan — sehingga notebook yang mulai mengukur sesuatu yang baru tidak
+menuntut perubahan kode — dan sudah merender `—` untuk nilai yang tidak ada.
+Empat kolom tetap yang direncanakan justru akan jadi kemunduran.
+
+Yang benar-benar kurang adalah urutan. Dengan trainer mengirim empat metrik, ia
+juga akan menumbuhkan kolom `BATCHES` dan `SAMPLES` — yang mengatakan berapa
+banyak kerja, bukan seberapa baik — dan `MAE` berdampingan dengan `LOSS`
+membawa satu angka dua kali.
+
+#### Satu frame per epoch
+
+Generator dijalankan pada **satu triplet uji tetap** di akhir tiap epoch. Tetap,
+bukan acak: membandingkan epoch 3 dengan epoch 9 pada triplet berbeda tidak
+mengatakan apa pun tentang modelnya, hanya tentang tripletnya.
+
+`FrameStackViewer` dari bagian C dipakai apa adanya, dengan epoch sebagai
+sumbunya. Ia dibuka pada epoch terakhir: yang ingin dilihat orang adalah di mana
+modelnya sekarang, bukan di mana ia bermula.
+
+Satu jebakan yang layak dicatat: foreign key `cascadeOnDelete` menghapus baris
+sampel dengan sempurna dan **tidak memicu event Eloquent sama sekali**,
+sehingga setiap PNG akan tertinggal di disk tanpa ada yang menunjuknya.
+`TrainingJob` menghapusnya lewat Eloquent lebih dulu, dan ada test yang
+menegaskan berkasnya benar-benar hilang.
+
+#### Terverifikasi, dan yang tidak
+
+Backend **272 test**, Flutter **168 test** (dari 162), `flutter analyze` bersih.
+
+Jumlah backend turun dari 281 ke 272 karena sembilan test dispatch dihapus
+bersama rutenya, bukan karena ada yang rusak.
+
+**Tidak satu pun dari bagian D pernah bertemu GPU.** Jalur training belum pernah
+dijalankan sekali pun terhadap perangkat keras sungguhan — ROADMAP §10
+mencatatnya sejak 18 Agustus — dan D menambahkan tiga hal baru di atasnya.
+Perubahan pada `script-api-train-deepct.py` hanya lolos `python -m py_compile`,
+yang membuktikan berkasnya terurai dan bukan bahwa `tf.image.ssim` dipanggil
+dengan benar.
+
 ## [1.23.0] - 2026-08-23
 
 ### Bagian C: unggah, lihat, lalu analisis

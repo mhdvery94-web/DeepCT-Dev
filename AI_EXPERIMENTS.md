@@ -13,6 +13,44 @@ Dokumen ini berisi catatan masalah, uji coba, dan solusi yang diterapkan pada mo
 
 ---
 
+## Metrik training, 23 Agustus 2026
+
+Trainer kini melaporkan **empat** angka per epoch, bukan dua.
+
+Yang mengejutkan: **MAE sudah dihitung sejak awal.** Loss di
+`script-api-train-deepct.py` adalah `tf.reduce_mean(tf.abs(prediction -
+target))` — itu definisi mean absolute error, hanya saja tercatat dengan nama
+`loss`. Ia sekarang dikirim dengan dua nama sekaligus, dan `loss` tetap ada
+supaya run yang sudah tercatat tidak kehilangan grafiknya.
+
+Yang benar-benar baru cuma dua baris, berdampingan dengan PSNR yang sudah ada:
+
+```python
+ssim = tf.reduce_mean(tf.image.ssim(a, b, max_val=1.0))
+mse = tf.reduce_mean(tf.square(prediction - target))
+```
+
+Keduanya di-window ke [0,1], karena di sanalah PSNR dan SSIM didefinisikan
+sementara model bekerja di [-1,1].
+
+### Satu frame per epoch
+
+Di akhir tiap epoch, generator dijalankan pada **satu triplet uji tetap** dan
+PNG-nya dikirim ke platform. Tetap, bukan acak: membandingkan epoch 3 dengan
+epoch 9 pada triplet yang berbeda tidak mengatakan apa pun tentang modelnya,
+hanya tentang tripletnya.
+
+Unggahannya sengaja *best effort* dan menelan kegagalannya sendiri. Sebuah
+gambar pratinjau yang tidak sampai tidak boleh menggagalkan training yang sudah
+berjalan berjam-jam.
+
+**Belum ada satu pun angka di atas yang berasal dari run sungguhan.** Jalur
+training belum pernah dijalankan terhadap GPU sekali pun — lihat ROADMAP §10 —
+dan seluruh perubahan ini hanya lolos `python -m py_compile`, yang membuktikan
+berkasnya terurai dan bukan bahwa `tf.image.ssim` dipanggil dengan benar.
+
+---
+
 ## 📊 Model Information
 
 ### GiNet TC-D (Generative Interpolation Network - Temporal Conditional Diffusion)

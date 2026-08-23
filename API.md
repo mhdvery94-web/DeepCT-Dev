@@ -85,6 +85,26 @@ Urutan slide: `sort_order` menaik, lalu `published_at` menurun.
 
 **`GET /news/{id}/image`** — foto apa adanya beserta mime type aslinya.
 
+### Training: sampel per epoch
+
+| Metode | Rute | Untuk apa |
+|---|---|---|
+| `POST` | `/training/worker/jobs/{id}/sample` | Worker mengirim satu PNG untuk sebuah epoch |
+| `GET` | `/me/training/jobs/{id}/samples` | Epoch mana saja yang punya gambar |
+| `GET` | `/me/training/jobs/{id}/samples/{epoch}` | PNG-nya |
+
+Yang pertama berada di grup `training.worker`, di luar `auth:sanctum`, dengan
+header `X-Worker-Token`. Batasnya 4 MB per sampel. Mengirim ulang sebuah epoch
+**menimpa** yang lama beserta berkasnya — worker yang mengulang setelah
+kehilangan sesi Kaggle adalah keadaan normal di sini, bukan pengecualian.
+
+Dua sisanya dibatasi pemilik job dan menjawab 404 untuk orang lain.
+
+**`POST /admin/training/jobs/{id}/dispatch` sudah tidak ada.** Ia lahir ketika
+admin yang memulai run; sekarang periset yang memulai, dan job antre diklaim
+worker lewat `POST /training/worker/claim`. Dua jalur menuju hal yang sama yang
+bedanya cuma siapa yang menekan bukanlah pengawasan.
+
 **`GET /news/{id}/video`** — video apa adanya, MP4 atau WebM. Dilayani
 `BinaryFileResponse`, yang menjawab `Range` sendiri: sebuah permintaan
 `Range: bytes=0-99` dijawab `206` dengan `Content-Range`, dan itulah yang
@@ -504,7 +524,6 @@ inbox tapi tetap ada, dan pesan baru dari orangnya menariknya kembali.
 | `DELETE` | `/admin/training/datasets/{id}` — **409** kalau masih dipakai job |
 | `GET` | `/admin/training/jobs` — filter `status` |
 | `GET` | `/admin/training/jobs/{id}` |
-| `POST` | `/admin/training/jobs/{id}/dispatch` — dorong ke trainer |
 | `POST` | `/admin/training/jobs/{id}/cancel` |
 | `DELETE` | `/admin/training/jobs/{id}` |
 | `GET` | `/admin/training/jobs/{id}/weights` |
@@ -519,21 +538,20 @@ ini; `source_type: url` cuma mencatat alamat yang nanti diambil sendiri oleh
 worker. Yang kedua itulah yang benar untuk dataset besar — mengirim 20 GB naik
 ke server lalu turun lagi ke Kaggle memboroskan dua-duanya.
 
-**`POST /admin/training/jobs/{id}/dispatch`** — mendorong job ke GPU, bentuknya
-persis seperti prediksi didorong ke endpoint model. Body opsional
-`trainer_url`; kalau kosong dipakai `TRAINING_TRAINER_URL`. URL yang terpakai
-disimpan di baris job-nya.
+**`POST /admin/training/jobs/{id}/dispatch` telah dicabut** pada 23 Agustus
+2026. Ia mendorong job ke GPU dengan bentuk yang persis seperti prediksi
+didorong ke endpoint model, dan ia ada karena dulu admin yang memulai run.
 
-Yang dikirim ke trainer: id job, epoch, hyperparameter, sumber dataset, **dan
-`callback`** berisi `base_url` + `worker_token`. Tanpa dua yang terakhir,
-trainer bisa melatih dengan sempurna lalu tidak punya tempat menaruh hasilnya.
+Sekarang periset yang memulai, dan job antre diklaim worker sendiri lewat
+`POST /training/worker/claim` — mekanisme yang memang dirancang untuk itu, dan
+yang membuat sebuah run bertahan melewati sesi Kaggle yang mati. Dua jalur
+menuju hal yang sama yang bedanya cuma siapa yang menekan bukanlah pengawasan.
 
-| Kondisi | Hasil |
-|---|---|
-| Job bukan `queued` | **409** |
-| Tidak ada trainer URL / worker token | **422** |
-| `callback` menunjuk ke `localhost` | **422** — GPU di internet tidak bisa menjangkaunya |
-| Trainer menolak atau tidak terjangkau | **502**, job **tetap `queued`** |
+Yang dikirim ke trainer tidak berubah: id job, epoch, hyperparameter, sumber
+dataset, **dan `callback`** berisi `base_url` + `worker_token`. Tanpa dua yang
+terakhir, trainer bisa melatih dengan sempurna lalu tidak punya tempat menaruh
+hasilnya.
+
 
 Job **tetap `queued`** setelah berhasil dikirim. Trainer bilang ia *menerima*;
 yang membuktikan ia *mulai* adalah heartbeat pertama. Menandainya `running` di
