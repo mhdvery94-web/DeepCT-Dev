@@ -296,10 +296,16 @@ def prepare_model(learning_rate: float, checkpoint_path: str | None):
             _model["optimizer"].apply_gradients(
                 zip(gradients, _model["generator"].trainable_variables)
             )
-            psnr = tf.reduce_mean(
-                tf.image.psnr((prediction + 1.0) / 2.0, (target + 1.0) / 2.0, max_val=1.0)
-            )
-            return loss, psnr
+            # Windowed to [0,1] because both PSNR and SSIM are defined on
+            # that range, while the model works in [-1,1].
+            a = (prediction + 1.0) / 2.0
+            b = (target + 1.0) / 2.0
+
+            psnr = tf.reduce_mean(tf.image.psnr(a, b, max_val=1.0))
+            ssim = tf.reduce_mean(tf.image.ssim(a, b, max_val=1.0))
+            mse = tf.reduce_mean(tf.square(prediction - target))
+
+            return loss, psnr, ssim, mse
 
         _model["step"] = step
 
@@ -326,24 +332,33 @@ def train_one_epoch(request: TrainRequest, dataset_dir: str, epoch: int,
     if steps_cap:
         order = order[: steps_cap * batch_size]
 
-    losses, psnrs, batches = [], [], 0
+    losses, psnrs, ssims, mses, batches = [], [], [], [], 0
 
     for start in range(0, len(order) - batch_size + 1, batch_size):
         pair, time_scalar, target = batch_from(
             paths, samples, order[start:start + batch_size]
         )
-        loss, psnr = step(pair, time_scalar, target)
+        loss, psnr, ssim, mse = step(pair, time_scalar, target)
 
         losses.append(float(loss))
         psnrs.append(float(psnr))
+        ssims.append(float(ssim))
+        mses.append(float(mse))
         batches += 1
 
         if batches % 25 == 0:
             print(f"[epoch {epoch}] {batches} batches, l1={np.mean(losses):.5f}")
 
     metrics = {
+        # `loss` here is L1 — mean absolute error by definition. It is
+        # reported under both names: `mae` because that is what it is, and
+        # `loss` because jobs recorded before this change are plotted under
+        # that key and would lose their graphs otherwise.
+        "mae": round(float(np.mean(losses)), 6),
         "loss": round(float(np.mean(losses)), 6),
         "psnr": round(float(np.mean(psnrs)), 4),
+        "ssim": round(float(np.mean(ssims)), 4),
+        "mse": round(float(np.mean(mses)), 6),
         "batches": batches,
         "samples": len(samples),
         "balanced_t": balanced_t,
