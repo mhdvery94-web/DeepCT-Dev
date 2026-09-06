@@ -1,56 +1,24 @@
-"""
-Training endpoint for the notebook — the twin of `script-api-deepct.py`.
+!pip install -q pyngrok fastapi uvicorn nest-asyncio tifffile
 
-Where the inference script exposes `POST /predict` over a tunnel and answers
-with an interpolated TIFF, this one exposes `POST /train` and runs a training
-job, reporting its progress back to the platform:
+import os
+from kaggle_secrets import UserSecretsClient
+import nest_asyncio
 
-    Admin console ──POST /train──► this notebook ──heartbeat/checkpoint──► platform
+# 1. SETUP KAGGLE SECRETS
+user_secrets = UserSecretsClient()
 
-Paste it into a Kaggle/Colab cell exactly like the inference script, copy the
-printed URL into the admin console (Training → trainer URL), then press
-"SEND TO TRAINER" on a queued job.
+# Ambil secret ngrok Anda dan masukkan ke environment variable yang dicari skrip
+os.environ["NGROK_AUTHTOKEN"] = user_secrets.get_secret("ngrok-endpoint")
 
-WHAT THIS TRAINS, AND WHAT IT DOES NOT
---------------------------------------
-Read this before quoting any number it prints.
+# Jika Anda juga punya secret untuk WORKER_TOKEN, uncomment baris di bawah ini:
+# os.environ["WORKER_TOKEN"] = user_secrets.get_secret("WORKER_TOKEN")
 
-The reference notebook `models-ai/Evaluation_2_to_1_1kx1k_With_Logo.ipynb` is an
-*evaluation* tool: it loads a folder of frames and generates the midpoint of
-each consecutive pair. It contains no training code, no discriminator and no
-loss. The original model is a GAN, and its discriminator is not in this
-repository.
+# 2. TERAPKAN NEST-ASYNCIO
+nest_asyncio.apply()
+print("Kredensial dimuat dan nest-asyncio berhasil diterapkan!")
 
-So what runs here is a **supervised fine-tune of the generator on an L1 pixel
-loss** — the same layers, normalisation and geometry as the notebook, and a
-loss that is derivable from the data alone. It is not the adversarial training
-that produced the published weights, and results from it must not be reported
-as though it were. See ROADMAP.md ("Belum dibangun, dan alasannya") and
-AI_EXPERIMENTS.md.
-
-What it *is* good for is the one thing the platform actually needs: the shipped
-model was trained on a t-imbalanced dataset, which is why the platform
-interpolates recursively at t=0.5 instead of asking for an arbitrary t. This
-script samples t uniformly from the frame spacing available in the dataset
-(`balanced_t`, on by default), which is precisely the experiment that would
-make recursion unnecessary.
-
-SETUP IN KAGGLE
----------------
-The ngrok token is read from the environment — never paste it into this file,
-it is a credential for the tunnel account and this file is committed.
-
-    Add-ons → Secrets → add NGROK_AUTHTOKEN, then:
-
-        import os
-        from kaggle_secrets import UserSecretsClient
-        os.environ["NGROK_AUTHTOKEN"] = UserSecretsClient().get_secret("NGROK_AUTHTOKEN")
-
-    !pip install -q fastapi uvicorn nest_asyncio pyngrok tifffile
-
-Then paste this file into the next cell and run `await serve()`.
-"""
-
+# 3. MASUKKAN SELURUH SKRIP UTAMA DI SINI
+import hmac
 import io
 import os
 import random
@@ -65,7 +33,7 @@ from PIL import Image
 
 import nest_asyncio
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 # Kaggle and Jupyter already own an event loop.
@@ -127,11 +95,131 @@ IMAGE_SIZE = (1024, 1024)
 GLOBAL_MIN = 0.0
 GLOBAL_MAX = 65535.0
 
-BASE_MODEL_PATH = os.environ.get(
-    "BASE_MODEL_PATH",
-    "/kaggle/input/models/basiadyanna/deepct-unet/keras/v1/1/"
-    "generator(Salinan 3 Ginet TC-D_Revisi).h5",
-)
+# The base weights are searched for, not declared.
+#
+# Kaggle builds the path to an attached model out of the slug, the framework
+# and the version picked at attach time. `deepct-ai/tensorflow2/default/1`,
+# `deepct-unet/keras/v1/1` and `train-deepct/tensorflow2/version-1/1` are all
+# the same file at different moments, and re-attaching the model rewrites the
+# path for reasons that have nothing to do with this code.
+#
+# Three copies of this project carried three different hard-coded paths and two
+# of them were wrong. The failure arrives as `[Errno 2] No such file or
+# directory` *after* a run has been accepted, so a researcher watches a job go
+# to `failed` for a reason no part of the platform can fix.
+MODEL_SEARCH_ROOT = os.environ.get("MODEL_SEARCH_ROOT", "/kaggle/input")
+
+
+def find_base_model() -> str | None:
+    """The generator weights under /kaggle/input, or None if none are attached.
+
+    `BASE_MODEL_PATH` still wins when it is set: an explicit answer beats a
+    search, and it is the way out for a layout this cannot guess. Set and
+    missing is an error rather than a fallback — silently searching past a
+    path someone typed would train against weights they did not choose.
+    """
+    declared = os.environ.get("BASE_MODEL_PATH", "").strip()
+    if declared:
+        if not os.path.exists(declared):
+            raise RuntimeError(
+                f"BASE_MODEL_PATH is set to {declared}, which does not exist."
+            )
+        return declared
+
+    found = sorted(
+        glob(os.path.join(MODEL_SEARCH_ROOT, "**", "*.h5"), recursive=True)
+        + glob(os.path.join(MODEL_SEARCH_ROOT, "**", "*.keras"), recursive=True)
+    )
+    if not found:
+        return None
+
+    # Prefer the file named `generator`. A checkpoint folder can also hold the
+    # discriminator, and loading that gives a model that runs and returns
+    # nonsense — the worst of the three outcomes, because nothing raises.
+    named = [p for p in found if "generator" in os.path.basename(p).lower()]
+    return (named or found)[0]
+
+
+# --------------------------------------------------------------------------
+# Kredensial ngrok — dan kenapa dua notebook tidak boleh berbagi satu.
+#
+# Satu akun ngrok gratis punya satu domain reserved, dan `ngrok.connect()`
+# tanpa nama domain mengambil domain itu. Jadi notebook kedua yang menyala
+# ditolak dengan **ERR_NGROK_334 "endpoint is already online"** — bukan karena
+# kodenya salah, melainkan karena keduanya memakai kredensial yang sama.
+#
+# Ini pernah tidak terlihat karena notebook prediksi menempelkan token akun
+# *lain* langsung di sel. Itu menyelesaikan bentrokannya secara kebetulan, dan
+# membayar dengan kredensial polos di dalam kode.
+#
+# Urutannya: variabel lingkungan menang (itu yang dipakai sel pembuka
+# notebook), lalu secret milik notebook ini sendiri, baru secret bersama.
+# --------------------------------------------------------------------------
+PREFERRED_NGROK_SECRET = "ngrok-train"
+SHARED_NGROK_SECRET = "ngrok-endpoint"
+
+
+def resolve_ngrok_token(get_secret) -> str:
+    """Kredensial ngrok untuk notebook ini.
+
+    `get_secret` adalah `UserSecretsClient().get_secret` — dioper masuk supaya
+    pemilihannya bisa diperiksa tanpa Kaggle.
+    """
+    from_env = os.environ.get("NGROK_AUTHTOKEN", "").strip()
+    if from_env:
+        return from_env
+
+    for name in (PREFERRED_NGROK_SECRET, SHARED_NGROK_SECRET):
+        try:
+            value = (get_secret(name) or "").strip()
+        except Exception:                                 # noqa: BLE001
+            # Secret yang tidak ada melempar; itu keadaan biasa, bukan galat.
+            continue
+        if value:
+            print(f"[ngrok] memakai Kaggle secret '{name}'")
+            return value
+
+    raise RuntimeError(
+        "Tidak ada kredensial ngrok. Setel NGROK_AUTHTOKEN, atau buat Kaggle "
+        f"secret '{PREFERRED_NGROK_SECRET}' (khusus notebook ini) atau "
+        f"'{SHARED_NGROK_SECRET}' (dipakai bersama)."
+    )
+
+
+def explain_tunnel_failure(error) -> str | None:
+    """Kalimat untuk ERR_NGROK_334, atau None kalau bukan itu masalahnya.
+
+    pyngrok melempar bentrokan domain sebagai HTTP 502 dengan empat puluh baris
+    traceback, dan satu-satunya bagian yang bisa ditindaklanjuti terkubur di
+    dalam JSON di baris terakhir.
+    """
+    text = str(error)
+    if "ERR_NGROK_334" not in text and "already online" not in text:
+        return None
+
+    return (
+        "ERR_NGROK_334: domain ngrok akun ini sudah dipakai notebook "
+        "lain yang sedang menyala. Satu akun gratis hanya punya satu "
+        "domain, dan notebook training biasanya sudah memegangnya. "
+        "Pilih satu: (a) buat Kaggle secret "
+        f"'{PREFERRED_NGROK_SECRET}' berisi authtoken ngrok dari akun "
+        "kedua, lalu jalankan ulang sel ini; atau (b) hentikan "
+        "notebook satunya lebih dulu."
+    )
+
+
+BASE_MODEL_PATH = find_base_model()
+
+if BASE_MODEL_PATH:
+    print(f"[model] base weights: {BASE_MODEL_PATH}")
+else:
+    print(
+        "[model] nothing matching *.h5 or *.keras under "
+        f"{MODEL_SEARCH_ROOT}. Attach the model in the Kaggle sidebar "
+        "(Add Input -> Models), or set BASE_MODEL_PATH. The tunnel still "
+        "opens so the platform can see this worker, but every job will "
+        "fail until the weights are there."
+    )
 WORK_DIR = os.environ.get("WORK_DIR", "/kaggle/working/brin-training")
 PORT = int(os.environ.get("PORT", "8080"))
 
@@ -144,6 +232,41 @@ app = FastAPI(title="BRIN Neutron CT — training endpoint")
 # would leave both slower and neither reportable.
 _current = {"job_id": None}
 _lock = threading.Lock()
+
+
+# --------------------------------------------------------------------------
+# The shared secret
+#
+# The platform sends `Authorization: Bearer <token>` on every call to a worker
+# (see `App\Services\WorkerRequest`). Until this file checked it, sending it
+# protected nothing.
+#
+# On Kaggle behind a randomly named tunnel, having no check is security by
+# obscurity — and it holds, because nobody guesses the tunnel name. It stops
+# holding the moment the GPU moves to a workstation at a fixed address on the
+# lab network, where anyone on that network can start a multi-hour training run
+# on somebody else's card.
+#
+# Empty means open, and that is the default so nothing breaks today. Set it
+# through Kaggle Secrets and put the same value in the admin console under
+# Model Management → SHARED SECRET:
+#
+#     os.environ["WORKER_TOKEN"] = UserSecretsClient().get_secret("WORKER_TOKEN")
+# --------------------------------------------------------------------------
+WORKER_TOKEN = os.environ.get("WORKER_TOKEN", "").strip()
+
+
+def require_token(authorization: str | None = Header(default=None)) -> None:
+    if not WORKER_TOKEN:
+        return
+
+    # compare_digest rather than `==`: an ordinary string comparison returns on
+    # the first differing byte, and the timing difference is enough to recover
+    # a secret one character at a time.
+    if not authorization or not hmac.compare_digest(
+        authorization.strip(), f"Bearer {WORKER_TOKEN}"
+    ):
+        raise HTTPException(status_code=401, detail="Invalid worker token.")
 
 
 # ==========================================================================
@@ -280,7 +403,15 @@ def save_generator(generator, path: str) -> str:
 
 def prepare_model(learning_rate: float, checkpoint_path: str | None):
     if _model["generator"] is None:
-        _model["generator"] = load_generator(checkpoint_path or BASE_MODEL_PATH)
+        source = checkpoint_path or BASE_MODEL_PATH
+        if not source:
+            raise RuntimeError(
+                "No base weights to start from: nothing matching *.h5 or "
+                f"*.keras under {MODEL_SEARCH_ROOT}. Attach the model in the "
+                "Kaggle sidebar (Add Input -> Models) or set BASE_MODEL_PATH, "
+                "then restart this notebook."
+            )
+        _model["generator"] = load_generator(source)
         # beta_1=0.5 is the convention this family of image GANs is trained
         # with; it is a starting point, not a result.
         _model["optimizer"] = tf.keras.optimizers.Adam(
@@ -598,7 +729,7 @@ def run_training(request: TrainRequest):
 # 8. Routes
 # ==========================================================================
 
-@app.post("/train")
+@app.post("/train", dependencies=[Depends(require_token)])
 def start_training(request: TrainRequest, background: BackgroundTasks):
     """
     Accept a job and start it in the background.
@@ -626,11 +757,23 @@ def start_training(request: TrainRequest, background: BackgroundTasks):
 
 @app.get("/")
 def root():
-    """Also what the platform's health check probes."""
+    """Also what the platform's health check probes.
+
+    Left open on purpose. It starts nothing and spends nothing, and being able
+    to check that a tunnel is alive from a browser — without pasting a
+    credential into the address bar — is worth more than hiding the fact that
+    a training endpoint exists. `protected` is reported so a glance at this
+    page answers "did the secret actually take effect".
+    """
     return {
         "service": "brin-training",
         "busy": _current["job_id"] is not None,
         "job_id": _current["job_id"],
+        "protected": bool(WORKER_TOKEN),
+        # Which weights this session actually found. `null` here is the whole
+        # explanation for a run that fails the moment it starts training, and
+        # it is visible from a browser before a single job is sent.
+        "base_model": BASE_MODEL_PATH,
     }
 
 
@@ -639,18 +782,40 @@ def root():
 # ==========================================================================
 
 def open_tunnel() -> str | None:
-    token = os.environ.get("NGROK_AUTHTOKEN")
-    if not token:
-        print(
-            "NGROK_AUTHTOKEN is not set — serving on localhost only.\n"
-            "In Kaggle: Add-ons → Secrets, then copy it into os.environ."
-        )
+    try:
+        from kaggle_secrets import UserSecretsClient
+        get_secret = UserSecretsClient().get_secret
+    except Exception:                                     # noqa: BLE001
+        # Not on Kaggle. The environment variable is then the only source,
+        # which is what a workstation deployment uses anyway.
+        def get_secret(_name):
+            return ""
+
+    try:
+        token = resolve_ngrok_token(get_secret)
+    except RuntimeError as error:
+        # Deliberately not fatal: a trainer with no tunnel still serves
+        # localhost, and saying so is more useful than refusing to start.
+        print(str(error))
+        print("Serving on localhost only.")
         return None
 
     from pyngrok import ngrok
 
     ngrok.set_auth_token(token)
-    url = ngrok.connect(PORT).public_url
+
+    options = {"addr": PORT, "proto": "http"}
+    domain = os.environ.get("NGROK_DOMAIN", "").strip()
+    if domain:
+        options["domain"] = domain
+
+    try:
+        url = ngrok.connect(**options).public_url
+    except Exception as error:                            # noqa: BLE001
+        said = explain_tunnel_failure(error)
+        if said:
+            raise RuntimeError(said) from error
+        raise
 
     print("=" * 60)
     print(f"TRAINER URL: {url}")
@@ -659,7 +824,6 @@ def open_tunnel() -> str | None:
     print("=" * 60)
     return url
 
-
 async def serve():
     """Run in a notebook cell:  await serve()"""
     os.makedirs(WORK_DIR, exist_ok=True)
@@ -667,8 +831,6 @@ async def serve():
     server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=PORT))
     await server.serve()
 
-
-if __name__ == "__main__":
-    os.makedirs(WORK_DIR, exist_ok=True)
-    open_tunnel()
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+# 4. JALANKAN SERVER
+# Hapus blok "if __name__ == '__main__':" dan ganti dengan:
+await serve()
