@@ -536,13 +536,15 @@ percobaan penyempurnaan bobot memang dijalankan dan dilaporkan apa adanya pada
 subbab 3.6.8, tetapi hasilnya belum memenuhi ambang yang ditetapkan sebelum
 percobaan dimulai, sehingga bobot tersebut tidak dipasang.
 
-Keputusan itu membawa serta empat batas perilaku model, dan keempatnya
-diperlakukan sebagai batasan penelitian, bukan sebagai sasaran perbaikan.
-Semuanya diukur pada subbab 3.6.6 terhadap arsip proyeksi BRIN. Pertama, model
-hampir tidak memakai masukan skalar waktunya: mengubah nilai `t` di sepanjang
-rentang yang sah hanya menggeser keluaran sebesar 0,17% dari perubahan yang
-seharusnya, sehingga beberapa posisi waktu yang diminta dari sepasang frame
-yang sama menghasilkan citra yang praktis serupa. Kedua, karena hal tersebut
+Model tersebut dirancang untuk menyisipkan satu frame pada titik tengah di
+antara dua frame hasil pindai, dan hanya dilatih pada posisi itu. Rancangan
+tersebut membawa serta empat batas perilaku yang diperlakukan sebagai batasan
+penelitian, bukan sebagai sasaran perbaikan. Semuanya diukur pada subbab 3.6.6
+terhadap arsip proyeksi BRIN. Pertama, masukan skalar waktunya praktis tidak
+berpengaruh di luar titik tengah: mengubah nilai `t` di sepanjang rentang yang
+sah hanya menggeser keluaran sebesar 0,17% dari perubahan yang seharusnya,
+sehingga beberapa posisi waktu yang diminta dari sepasang frame yang sama
+menghasilkan citra yang praktis serupa. Kedua, karena hal tersebut
 pengisian harus dijalankan secara rekursif pada titik tengah, dan galatnya
 berlipat setiap kali sebuah batas ternyata merupakan keluaran model sendiri,
 yaitu 1,73 kali untuk satu batas dan 3,27 kali untuk dua. Ketiga, galat
@@ -1875,10 +1877,10 @@ sistem ini.
 Model proses berurutan menuntut kebutuhan dirumuskan lengkap sebelum
 pembangunan dimulai. Pada penelitian ini kebutuhan itu tidak dapat dirumuskan
 lengkap di awal, dan bukti paling jelasnya muncul dari pelaksanaannya sendiri:
-keempat cacat model pada subbab 3.6.6 baru terungkap setelah sistem berjalan
+keempat batas perilaku model pada subbab 3.6.6 baru terungkap setelah sistem berjalan
 dan diukur terhadap arsip sungguhan, bukan dari kajian pustaka.
 
-Cacat-cacat itu kemudian mengubah rancangan, dan dari situlah lahir pencatatan
+Batas-batas itu kemudian mengubah rancangan, dan dari situlah lahir pencatatan
 asal-usul frame serta batas kelayakan pada subbab 3.6.8. Sebuah rancangan yang
 dibekukan di awal tidak akan memiliki jalan untuk menyerap temuan semacam itu.
 Metode prototyping menyediakan jalan tersebut, dan penerapannya beserta
@@ -2038,14 +2040,34 @@ angka tersebut tidak boleh diperlakukan sebagai kegagalan.
 
 ### 3.6.6 Analisa Perilaku Bobot Dasar
 
-Sebelum bobot dasar disempurnakan, perilakunya diukur lebih dahulu. Pengukuran
-ini diperlukan karena keterangan yang beredar mengenai model tersebut, yaitu
-bahwa ia mengabaikan masukan skalar waktu, merupakan tafsiran atas gejala dan
-bukan hasil pengukuran. Sebuah penyempurnaan yang berangkat dari tafsiran yang
-salah akan memperbaiki hal yang tidak rusak.
+Sebelum bobot dasar disempurnakan, perilakunya diukur lebih dahulu. Pengukuran ini diperlukan karena keterangan yang beredar mengenai model
+tersebut, yaitu bahwa ia mengabaikan masukan skalar waktu, merupakan tafsiran
+atas gejala dan bukan hasil pengukuran. Sebuah penyempurnaan yang berangkat
+dari tafsiran yang salah akan memperbaiki hal yang tidak rusak.
 
 Pengukuran dilakukan terhadap berkas bobot yang dipakai melalui layanan
 inferensi yang berjalan, menggunakan arsip proyeksi nyata dari BRIN.
+
+**Rancangan model perlu dinyatakan lebih dahulu**, sebab ia menentukan mana
+yang merupakan batas rancangan dan mana yang benar-benar kekurangan. Dua
+sumber menyatakannya tanpa ragu.
+
+Notebook evaluasi yang menyertai bobot tersebut memanggil model dengan skalar
+waktu yang dipaku pada satu nilai, yaitu `t = 0,5`, menamai keluarannya dengan
+nomor ganjil `2i + 1`, dan menghasilkan tepat satu frame untuk setiap pasangan
+frame masukan yang berurutan. Tidak ada rekursi di dalamnya.
+
+Skrip pelatihan menyatakan hal yang sama dari sisi data. Fungsi pembentuk
+sampel hanya menerima sampel yang nilai `t`-nya 0,5, kecuali ragam `t` seimbang
+dinyalakan, dan keterangan pada fungsi itu menyebut distribusi tersebut sebagai
+distribusi tempat bobot yang terkirim dilatih.
+
+Kedua sumber itu menetapkan bahwa **model dirancang untuk menyisipkan satu
+frame pada titik tengah di antara dua frame hasil pindai**. Masukan skalar
+waktu memang tersedia pada arsitekturnya, tetapi tidak pernah dilatih maupun
+dijalankan pada nilai selain 0,5. Karena itu pengukuran berikut tidak
+memperlakukan tanggapan yang lemah terhadap `t` sebagai kerusakan, melainkan
+sebagai batas rancangan yang besarnya selama ini belum pernah diukur.
 
 **Bagian pertama: apakah jalur pengondisi waktu terlatih?** Pemeriksaan
 langsung terhadap bobot menunjukkan jalur tersebut sama sekali tidak mati.
@@ -2081,12 +2103,11 @@ menyerupai frame 0055. Yang terjadi, seluruh nilai `t` menghasilkan galat yang
 praktis sama: terhadap 0053 galatnya bergerak hanya dari 530,10 ke 529,64
 sepanjang seluruh rentang `t` yang diuji.
 
-**Kesimpulan pengukuran.** Cacatnya bukan jalur waktu yang mati, melainkan
+**Kesimpulan pengukuran.** Batasnya bukan jalur waktu yang mati, melainkan
 jalur waktu yang **tidak pernah dilatih untuk berpengaruh**. Kapasitasnya
 sudah ada di dalam arsitektur, bahkan diberi bobot paling besar di antara
 seluruh kanal masukan dekoder, tetapi distribusi data pelatihannya tidak
-pernah menuntut kapasitas itu dipakai. Inilah cacat yang menjadi sasaran
-penyempurnaan pada penelitian ini, dan inilah pula alasan mengapa
+pernah menuntut kapasitas itu dipakai. Inilah batas yang menjadi sasaran penyempurnaan pada penelitian ini, dan inilah pula alasan mengapa
 penyempurnaannya berbentuk pelatihan ulang dengan ragam `t` seimbang, bukan
 perubahan arsitektur.
 
@@ -2186,8 +2207,7 @@ secara umum. Pengujian menyeluruh sebagaimana dirancang pada subbab 3.7 adalah
 yang akan menjawab pertanyaan tersebut.
 
 **Kriteria keberhasilan penyempurnaan.** Metrik pelatihan pada Tabel 3.13
-hanya menyatakan bahwa model membaik pada distribusi yang dilatihkan; ia tidak
-menyatakan bahwa cacat pada subbab 3.6.6 telah tertutup. Penyempurnaan
+hanya menyatakan bahwa model membaik pada distribusi yang dilatihkan; ia tidak menyatakan bahwa batas pada subbab 3.6.6 telah terlampaui. Penyempurnaan
 dinyatakan berhasil apabila pengukuran yang sama persis dengan Tabel 3.11,
 diulang terhadap bobot hasil penyempurnaan, memenuhi dua syarat berikut:
 
@@ -2218,7 +2238,7 @@ Kedua syarat tersebut telah diukur, dan hasilnya diuraikan pada subbab 3.6.8.
 
 Subbab 3.6.6 menunjukkan bahwa bobot dasar tidak memakai masukan skalar
 waktunya. Subbab ini menguraikan percobaan penyempurnaan yang dirancang untuk
-menutup cacat tersebut, perhitungan yang mendasarinya, hasil pengukurannya,
+melampaui batas tersebut, perhitungan yang mendasarinya, hasil pengukurannya,
 serta keputusan rancangan yang diambil sesudahnya karena hasil itu belum
 memadai.
 
@@ -2486,8 +2506,7 @@ iterasi berikutnya.
 Iterasi kedelapan berbeda bentuknya, dan perbedaan itu disengaja. Keluarannya
 bukan purwarupa yang diserahkan, melainkan angka dan keputusan rancangan
 yang diturunkan darinya, yaitu bentuk purwarupa yang dibuang setelah menjawab
-pertanyaannya sebagaimana diuraikan pada subbab 2.2.10. Iterasi inilah yang
-menyingkap keempat cacat pada subbab 3.6.6 dan melahirkan pencatatan asal-usul
+pertanyaannya sebagaimana diuraikan pada subbab 2.2.10. Iterasi inilah yang mengukur keempat batas pada subbab 3.6.6 dan melahirkan pencatatan asal-usul
 frame pada subbab 3.6.8; keduanya tidak dapat dirumuskan pada tahap analisis
 awal karena keduanya baru terlihat setelah sistem berjalan dan diukur.
 
@@ -2908,10 +2927,11 @@ skalar waktu pada setiap panggilan.
 
 Kedua, penerapan algoritma Spatio-Temporal U-Net pada persoalan ini berhasil
 menghasilkan frame antara, tetapi perilakunya terhadap arsip yang sebenarnya
-ikut menentukan bagaimana sistem harus dirancang. Pengukuran terhadap bobot
-dasar menunjukkan tanggapannya terhadap skalar waktu hanya 0,17% dari yang
-seharusnya, sehingga pengisian harus dijalankan secara rekursif pada titik
-tengah, dan galatnya berlipat 1,73 kali setiap kali sebuah batas merupakan
+ikut menentukan bagaimana sistem harus dirancang. Model tersebut dirancang
+untuk menyisipkan satu frame pada titik tengah di antara dua frame pindai, dan
+hanya dilatih pada posisi itu; pengukuran menunjukkan tanggapannya terhadap
+skalar waktu di luar titik tengah hanya 0,17% dari yang seharusnya, sehingga
+pengisian celah yang lebih lebar harus dijalankan secara rekursif, dan galatnya berlipat 1,73 kali setiap kali sebuah batas merupakan
 keluaran model sendiri. Akibatnya hanya frame yang kedua batasnya merupakan
 hasil pindai yang layak dipercaya. Percobaan penyempurnaan bobot berhasil
 menaikkan tanggapan tersebut menjadi 27,87% tanpa mengubah satu lapisan pun,

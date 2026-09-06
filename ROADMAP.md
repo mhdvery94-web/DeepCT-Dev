@@ -64,7 +64,7 @@ perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
       `TiffPreview`. Bagian E terbukti pada arsip datar dan tidak pernah
       bertemu yang berfolder, padahal arsip BRIN yang nyata berfolder.
 
-- [ ] **Model hanya andal pada satu frame per celah.** Diukur 4 September
+- [x] **Model dirancang untuk satu sisipan titik tengah, dan batasnya sudah terukur.** Diukur 4 September
       terhadap arsip BRIN: hanya frame yang **kedua batasnya hasil pindai** yang
       layak dipakai. Celah 2 memberi 1 dari 1, celah 4 memberi 1 dari 3, celah 8
       memberi **0 dari 7** — ambangnya menyalin frame di sebelahnya, MAE 555.
@@ -75,7 +75,7 @@ perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
       lewat `generation`. Yang belum ada: peringatan eksplisit di antarmuka
       bahwa frame bergenerasi dua ke atas berada di bawah ambang kelayakan.
 
-- [ ] **Percobaan penyempurnaan bobot belum tuntas.** Job 19 (`balanced_t`,
+- [ ] **Penyempurnaan bobot diserahkan ke BRIN.** Job 19 (`balanced_t`,
       `max_gap=8`, 20 epoch) menaikkan tanggapan `t` dari 0,17% ke 27,87%,
       tetapi masih di bawah ambang yang dapat dibedakan mata. Kurva latih
       **belum mendatar** — lima epoch terakhir masih menurun pada 76% laju awal.

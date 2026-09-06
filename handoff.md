@@ -34,14 +34,14 @@ lebih dulu. Jangan commit tanpa diminta.
 | 1.36.0 | `TiffPreview` ditulis ulang di atas untai biner — **196 MB → 11,7 MB** per frame 2048²; `MAX_PIXELS` naik ke 4096² |
 | 1.37.0 | Pratinjau dataset 404 untuk frame di dalam subfolder (`{name}` tidak bisa merentang garis miring) |
 | 1.38.0 | Retensi arsip dataset (`training:cleanup`); `ArchiveSource` agar unggahan tidak memuat arsip ke RAM; resume unggah dataset |
-| 1.39.0 | UTF-8 rusak di 8 berkas; empat cacat model diukur; percobaan penyempurnaan bobot dengan hasil negatif |
+| 1.39.0 | UTF-8 rusak di 8 berkas; empat batas perilaku model diukur; percobaan penyempurnaan bobot dengan hasil negatif |
 
 ### 2.2 Penyelidikan model — inti sesi ini
 
 Model `STUNet_2to1_TimeCond` dipakai sejak awal proyek berdasarkan keterangan
 yang tidak pernah diverifikasi. Sesi ini mengukurnya.
 
-**Empat cacat, semuanya terukur terhadap arsip BRIN yang sebenarnya:**
+**Empat batas perilaku, semuanya terukur terhadap arsip BRIN:**
 
 | | Cacat | Angka |
 |---|---|---|

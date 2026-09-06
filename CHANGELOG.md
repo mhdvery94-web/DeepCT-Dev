@@ -57,7 +57,22 @@ memindai `lib/` dan `test/`, satu di suite PHP memindai `app/`, `routes/`,
 Kerusakan ini menyebar diam-diam lewat penyuntingan biasa; tanpa tripwire ia
 akan kembali.
 
-### Empat cacat model, akhirnya diukur
+### Empat batas perilaku model, akhirnya diukur
+
+> **Koreksi 6 September 2026.** Bagian ini semula menyebut keempatnya “cacat”.
+> Itu menuduh terlalu jauh, dan tiga sumber membantahnya. Notebook evaluasi
+> kolaborasi memaku `time_scalar = 0.5`, menamai keluarannya `2i + 1`, dan
+> menghasilkan satu frame per pasangan berurutan tanpa rekursi sama sekali.
+> `build_samples()` pada skrip pelatihan runtuh ke titik tengah kecuali ragam
+> `t` seimbang dinyalakan, dan docstring-nya sendiri menyebut itu distribusi
+> tempat bobot terkirim dilatih. Uji Sample Contrast pun sejalan: frame 0002,
+> yang kedua batasnya hasil pindai, berhasil — yang gagal adalah 0004, 0005
+> dan 0006, yang menuntut rekursi.
+>
+> Model **dirancang untuk menyisipkan satu frame pada titik tengah di antara
+> dua frame pindai**. Angka-angka di bawah tetap berlaku; yang berubah adalah
+> namanya. Keempatnya adalah batas rancangan beserta ongkos melampauinya, bukan
+> kerusakan.
 
 Model `STUNet_2to1_TimeCond` dipakai sejak awal proyek dengan keterangan yang
 tidak pernah diverifikasi. Diukur terhadap berkas bobot dan layanan inferensi
@@ -74,7 +89,7 @@ Akibatnya, dari frame yang dihasilkan hanya yang **kedua batasnya hasil pindai**
 yang layak: celah 2 memberi 1 dari 1, celah 4 memberi 1 dari 3, celah 8 memberi
 **0 dari 7**. Ambangnya adalah menyalin frame pindai di sebelahnya, MAE ≈ 555.
 
-Dua kendali memisahkan cacat model dari kesalahan skrip. Menukar urutan gambar
+Dua kendali memisahkan perilaku model dari kesalahan skrip. Menukar urutan gambar
 masukan menggeser keluaran 63,94 melalui jalur kode yang sama, sehingga skrip
 terbukti meneruskan masukan dengan benar. Dan `script-api-deepct.py` diperiksa
 baris per baris: `time_scalar` diterima sebagai Form wajib, dibungkus menjadi

@@ -294,7 +294,7 @@ tetapi mengabaikan skalarnya. Yang membuat urutan berpengaruh adalah reduksi
 `TimeLast` tersendiri, yang didaftarkan skrip pemuat tetapi tidak dipakai
 satu kali pun pada berkas bobot ini.
 
-Rincian pengukuran, empat cacat yang ditemukan, dan percobaan penyempurnaan
+Rincian pengukuran, empat batas perilaku yang terukur, dan percobaan penyempurnaan
 yang mengikutinya tercatat pada `CHANGELOG.md` versi 1.39.0.
 
 #### ✅ Solusi: Interpolasi Rekursif (Recursive Interpolation)
