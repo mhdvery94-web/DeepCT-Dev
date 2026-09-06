@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
 import '../models/user_model.dart';
+import 'secure_store.dart';
 
 class AuthService {
   final Dio _dio = Dio(
@@ -18,8 +18,6 @@ class AuthService {
       },
     ),
   );
-
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   // Storage keys
   static const String _tokenKey = 'auth_token';
@@ -59,9 +57,11 @@ class AuthService {
         final token = response.data['data']['token'];
         final userData = response.data['data']['user'];
 
-        // Save token dan user data
-        await _storage.write(key: _tokenKey, value: token);
-        await _storage.write(key: _userKey, value: jsonEncode(userData));
+        // Save token dan user data. Through SecureStore: the sign-in has
+        // already succeeded by this line, and a keystore that refuses the
+        // write must not turn a working login into a failed one.
+        await SecureStore.write(_tokenKey, token);
+        await SecureStore.write(_userKey, jsonEncode(userData));
 
         return {
           'success': true,
@@ -89,8 +89,8 @@ class AuthService {
     } catch (e) {
       // Ignore error, just clear local data
     } finally {
-      await _storage.delete(key: _tokenKey);
-      await _storage.delete(key: _userKey);
+      await SecureStore.delete(_tokenKey);
+      await SecureStore.delete(_userKey);
     }
   }
 
@@ -116,7 +116,7 @@ class AuthService {
 
   /// Get stored token
   Future<String?> getToken() async {
-    return await _storage.read(key: _tokenKey);
+    return await SecureStore.read(_tokenKey);
   }
 
   /// Handle Dio errors
@@ -167,9 +167,24 @@ class AuthService {
         return data['message'].toString();
       }
 
-      return 'An error occurred';
+      // A body that is not JSON is almost always ngrok's interstitial, which
+      // it serves with HTTP 200 to anything it takes for a browser. Say so
+      // rather than "An error occurred", which names nothing.
+      if (data is String && data.contains('ngrok')) {
+        return 'The tunnel answered instead of the API. The backend is '
+            'probably not running behind ${ApiConfig.baseUrl}.';
+      }
+
+      return 'The server answered ${statusCode ?? 'oddly'} and this app could '
+          'not read it.';
     }
 
-    return 'An unexpected error occurred';
+    // No response at all, and not one of the network types above: a
+    // `PlatformException` from secure storage used to land here and read as
+    // "An unexpected error occurred", which sent someone through the backend,
+    // the tunnel and the database looking for a fault that was not there.
+    // Name the address and the real error instead.
+    return 'Could not complete the request to ${ApiConfig.baseUrl} '
+        '(${error.error ?? error.type.name}).';
   }
 }

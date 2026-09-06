@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fe/main.dart';
 import 'package:fe/screens/landing/landing_page.dart';
 import 'package:fe/theme/app_theme.dart';
-import 'package:fe/widgets/news_carousel.dart';
+import 'package:fe/widgets/news_section.dart';
 
 /// Renders the whole app at [size] and returns once it has settled.
 ///
@@ -39,10 +39,10 @@ void main() {
     // For the same reason: the research-news carousel on the landing page
     // loads itself, and a real request leaves a pending timeout timer that
     // fails the test regardless of what it was asserting.
-    NewsCarousel.debugLoader = () async => const [];
+    NewsSection.debugLoader = () async => const [];
   });
 
-  tearDownAll(() => NewsCarousel.debugLoader = null);
+  tearDownAll(() => NewsSection.debugLoader = null);
 
   setUp(() {
     // No stored credentials, so AuthProvider.checkAuthStatus() finds no token.

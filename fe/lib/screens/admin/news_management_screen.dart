@@ -427,7 +427,6 @@ class _PostEditorState extends State<_PostEditor> {
   late final TextEditingController _title;
   late final TextEditingController _summary;
   late final TextEditingController _body;
-  late final TextEditingController _order;
 
   Uint8List? _imageBytes;
   String? _imageName;
@@ -452,7 +451,6 @@ class _PostEditorState extends State<_PostEditor> {
     _title = TextEditingController(text: post?.title ?? '');
     _summary = TextEditingController(text: post?.summary ?? '');
     _body = TextEditingController(text: post?.body ?? '');
-    _order = TextEditingController(text: '${post?.sortOrder ?? 0}');
   }
 
   @override
@@ -460,7 +458,6 @@ class _PostEditorState extends State<_PostEditor> {
     _title.dispose();
     _summary.dispose();
     _body.dispose();
-    _order.dispose();
     super.dispose();
   }
 
@@ -542,7 +539,6 @@ class _PostEditorState extends State<_PostEditor> {
         title: _title.text.trim(),
         summary: _summary.text.trim(),
         body: _body.text.trim(),
-        sortOrder: int.tryParse(_order.text.trim()) ?? 0,
         imageBytes: _imageBytes,
         imageName: _imageName,
         removeImage: _removeImage,
@@ -624,15 +620,17 @@ class _PostEditorState extends State<_PostEditor> {
                     hintText: 'Shown behind "Read more"',
                   ),
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _order,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Slide order',
-                    hintText: 'Lower numbers come first',
-                  ),
-                ),
+                // "Slide order" used to sit here. There is no slideshow any
+                // more — the landing page features the newest post and lists
+                // the rest — so a number that decided which slide came first
+                // decided nothing an editor could see. Ordering is by publish
+                // date, which is what a news feed means anyway.
+                //
+                // The column stays in the database and the API still sends it,
+                // so existing values keep sorting as they always did. Nothing
+                // writes one now: `save()` omits the field entirely rather
+                // than sending 0, which would silently renumber a post every
+                // time somebody edited its title.
                 const SizedBox(height: 20),
 
                 _buildImagePicker(context),
@@ -685,6 +683,28 @@ class _PostEditorState extends State<_PostEditor> {
     );
   }
 
+  /// Width of the choose/replace button in both pickers.
+  ///
+  /// Fixed, and shared, so the two rows line up: the control on the left, what
+  /// was chosen on the right, at the same x in both. They used to disagree —
+  /// the photo put its thumbnail first and its button second, the video the
+  /// other way round — and two rows of the same form reading in opposite
+  /// directions is the kind of thing that is only invisible to whoever wrote
+  /// it.
+  static const double _pickerButtonWidth = 150;
+
+  /// The shared shape of both pickers: control, gap, result.
+  Widget _pickerRow({required Widget button, required Widget result}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: _pickerButtonWidth, child: button),
+        const SizedBox(width: 12),
+        Expanded(child: result),
+      ],
+    );
+  }
+
   Widget _buildImagePicker(BuildContext context) {
     final existing = widget.post?.imagePath;
     final hasNew = _imageBytes != null;
@@ -695,51 +715,57 @@ class _PostEditorState extends State<_PostEditor> {
       children: [
         Text('Photo', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            SizedBox(
-              width: 96,
-              height: 72,
-              child: hasNew
-                  ? Image.memory(_imageBytes!, fit: BoxFit.cover)
-                  : AuthedImage(
-                      path: showsExisting ? widget.post?.imagePath : null,
-                      placeholder: const _Thumb(),
-                    ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.upload_outlined, size: 16),
-                    label: Text(hasNew ? 'CHANGE' : 'CHOOSE'),
-                  ),
-                  if (hasNew)
+        _pickerRow(
+          button: OutlinedButton.icon(
+            onPressed: _pickImage,
+            icon: const Icon(Icons.upload_outlined, size: 16),
+            label: Text(hasNew ? 'CHANGE' : 'CHOOSE'),
+          ),
+          result: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 96,
+                height: 72,
+                child: hasNew
+                    ? Image.memory(_imageBytes!, fit: BoxFit.cover)
+                    : AuthedImage(
+                        path: showsExisting ? widget.post?.imagePath : null,
+                        placeholder: const _Thumb(),
+                      ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      _imageName ?? '',
+                      hasNew
+                          ? (_imageName ?? '')
+                          : (_removeImage
+                                ? 'Photo will be removed on save'
+                                : (showsExisting
+                                      ? 'A photo is already attached.'
+                                      : 'No photo attached.')),
                       style: Theme.of(context).textTheme.labelSmall,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  if (showsExisting)
-                    TextButton(
-                      onPressed: () => setState(() => _removeImage = true),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppTheme.error,
+                    if (showsExisting)
+                      TextButton(
+                        onPressed: () => setState(() => _removeImage = true),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.error,
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('REMOVE PHOTO'),
                       ),
-                      child: const Text('REMOVE PHOTO'),
-                    ),
-                  if (_removeImage)
-                    Text(
-                      'Photo will be removed on save',
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 6),
         Text(
@@ -760,26 +786,26 @@ class _PostEditorState extends State<_PostEditor> {
       children: [
         Text('Video', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            OutlinedButton.icon(
-              onPressed: _saving ? null : _pickVideo,
-              icon: const Icon(Icons.movie_outlined, size: 16),
-              label: Text(chosen || existing ? 'REPLACE' : 'CHOOSE'),
+        _pickerRow(
+          button: OutlinedButton.icon(
+            onPressed: _saving ? null : _pickVideo,
+            icon: const Icon(Icons.movie_outlined, size: 16),
+            label: Text(chosen || existing ? 'REPLACE' : 'CHOOSE'),
+          ),
+          result: Padding(
+            // Aligns the line of text with the button's own text rather than
+            // with the top of its border.
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              chosen
+                  ? _videoName!
+                  : (existing
+                        ? 'A video is already attached.'
+                        : 'No video attached.'),
+              style: Theme.of(context).textTheme.labelSmall,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                chosen
-                    ? _videoName!
-                    : (existing
-                          ? 'A video is already attached.'
-                          : 'No video attached.'),
-                style: Theme.of(context).textTheme.labelSmall,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+          ),
         ),
         // Shown only while bytes are moving. 50 MB over a tunnel is slow
         // enough that silence reads as a hang.

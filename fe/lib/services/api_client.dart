@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
+import 'secure_store.dart';
 
 /// Thrown when the API returns a non-2xx response or the request fails.
 /// Carries a message already suitable for display in the UI.
@@ -38,7 +38,11 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token = await _storage.read(key: tokenKey);
+          // Through SecureStore, never the plugin directly. A throw here fails
+          // the request it is decorating, and this interceptor sits in front
+          // of the public endpoints too — an unreadable keystore once emptied
+          // the landing page's news carousel, which asks for no token at all.
+          final token = await SecureStore.read(tokenKey);
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -52,8 +56,6 @@ class ApiClient {
   static final ApiClient instance = ApiClient._internal();
 
   static const String tokenKey = 'auth_token';
-
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   final Dio _dio = Dio(
     BaseOptions(

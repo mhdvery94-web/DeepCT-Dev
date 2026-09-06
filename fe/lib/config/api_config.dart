@@ -71,6 +71,9 @@ class ApiConfig {
   static const String adminModels = '/admin/models';
   static const String adminActivities = '/admin/activities';
 
+  /// Live queue board: who the worker is on, and who is behind them.
+  static const String adminQueue = '/admin/queue';
+
   // Self-service endpoints (any signed-in user, not admin-only)
   static const String meAvatar = '/me/avatar';
   static const String meActivities = '/me/activities';

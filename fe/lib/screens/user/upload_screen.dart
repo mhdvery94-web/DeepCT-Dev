@@ -852,9 +852,25 @@ class _ModelOption extends StatelessWidget {
 
   const _ModelOption({required this.model, required this.selected, this.onTap});
 
+  /// The colour of health, not of brand.
+  ///
+  /// This used to be `selected ? AppTheme.primary : AppTheme.border`, and
+  /// AppTheme.primary is BRIN red — so choosing a healthy model drew a red
+  /// frame around it, in the same red the strip above uses for "offline".
+  /// Selection and status were being said in one language, and status lost.
+  ///
+  /// Health owns the colour now; selection is carried by the border's weight
+  /// and the radio button, which were already there and never ambiguous.
+  Color get _statusColor {
+    if (model.isOnline) return AppTheme.success;
+    if (model.isAvailable) return AppTheme.warning;
+    return AppTheme.error;
+  }
+
   @override
   Widget build(BuildContext context) {
     final disabled = onTap == null;
+    final status = _statusColor;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -863,9 +879,12 @@ class _ModelOption extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.primaryLight : AppTheme.surface,
+            color: selected
+                ? status.withValues(alpha: 0.06)
+                : AppTheme.surface,
             border: Border.all(
-              color: selected ? AppTheme.primary : AppTheme.border,
+              color: selected ? status : status.withValues(alpha: 0.35),
+              width: selected ? 2 : 1,
             ),
           ),
           child: Row(
@@ -877,7 +896,7 @@ class _ModelOption extends StatelessWidget {
                 size: 18,
                 color: disabled
                     ? AppTheme.borderDark
-                    : (selected ? AppTheme.primary : AppTheme.textMuted),
+                    : (selected ? status : AppTheme.textMuted),
               ),
               const SizedBox(width: 12),
               Expanded(

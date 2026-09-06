@@ -15,6 +15,7 @@ import '../../widgets/pagination_bar.dart';
 import '../../widgets/register_model_form.dart';
 import '../../widgets/model_status_strip.dart';
 import '../../widgets/status_badge.dart';
+import '../../widgets/training_handoff_panel.dart';
 
 /// Admin screen for managing remotely deployed inference models.
 ///
@@ -275,7 +276,11 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
           ModelStatusStrip(onChanged: (_) => _load()),
           const SizedBox(height: 16),
           Expanded(child: _buildContent()),
-          _buildTrainingHandoff(context),
+          TrainingHandoffPanel(
+            jobs: _finishedJobs,
+            onRegister: _registerModel,
+            onDelete: _deleteTrainingJob,
+          ),
           PaginationBar(
             pagination: _pagination,
             onPageChanged: (p) {
@@ -380,65 +385,6 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
       },
     );
   }
-
-  /// Finished training runs waiting to become model versions.
-  ///
-  /// Hidden entirely when there are none, so the screen does not carry an
-  /// empty heading for a state that is the normal one.
-  Widget _buildTrainingHandoff(BuildContext context) {
-    if (_finishedJobs.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 24),
-        Text(
-          'Training runs ready to register',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        for (final job in _finishedJobs)
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surface,
-              border: Border.all(color: AppTheme.border),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        job.name,
-                        style: Theme.of(context).textTheme.titleSmall,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        '${job.currentEpoch} epochs trained',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ],
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => _registerModel(job),
-                  child: const Text('REGISTER AS MODEL'),
-                ),
-                TextButton(
-                  onPressed: () => _deleteTrainingJob(job),
-                  style: TextButton.styleFrom(foregroundColor: AppTheme.error),
-                  child: const Text('DELETE'),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
 }
 
 class _ModelCard extends StatelessWidget {
@@ -690,6 +636,18 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
   late final TextEditingController _endpoint;
   late final TextEditingController _description;
 
+  /// Never prefilled, because the stored secret is never readable. Blank on an
+  /// edit means "leave it as it is".
+  late final TextEditingController _authToken;
+
+  /// Explicit removal, which a blank field cannot express — blank already
+  /// means "unchanged".
+  bool _clearAuthToken = false;
+
+  /// Checked by default when creating: a new endpoint should get the secure
+  /// answer, while an existing one keeps whatever it was registered with.
+  bool _verifyTls = true;
+
   bool _isSaving = false;
   String? _error;
 
@@ -712,6 +670,8 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
     _version = TextEditingController(text: m?.version ?? '');
     _endpoint = TextEditingController(text: m?.endpointUrl ?? '');
     _description = TextEditingController(text: m?.description ?? '');
+    _authToken = TextEditingController();
+    _verifyTls = m?.verifyTls ?? true;
   }
 
   @override
@@ -720,6 +680,7 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
     _version.dispose();
     _endpoint.dispose();
     _description.dispose();
+    _authToken.dispose();
     super.dispose();
   }
 
@@ -733,12 +694,22 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
 
     try {
       if (_isEdit) {
+        final typed = _authToken.text.trim();
+
         await widget.service.update(
           id: widget.existing!.id,
           name: _name.text.trim(),
           version: _version.text.trim(),
           endpointUrl: _endpoint.text.trim(),
           description: _description.text.trim(),
+          // Three meanings, and the difference matters: null leaves the
+          // stored secret alone, '' clears it, and a string replaces it.
+          // Sending the field unconditionally would wipe the credential every
+          // time somebody fixed a typo in the description.
+          authToken: _clearAuthToken
+              ? ''
+              : (typed.isEmpty ? null : typed),
+          verifyTls: _verifyTls,
         );
       } else {
         await widget.service.create(
@@ -747,6 +718,8 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
           kind: _kind,
           endpointUrl: _endpoint.text.trim(),
           description: _description.text.trim(),
+          authToken: _authToken.text.trim(),
+          verifyTls: _verifyTls,
         );
       }
 
@@ -862,6 +835,61 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _authToken,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: _isEdit && widget.existing!.hasAuthToken
+                        ? 'SHARED SECRET (LEAVE BLANK TO KEEP)'
+                        : 'SHARED SECRET (OPTIONAL)',
+                    helperText: _isEdit && widget.existing!.hasAuthToken
+                        ? 'A secret is set. Type a new one to replace it.'
+                        : 'Sent to the worker as Authorization: Bearer. '
+                              'Required once the worker is on a network other '
+                              'people can reach.',
+                    helperMaxLines: 3,
+                  ),
+                ),
+                if (_isEdit && widget.existing!.hasAuthToken) ...[
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () =>
+                          setState(() => _clearAuthToken = !_clearAuthToken),
+                      style: TextButton.styleFrom(
+                        foregroundColor: _clearAuthToken
+                            ? AppTheme.error
+                            : AppTheme.textMuted,
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: Text(
+                        _clearAuthToken
+                            ? 'SECRET WILL BE REMOVED ON SAVE — UNDO'
+                            : 'REMOVE SECRET',
+                      ),
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  value: _verifyTls,
+                  onChanged: (v) => setState(() => _verifyTls = v ?? false),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Verify TLS certificate'),
+                  // Checked by default when creating, so a new endpoint gets
+                  // the secure answer; a tunnel or a self-signed certificate
+                  // on the LAN is the case for turning it off, and that should
+                  // be a decision somebody makes on purpose.
+                  subtitle: Text(
+                    'Turn off only for a tunnel or a self-signed certificate.',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ),
+
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _description,

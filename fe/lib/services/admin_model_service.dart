@@ -83,12 +83,17 @@ class AdminModelService {
   /// `trainer` for one that answers `POST /train`. One registry serves both:
   /// a trainer is switched on and health-checked exactly like a model, and a
   /// second screen for it would have been the same screen twice.
+  /// [authToken] is the shared secret the worker expects as
+  /// `Authorization: Bearer`. It is write-only: no endpoint ever returns it,
+  /// and [ModelInfo.hasAuthToken] is all the registry will say afterwards.
   Future<ModelInfo> create({
     required String name,
     required String version,
     required String endpointUrl,
     String kind = 'inference',
     String? description,
+    String? authToken,
+    bool verifyTls = true,
   }) async {
     final body = await _api.post(
       ApiConfig.adminModels,
@@ -97,6 +102,8 @@ class AdminModelService {
         'version': version,
         'kind': kind,
         'endpoint_url': endpointUrl,
+        if (authToken != null && authToken.isNotEmpty) 'auth_token': authToken,
+        'verify_tls': verifyTls,
         if (description != null && description.isNotEmpty)
           'description': description,
       },
@@ -112,12 +119,19 @@ class AdminModelService {
   }
 
   /// PUT /admin/models/{id} — partial update; only send what changed.
+  ///
+  /// [authToken] carries three meanings and the difference matters: null
+  /// leaves the stored secret untouched, a string replaces it, and an empty
+  /// string clears it. A form that always sent the field would wipe the
+  /// credential every time somebody fixed a typo in the description.
   Future<ModelInfo> update({
     required int id,
     String? name,
     String? version,
     String? endpointUrl,
     String? description,
+    String? authToken,
+    bool? verifyTls,
   }) async {
     // Build the payload explicitly so we only send fields the caller changed.
     final data = <String, dynamic>{};
@@ -125,6 +139,8 @@ class AdminModelService {
     if (version != null) data['version'] = version;
     if (endpointUrl != null) data['endpoint_url'] = endpointUrl;
     if (description != null) data['description'] = description;
+    if (authToken != null) data['auth_token'] = authToken;
+    if (verifyTls != null) data['verify_tls'] = verifyTls;
 
     final body = await _api.put('${ApiConfig.adminModels}/$id', data: data);
 

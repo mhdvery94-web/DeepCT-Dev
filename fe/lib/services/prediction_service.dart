@@ -93,6 +93,33 @@ class PredictionService {
     await _api.delete('${ApiConfig.predictions}/$id');
   }
 
+  /// POST /predictions/{id}/rerun — the same frames through another model.
+  ///
+  /// Returns the id of the new job. The frames are copied server-side, so the
+  /// two runs can be deleted or expire independently without either losing
+  /// what it was measured on.
+  Future<int> rerun({required int id, required int modelId}) async {
+    final body = await _api.post(
+      '${ApiConfig.predictions}/$id/rerun',
+      data: {'model_id': modelId},
+    );
+
+    return (body['data'] as Map)['id'] as int;
+  }
+
+  /// GET /predictions/{id}/evidence/{name} — a kept thumbnail, as PNG.
+  ///
+  /// These outlive the frames they were rendered from, so unlike
+  /// [framePreview] this keeps working after the 24-hour window closes. That
+  /// is the whole reason they are kept.
+  Future<Uint8List> evidence({required int id, required String name}) async {
+    final result = await _api.getBytes(
+      '${ApiConfig.predictions}/$id/evidence/${Uri.encodeComponent(name)}',
+    );
+
+    return result.bytes;
+  }
+
   /// GET /predictions/{id}/frames — what is on disk, inputs and outputs.
   Future<List<PredictionFrame>> frames(int id) async {
     final body = await _api.get('${ApiConfig.predictions}/$id/frames');

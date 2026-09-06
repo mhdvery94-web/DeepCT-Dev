@@ -98,6 +98,16 @@ class _FrameGalleryScreenState extends State<FrameGalleryScreen> {
   List<PredictionFrame> get _visible =>
       _generatedOnly ? _frames.where((f) => f.isGenerated).toList() : _frames;
 
+  /// What the record says about how [name] was produced, or null — either
+  /// because it came off the scanner, or because the job predates the platform
+  /// recording this at all.
+  FrameProvenance? _provenanceFor(String name) {
+    for (final p in widget.prediction.frameProvenance) {
+      if (p.frame == name) return p;
+    }
+    return null;
+  }
+
   void _openViewer(int indexInVisible) {
     Navigator.push(
       context,
@@ -122,6 +132,18 @@ class _FrameGalleryScreenState extends State<FrameGalleryScreen> {
         backgroundColor: AppTheme.surface,
         shape: const Border(bottom: BorderSide(color: AppTheme.border)),
         actions: [
+          // The grid answers "what came out"; this answers "does the sequence
+          // move properly", which is the question a CT stack is actually for
+          // and the reason people were opening ImageJ alongside the platform.
+          // It was reachable only by tapping a thumbnail, which does not
+          // announce that a scrubber exists at all.
+          if (_visible.isNotEmpty)
+            TextButton.icon(
+              key: const Key('open-stack-viewer'),
+              onPressed: () => _openViewer(0),
+              icon: const Icon(Icons.play_circle_outline, size: 18),
+              label: const Text('PLAY STACK'),
+            ),
           if (generated > 0 && generated < _frames.length)
             TextButton(
               onPressed: () => setState(() => _generatedOnly = !_generatedOnly),
@@ -187,6 +209,7 @@ class _FrameGalleryScreenState extends State<FrameGalleryScreen> {
             itemCount: visible.length,
             itemBuilder: (context, index) => _FrameTile(
               frame: visible[index],
+              provenance: _provenanceFor(visible[index].name),
               load: () => _preview(visible[index].name, _thumbSize),
               onTap: () => _openViewer(index),
             ),
@@ -202,11 +225,17 @@ class _FrameGalleryScreenState extends State<FrameGalleryScreen> {
 /// One thumbnail. Loads its own bytes so the grid can build lazily.
 class _FrameTile extends StatelessWidget {
   final PredictionFrame frame;
+
+  /// Null for a scanned frame, and also for a generated one belonging to a job
+  /// that finished before the platform began recording this.
+  final FrameProvenance? provenance;
+
   final Future<Uint8List> Function() load;
   final VoidCallback onTap;
 
   const _FrameTile({
     required this.frame,
+    required this.provenance,
     required this.load,
     required this.onTap,
   });
@@ -269,28 +298,52 @@ class _FrameTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (frame.isGenerated)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 1,
-                      ),
-                      color: AppTheme.primaryLight,
-                      child: const Text(
-                        'AI',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                    ),
+                  if (frame.isGenerated) _badge(),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// `AI` for a frame drawn between two scanned neighbours, `AI G2` and up for
+  /// one drawn against a frame the model had itself invented.
+  ///
+  /// The distinction is the point. Every generated frame used to carry the
+  /// same badge, and a reader had no way to tell the model's output from the
+  /// model's output fed back into the model — which is not the same evidence.
+  /// Second generation and beyond is drawn in the warning colour, and the
+  /// tooltip names the two frames it came from.
+  Widget _badge() {
+    final p = provenance;
+    final compounded = p != null && !p.isFirstGeneration;
+
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      color: compounded ? AppTheme.warningLight : AppTheme.primaryLight,
+      child: Text(
+        p == null || p.isFirstGeneration ? 'AI' : 'AI G${p.generation}',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: compounded ? AppTheme.warning : AppTheme.primary,
+        ),
+      ),
+    );
+
+    if (p == null) return chip;
+
+    return Tooltip(
+      message: p.isFirstGeneration
+          ? 'Interpolated between frames ${p.leftIndex} and ${p.rightIndex}, '
+                'both of which came off the scanner.'
+          : 'Interpolated between frames ${p.leftIndex} and ${p.rightIndex}. '
+                '${p.syntheticParents == 2 ? "Both were" : "One was"} '
+                'generated by the model, so this is generation '
+                '${p.generation}.',
+      child: chip,
     );
   }
 }

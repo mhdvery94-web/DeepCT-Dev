@@ -27,7 +27,7 @@ class NotificationBell extends StatefulWidget {
 
   /// Replaces the poll. Tests only — production leaves it null.
   ///
-  /// Same bargain as `NewsCarousel.debugLoader`: the widget calls the server
+  /// Same bargain as `NewsSection.debugLoader`: the widget calls the server
   /// the moment it is built, and a real request leaves a pending timeout timer
   /// that fails whatever test happened to pump it.
   static Future<({int notifications, int messages})> Function()? debugCounts;

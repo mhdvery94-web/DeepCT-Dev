@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -72,6 +73,78 @@ void main() {
     expect(find.byKey(const Key('frame-tick-1')), findsOneWidget);
     expect(find.byKey(const Key('frame-tick-2')), findsOneWidget);
     expect(find.byKey(const Key('frame-tick-0')), findsNothing);
+  });
+
+  testWidgets('every frame is fetched once, not once per step', (tester) async {
+    // The regression this widget was rewritten for. It used to call the loader
+    // from inside a PageView's itemBuilder, so scrubbing re-fetched a frame
+    // every time it came back on screen and put a spinner in between — which
+    // is what made the slider feel notched rather than continuous.
+    final calls = <String>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FrameStackViewer(
+          frames: _frames(),
+          initialIndex: 0,
+          loader: (name) async {
+            calls.add(name);
+            return _png;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(calls.length, 4);
+
+    // Walk the whole stack twice. Not one further fetch may happen.
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    for (var pass = 0; pass < 2; pass++) {
+      for (var i = 0; i < 4; i++) {
+        slider.onChanged!(i.toDouble());
+        await tester.pumpAndSettle();
+      }
+    }
+
+    expect(calls.length, 4);
+    expect(calls.toSet().length, 4);
+  });
+
+  testWidgets('playback is held back until the stack is all in memory', (
+    tester,
+  ) async {
+    // Animating while frames are still arriving would show the very stutter
+    // the prefetch exists to remove.
+    final stuck = Completer<Uint8List>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FrameStackViewer(
+          frames: _frames(),
+          initialIndex: 0,
+          loader: (name) =>
+              name == 'frame_004.tif' ? stuck.future : Future.value(_png),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final play = tester.widget<IconButton>(
+      find.byKey(const Key('frame-play')),
+    );
+    expect(play.onPressed, isNull);
+    expect(find.byKey(const Key('frame-stack-loading')), findsOneWidget);
+
+    stuck.complete(_png);
+    await tester.pumpAndSettle();
+
+    final ready = tester.widget<IconButton>(
+      find.byKey(const Key('frame-play')),
+    );
+    expect(ready.onPressed, isNotNull);
+    expect(find.byKey(const Key('frame-stack-loading')), findsNothing);
   });
 
   testWidgets('a stack with no generated frames shows no ticks', (

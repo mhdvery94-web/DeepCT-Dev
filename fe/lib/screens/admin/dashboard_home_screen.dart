@@ -12,6 +12,7 @@ import '../../services/admin_user_service.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/storage_panel.dart';
 import '../../widgets/async_state_views.dart';
 
 /// Landing section of the admin console.
@@ -202,6 +203,12 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 24),
+
+            // Draws nothing until it has an answer, and nothing at all if the
+            // request fails — a storage panel should not be able to take the
+            // dashboard down with it.
+            const StoragePanel(),
             const SizedBox(height: 32),
 
             Row(

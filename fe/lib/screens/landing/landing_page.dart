@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../services/access_request_service.dart';
 import '../../services/api_client.dart';
-import '../../widgets/news_carousel.dart';
+import '../../widgets/news_section.dart';
 import '../auth/login_page.dart';
 import '../messages/public_message_sheet.dart';
 
@@ -669,7 +669,7 @@ class _LandingPageState extends State<LandingPage> {
           // Renders nothing until an administrator publishes something, so
           // the section reads exactly as before on a fresh install.
           const SizedBox(height: 32),
-          const NewsCarousel(),
+          const NewsSection(),
         ],
       ),
     );

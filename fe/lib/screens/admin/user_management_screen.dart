@@ -399,38 +399,43 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               bordered: false,
                             ),
                             const SizedBox(width: 10),
+                            // Name first and in the heavier type, phone under
+                            // it. It was the other way round: the telephone
+                            // number was the bold headline of the row and the
+                            // person's name the small grey line beneath — so a
+                            // list of people was read as a list of numbers.
                             Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      user.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    if (isSelf) ...[
+                                      const SizedBox(width: 6),
+                                      const Text(
+                                        '(you)',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppTheme.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                                 Text(
                                   user.phone ?? '—',
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                    color: AppTheme.textMuted,
                                   ),
                                 ),
-                                if (isSelf) ...[
-                                  const SizedBox(width: 6),
-                                  const Text(
-                                    '(you)',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppTheme.textMuted,
-                                    ),
-                                  ),
-                                ],
                               ],
-                            ),
-                            Text(
-                              user.name,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppTheme.textMuted,
-                              ),
-                            ),
-                          ],
                             ),
                           ],
                         ),

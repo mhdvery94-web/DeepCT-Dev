@@ -27,6 +27,20 @@ class ModelInfo {
   final DateTime? deployedAt;
   final DateTime? createdAt;
 
+  /// Whether a shared secret is registered for this worker.
+  ///
+  /// The secret itself is never returned by any endpoint — this is the whole
+  /// of what the registry will say about it. Replacing it is the only way to
+  /// change it, which is how a credential should behave.
+  final bool hasAuthToken;
+
+  /// Whether the worker's TLS certificate is checked.
+  ///
+  /// False on every worker registered before this existed, which is exactly
+  /// what the platform did then: verification was hardcoded off for tunnel
+  /// and Colab certificates.
+  final bool verifyTls;
+
   const ModelInfo({
     required this.id,
     required this.name,
@@ -44,6 +58,8 @@ class ModelInfo {
     this.accuracy,
     this.deployedAt,
     this.createdAt,
+    this.hasAuthToken = false,
+    this.verifyTls = false,
   });
 
   static bool _toBool(dynamic v) => v == 1 || v == true || v == '1';
@@ -86,6 +102,8 @@ class ModelInfo {
       accuracy: _toDouble(json['accuracy']),
       deployedAt: _toDate(json['deployed_at']),
       createdAt: _toDate(json['created_at']),
+      hasAuthToken: _toBool(json['has_auth_token']),
+      verifyTls: _toBool(json['verify_tls']),
     );
   }
 

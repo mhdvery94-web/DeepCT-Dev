@@ -86,12 +86,30 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
 - ✅ **Dashboard** — model availability, own analysis counters, activity today,
   and the 5 most recent actions
 - ✅ **New Analysis** — pick a model, pick a ZIP, upload with live progress
-- ✅ **Results & History** — job status with polling, dual download, delete
+- ✅ **Results & History** — job status with polling, dual download, delete.
+  A completed run also shows what it scored: a frame the archive already held
+  was set aside, regenerated, and measured against the real one. Where the same
+  frames were run through more than one model, their errors sit side by side
+- ✅ **Frame gallery** — every frame, input and output, with generated ones
+  badged `AI` and `AI G2` upward. The second badge is the point: a frame drawn
+  between two scanned neighbours and a frame drawn against one the model had
+  just invented are not the same evidence
+- ✅ **Kept thumbnails** — a run stays something you can look at after its
+  frames are deleted, rather than a row saying it once completed
 - ✅ **My Activity** — full paginated audit trail of the signed-in account
 - ✅ **Messages** — one conversation with the administrators. Nothing to
   classify first: type the problem and send it
 - ✅ **Notifications** — the same bell, carrying finished jobs, failures,
   replies and an expiry warning before results are deleted
+
+### Admin additions
+- ✅ **Storage panel** on the dashboard — free space, and the breakdown that
+  actually decides whether a full volume is a problem: prediction output comes
+  back within a day, training datasets never do. Shouts when the results volume
+  is not mounted, because nothing else in the system reports that
+- ✅ **Worker credentials** in the model form — a shared secret sent to the
+  worker as `Authorization: Bearer`, write-only (typing a new one replaces it;
+  blank leaves it alone), plus a per-model TLS verification switch
 
 ### Public Landing Page
 - ✅ **Join form** — wired to `POST /api/access-requests`, with the server's own
@@ -233,47 +251,59 @@ flutter build apk --release
 ```
 lib/
 ├── config/
-│   └── api_config.dart          # API base URL configuration
+│   └── api_config.dart           # API base URL, a build-time constant
 │
 ├── models/
-│   ├── user_model.dart          # UserModel
-│   ├── model_info.dart          # ModelInfo (AI model registry entry)
-│   ├── activity_log.dart        # ActivityLog
-│   ├── me_stats.dart            # MeStats (researcher dashboard counters)
-│   ├── prediction.dart          # Prediction (one interpolation job)
-│   ├── chat_message.dart        # Conversation + ChatMessage
-│   ├── app_notification.dart    # AppNotification
-│   ├── news_post.dart           # NewsPost (research news)
-│   └── pagination.dart          # Pagination + PaginatedResult<T>
+│   ├── user_model.dart           # UserModel
+│   ├── model_info.dart           # ModelInfo (AI model registry entry)
+│   ├── model_status_message.dart # What a researcher is told when a model is unusable
+│   ├── activity_log.dart         # ActivityLog
+│   ├── me_stats.dart             # MeStats (researcher dashboard counters)
+│   ├── prediction.dart           # Prediction (one interpolation job)
+│   ├── prediction_frame.dart     # One frame of a prediction, with its provenance
+│   ├── training.dart             # Training jobs, datasets and per-epoch samples
+│   ├── storage_report.dart       # Room left on the results volume
+│   ├── access_request.dart       # An account request from the landing page
+│   ├── chat_message.dart         # Conversation + ChatMessage
+│   ├── app_notification.dart     # AppNotification
+│   ├── news_post.dart            # NewsPost (research news)
+│   └── pagination.dart           # Pagination + PaginatedResult<T>
 │
 ├── services/
-│   ├── api_client.dart          # Dio HTTP client wrapper (ApiClient.instance)
-│   ├── avatar_service.dart      # Profile photos + AvatarCache
-│   ├── auth_service.dart        # Authentication service
-│   ├── auth_provider.dart       # ChangeNotifier holding the signed-in user
-│   ├── admin_user_service.dart  # AdminUserService  — user management API
-│   ├── admin_model_service.dart # AdminModelService — model management API
-│   ├── activity_service.dart    # ActivityService   — activity logs API
-│   ├── me_service.dart          # MeService — /api/me, the only non-admin data
+│   ├── api_client.dart           # Dio HTTP client wrapper (ApiClient.instance)
+│   ├── auth_service.dart         # Authentication
+│   ├── auth_provider.dart        # ChangeNotifier holding the signed-in user
+│   ├── secure_store.dart         # Token storage a broken keystore cannot kill the app with
+│   ├── avatar_service.dart       # Profile photos + AvatarCache
+│   ├── authed_image_cache.dart   # Bytes of images behind the authenticated API
+│   ├── admin_user_service.dart   # User management API
+│   ├── admin_model_service.dart  # Model management API
+│   ├── admin_queue_service.dart  # The administrator's queue board
+│   ├── activity_service.dart     # Activity logs API
+│   ├── me_service.dart           # /api/me, the only non-admin data
 │   ├── access_request_service.dart # Join form + admin review
-│   ├── message_service.dart     # MessageService — thread, inbox, public
-│   ├── notification_service.dart # NotificationService — the bell
-│   ├── news_service.dart        # NewsService — public feed + admin CRUD
-│   └── prediction_service.dart  # PredictionService — upload, list, download
+│   ├── message_service.dart      # Thread, inbox, public channel
+│   ├── notification_service.dart # The bell
+│   ├── news_service.dart         # Public feed + admin CRUD
+│   ├── prediction_service.dart   # Upload, list, download
+│   ├── training_service.dart     # Managed training, administrator side
+│   ├── researcher_training_service.dart # Managed training, researcher side
+│   └── upload_resume_store.dart  # What an unfinished upload was going to become
 │
 ├── screens/
 │   ├── landing/
-│   │   └── landing_page.dart    # Public landing page
+│   │   └── landing_page.dart     # Public landing page
 │   ├── auth/
-│   │   └── login_page.dart      # Login screen
+│   │   ├── login_page.dart
+│   │   └── password_gate.dart    # Blocks the console until an issued password is replaced
 │   ├── admin/
-│   │   ├── admin_shell.dart             # Admin layout with sidebar
-│   │   ├── dashboard_home_screen.dart   # Stats + recent activities
+│   │   ├── admin_shell.dart              # Admin layout with sidebar
+│   │   ├── dashboard_home_screen.dart    # Stats + recent activities
 │   │   ├── user_management_screen.dart
 │   │   ├── model_management_screen.dart
+│   │   ├── queue_monitor_screen.dart     # Who the model is working for, and who is behind them
 │   │   ├── access_requests_screen.dart
 │   │   ├── news_management_screen.dart
-│   ├── training_screen.dart
 │   │   └── activity_logs_screen.dart
 │   ├── messages/
 │   │   ├── message_thread_screen.dart       # The researcher's one thread
@@ -286,28 +316,46 @@ lib/
 │       ├── upload_screen.dart               # Start a new analysis
 │       ├── prediction_history_screen.dart   # Job status, polling, download
 │       ├── frame_gallery_screen.dart        # Frame previews for one job
+│       ├── training_screen.dart             # Datasets, runs and metrics
 │       ├── user_activity_screen.dart        # Full paginated activity log
 │       └── user_activity_tile.dart          # Shared row widget
 │
 ├── widgets/
-│   ├── status_badge.dart        # Status chip widget
-│   ├── pagination_bar.dart      # Pagination controls
-│   ├── news_carousel.dart       # Landing-page research-news slideshow
-│   ├── user_avatar.dart         # Photo or initials frame + AvatarButton
-│   ├── message_bubbles.dart     # Bubble list + composer, both sides
-│   ├── notification_bell.dart   # Bell, badge and panel
-│   ├── avatar_editor_sheet.dart # Change/remove a photo (self or, as admin, anyone)
-│   └── async_state_views.dart   # LoadingView / ErrorView / EmptyView
+│   ├── app_dialog.dart           # The one way this app opens a dialog
+│   ├── status_badge.dart         # Status chip
+│   ├── pagination_bar.dart       # Pagination controls
+│   ├── async_state_views.dart    # LoadingView / ErrorView / EmptyView
+│   ├── user_avatar.dart          # Photo or initials frame + AvatarButton
+│   ├── avatar_editor_sheet.dart  # Change/remove a photo
+│   ├── change_password_dialog.dart # Serves both consoles
+│   ├── authed_image.dart         # An API image loaded with the caller's bearer token
+│   ├── frame_stack_viewer.dart   # Scrub through a stack of frames the way ImageJ does
+│   ├── model_status_strip.dart   # Live availability of the deep-learning workers
+│   ├── storage_panel.dart        # Free space on the results volume
+│   ├── training_handoff_panel.dart # Finished runs waiting to become model versions
+│   ├── register_model_form.dart  # Turn a run's weights into a model version
+│   ├── message_bubbles.dart      # Bubble list + composer, both sides
+│   ├── notification_bell.dart    # Bell, badge and panel
+│   ├── news_section.dart         # Landing-page research news: one featured, then the rest
+│   ├── news_article_view.dart    # Opens one post in full
+│   └── news_video_player.dart    # Only where `video_player` has an implementation
 │
 ├── utils/
-│   ├── file_download.dart       # Conditional export (web vs native)
-│   ├── file_download_web.dart   # package:web browser download
-│   └── file_download_io.dart    # dart:io + path_provider file write
+│   ├── archive_source.dart       # Where an upload's bytes come from, a range at a time
+│   ├── file_archive.dart         # Conditional export (web vs native)
+│   ├── file_archive_io.dart      # Ranges read off disk; only the current chunk is resident
+│   ├── file_archive_web.dart     # BytesArchiveSource — no file handle exists on the web
+│   ├── file_download.dart        # Conditional export (web vs native)
+│   ├── file_download_web.dart    # package:web browser download
+│   ├── file_download_io.dart     # dart:io + path_provider file write
+│   ├── blob_url.dart / _io / _web # Bytes in memory → a URL a `<video>` can play
+│   ├── file_extension.dart       # hasExtension — the check file_picker cannot do portably
+│   └── frame_bundle.dart         # Wrap loose `.tif` frames into the ZIP the upload path expects
 │
 ├── theme/
-│   └── app_theme.dart           # App colors & typography
+│   └── app_theme.dart            # Colors & typography
 │
-└── main.dart                    # App entry point
+└── main.dart                     # App entry point
 ```
 
 **Service conventions.** Every API service is instantiated (`AdminUserService()`),
@@ -545,7 +593,7 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — 129 tests, passing
+- ✅ `flutter test` — passing (269 tests as of 4 September 2026)
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
@@ -560,35 +608,54 @@ flutter build appbundle --release
 - ✅ IT support tickets, in-app for signed-in users and public from the
   sign-in page
 - ✅ Research news: admin editor with photo upload and a publish switch, shown
-  as a slideshow in the landing page's Research section
+  in the landing page's Research section as one featured post plus the rest
+- ✅ Managed training from the researcher's side: datasets, runs, per-epoch
+  metrics, and looking at a dataset before spending GPU time on it
+- ✅ Admin queue board and storage panel
+- ✅ Uploads that stream: bytes are read a range at a time, so a 512 MB dataset
+  never sits in the heap
 
 ### Testing
-The suite is **89** tests across eight files.
-`widget_test.dart` covers the landing page: a boot smoke test, a layout check at
-seven viewports (fails if any section overflows), a status-bar clearance check,
-and three header-navigation checks. `user_console_test.dart` covers the
-researcher console: `MeStats` payload parsing and `UserActivityTile` rendering.
-`support_test.dart` covers ticket parsing (including the guest fallback) and the
-public ticket sheet's validation and phone layout. `upload_resume_test.dart` covers the interrupted-upload record and its store.
-`messaging_test.dart` covers the thread payloads, which side a bubble sits on,
-the read ticks, and that the composer puts your text back when a send fails.
-`notification_test.dart` covers the payload, the icon/colour fallback for a type
-the client has never seen, and the bell's badge.
-`avatar_test.dart` covers the initials fallback (two-part names, one-word
-names, an empty name) and `UserModel`'s photo field. `news_test.dart` covers the
-news payload and the carousel: that it collapses to nothing when the feed is
-empty *or* fails, that it advances on its own, and that a slide fits four
-viewports — the landing-page layout tests run with an empty feed, so the slide's
-own layout is only covered here.
+The suite is **269 tests across 32 files**, and `flutter analyze` is clean.
+Both were last run on 4 September 2026.
 
-That is the entire automated suite — the file was Flutter's counter-app scaffold
-until 15 Aug 2026, and it *failed*. The "23/23 contract tests" quoted in older
-notes were a manual `curl` checklist, not a runnable suite.
+The file was Flutter's counter-app scaffold until 15 August 2026, and it
+*failed*. The "23/23 contract tests" quoted in older notes were a manual `curl`
+checklist, not a runnable suite — if you find that number anywhere, it is not
+evidence of anything.
+
+| File | Covers |
+|---|---|
+| `widget_test.dart` | The landing page: a boot smoke test, a layout check at seven viewports that fails if any section overflows, a status-bar clearance check, and header navigation |
+| `user_console_test.dart` | `MeStats` payload parsing and `UserActivityTile` rendering |
+| `shell_navigation_test.dart` | Moving between tabs by swipe, and that leaving mid-work asks first |
+| `messaging_test.dart` / `message_delivery_test.dart` | Thread payloads, which side a bubble sits on, read ticks, and the composer putting your text back when a send fails |
+| `notification_test.dart` | The payload, the icon/colour fallback for a type the client has never seen, and the bell's badge |
+| `avatar_test.dart` | The initials fallback (two-part names, one-word names, an empty name) and `UserModel`'s photo field |
+| `news_test.dart` / `news_video_test.dart` | The news payload, the section's behaviour on an empty *or* failed feed, and a post's video not being hidden |
+| `upload_resume_test.dart` | The interrupted-upload record and its store |
+| `archive_source_test.dart` | That a large archive is walked a range at a time and never pulled into the heap whole |
+| `frame_bundle_test.dart` / `file_extension_test.dart` | Zipping loose frames, and the extension check `file_picker` cannot do portably |
+| `frame_provenance_test.dart` / `frame_stack_viewer_test.dart` | How a frame says where it came from, and scrubbing a stack |
+| `training_test.dart` / `researcher_training_test.dart` / `training_metrics_test.dart` / `training_handoff_panel_test.dart` | The managed-training payloads from both sides, metrics in whatever shape they arrive, and handing weights over as a model version |
+| `model_status_test.dart` / `model_status_message_test.dart` / `upload_model_picker_test.dart` | Live worker availability, the wording a researcher gets when a model is unusable, and picking one |
+| `queue_monitor_screen_test.dart` / `storage_panel_test.dart` / `recent_activity_scroll_test.dart` | The admin panels |
+| `worker_auth_test.dart` | The per-model secret never reaching a client — including MySQL's integer booleans being read correctly |
+| `password_gate_test.dart` / `secure_store_test.dart` / `login_failure_message_test.dart` | Getting in, staying in, and being told why when you cannot |
+| `authed_image_cache_test.dart` / `selectable_text_test.dart` | Images behind a bearer token, and text a user can actually copy |
+| `source_encoding_test.dart` | A tripwire, not a feature. It fails if any file under `lib/` or `test/` grows a mojibake sequence — UTF-8 read back as Windows-1252 corrupts text through ordinary editing, and it reached production text (`by Administrator • 4d ago` on the admin dashboard) before anyone noticed. Its twin guards the backend |
 
 **A layout test earns its place.** The phone-width check on `PublicTicketSheet`
 caught a real 54px overflow: `DropdownButtonFormField` sizes itself to its
 longest option rather than the space it is given, so "prediction" pushed the row
 off the edge. Pass `isExpanded: true` on every dropdown in a constrained row.
+
+**A memory test has to be able to fail.** `archive_source_test.dart` asserts
+that walking a large file does not pull it into memory, and it passed against a
+deliberately wrong whole-file-read implementation — because the fixture helper
+had already allocated 64 MB building the file. Writing the fixture 1 MB at a
+time made the wrong implementation grow RSS by 167 MB and fail, which is what
+the test was for.
 
 ```bash
 flutter test
@@ -637,6 +704,6 @@ server-side previews, and both upload and download report progress.
 
 ---
 
-**Last Updated:** August 14, 2026  
-**Flutter Version:** Latest Stable  
-**Status:** Active Development - FASE 2 Complete
+**Last Updated:** 4 September 2026  
+**Flutter Version:** 3.44+  
+**Status:** Active development. `flutter analyze` clean, 269 tests passing.

@@ -11,6 +11,7 @@ import '../landing/landing_page.dart';
 import '../messages/admin_inbox_screen.dart';
 import 'access_requests_screen.dart';
 import 'activity_logs_screen.dart';
+import 'queue_monitor_screen.dart';
 import 'dashboard_home_screen.dart';
 import 'model_management_screen.dart';
 import 'news_management_screen.dart';
@@ -24,6 +25,7 @@ enum AdminSection {
   messages('Messages', Icons.forum_outlined),
   news('Research News', Icons.article_outlined),
   models('Model Management', Icons.memory_outlined),
+  queue('Queue', Icons.hourglass_bottom_outlined),
   activities('Activity Logs', Icons.history);
 
   const AdminSection(this.label, this.icon);
@@ -128,6 +130,8 @@ class _AdminShellState extends State<AdminShell> {
         return const NewsManagementScreen();
       case AdminSection.models:
         return const ModelManagementScreen();
+      case AdminSection.queue:
+        return const QueueMonitorScreen();
       case AdminSection.activities:
         return const ActivityLogsScreen();
     }

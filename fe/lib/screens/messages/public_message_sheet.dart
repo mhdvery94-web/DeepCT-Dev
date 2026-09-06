@@ -93,7 +93,16 @@ class _PublicMessageSheetState extends State<PublicMessageSheet> {
     );
   }
 
+  /// Resolved while the element is certainly alive.
+  ///
+  /// `Navigator.pop(context)` looks the ancestor up *at tap time*, and a sheet
+  /// that is already on its way out has a defunct element by then — the lookup
+  /// throws "Null check operator used on a null value" instead of closing.
+  /// Caught on a real device, from the CANCEL button. Holding the state is
+  /// safe: the Navigator outlives every sheet it shows.
   Widget _buildDone(BuildContext context) {
+    final navigator = Navigator.of(context);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -109,7 +118,7 @@ class _PublicMessageSheetState extends State<PublicMessageSheet> {
         ),
         const SizedBox(height: 20),
         ElevatedButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: navigator.maybePop,
           child: const Text('CLOSE'),
         ),
       ],
@@ -117,6 +126,9 @@ class _PublicMessageSheetState extends State<PublicMessageSheet> {
   }
 
   Widget _buildForm(BuildContext context) {
+    // Same reason as _buildDone: resolved now, not at tap time.
+    final navigator = Navigator.of(context);
+
     return Form(
       key: _formKey,
       child: Column(
@@ -187,7 +199,7 @@ class _PublicMessageSheetState extends State<PublicMessageSheet> {
           Row(
             children: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: navigator.maybePop,
                 child: const Text('CANCEL'),
               ),
               const Spacer(),

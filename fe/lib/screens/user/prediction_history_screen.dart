@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -389,12 +390,24 @@ class _PredictionCard extends StatelessWidget {
               if (prediction.isUploaded) _fact(context, 'Ready to analyse'),
               if (prediction.isCompleted)
                 _fact(context, '${prediction.outputFilesCount} generated'),
-              if (prediction.isPending && prediction.queuePosition != null)
-                _fact(context, 'position ${prediction.queuePosition}'),
               if (prediction.isCompleted)
                 _fact(context, prediction.expiryLabel),
             ],
           ),
+
+          if (prediction.isPending) _queuePlace(context, prediction),
+
+          // The hold-out measurement is no longer shown on its own here. It
+          // answers "is this model any good", which is a question about a
+          // model rather than about one researcher's run, and on a finished
+          // prediction it read as a grade on work they had already accepted.
+          //
+          // The numbers themselves are not gone: `_comparison` still uses them
+          // to rank two runs over the same frames, which is where an error
+          // figure earns its place, and the training screen reports the same
+          // family of metrics per epoch.
+          _comparison(context, prediction),
+          _evidence(context, prediction),
 
           if (prediction.isFailed && prediction.errorMessage != null) ...[
             const SizedBox(height: 12),
@@ -483,6 +496,263 @@ class _PredictionCard extends StatelessWidget {
 
   Widget _fact(BuildContext context, String text) =>
       Text(text, style: Theme.of(context).textTheme.bodySmall);
+
+  /// Where in the line this run is, and roughly how long that means.
+  ///
+  /// A waiting job used to say only "pending", and the position was computed
+  /// on the detail endpoint the history screen never calls — so the wait had
+  /// no shape at all. Someone watching a spinner with no number cannot tell a
+  /// queue of one from a queue of nine, and after a few minutes the only
+  /// reasonable conclusion is that it has broken.
+  ///
+  /// The estimate is deliberately vague in wording and specific in number: it
+  /// is an average over recent runs, so it is a guide, not a promise.
+  Widget _queuePlace(BuildContext context, Prediction prediction) {
+    final place = prediction.queuePosition;
+    final wait = prediction.estimatedWaitMinutes;
+    final theme = Theme.of(context);
+
+    return Container(
+      key: const Key('prediction-queue-place'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        border: Border(left: BorderSide(color: AppTheme.accent, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.schedule,
+                size: 16,
+                color: AppTheme.accent,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                place == null
+                    ? 'Waiting to start'
+                    : (place == 1
+                          ? 'Next to run'
+                          : 'Number $place in the queue'),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          if (wait != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              place == 1
+                  ? 'Usually about $wait minute(s) once it starts.'
+                  : 'Usually about $wait minute(s) from now.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppTheme.textMuted,
+              ),
+            ),
+          ],
+          if (prediction.queueStalledMessage != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              prediction.queueStalledMessage!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppTheme.warning,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Every run made on these same frames, side by side.
+  ///
+  /// The registry could always hold several inference endpoints; until there
+  /// was a way to put two of them on one set of frames it was plumbing rather
+  /// than an instrument. Lower MAE is better, and the winner is marked so
+  /// nobody has to squint at four decimal places to find it.
+  Widget _comparison(BuildContext context, Prediction prediction) {
+    final runs = prediction.comparison;
+    if (runs.length < 2) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+
+    final measured = runs.where((r) => r.isMeasured).toList()
+      ..sort((a, b) => a.mae!.compareTo(b.mae!));
+    final best = measured.isEmpty ? null : measured.first;
+
+    return Container(
+      key: const Key('prediction-comparison'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(border: Border.all(color: AppTheme.border)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'RUNS ON THESE FRAMES',
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final run in runs)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  if (run.isCurrent)
+                    Container(width: 3, height: 14, color: AppTheme.primary)
+                  else
+                    const SizedBox(width: 3),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      run.modelLabel,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: run.isCurrent
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    // A run still going, or one whose archive offered nothing
+                    // to hold out, has no number — and saying which is more
+                    // use than printing a dash for both.
+                    run.status != 'completed'
+                        ? run.status
+                        : (run.isMeasured
+                              ? 'MAE ${run.mae!.toStringAsFixed(1)}'
+                              : 'not measured'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: best != null && run.id == best.id
+                          ? AppTheme.success
+                          : AppTheme.textMuted,
+                      fontWeight: best != null && run.id == best.id
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (best != null && measured.length > 1) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Lowest error: ${best.modelLabel}. One frame on one archive — '
+              'a direction, not a verdict.',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: AppTheme.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Thumbnails kept after the frames themselves were deleted.
+  ///
+  /// Shown only once the files are gone. While they are still there the
+  /// gallery is better in every way; this exists for the week afterwards,
+  /// when the record used to say a job had completed and offer nothing at all
+  /// to look at.
+  Widget _evidence(BuildContext context, Prediction prediction) {
+    if (prediction.evidence.isEmpty || prediction.canDownload) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      key: const Key('prediction-evidence'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'KEPT AFTER EXPIRY',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 84,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: prediction.evidence.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, i) => _EvidenceThumb(
+                predictionId: prediction.id,
+                name: prediction.evidence[i],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One kept thumbnail. Loads its own bytes so the strip builds lazily.
+class _EvidenceThumb extends StatelessWidget {
+  final int predictionId;
+  final String name;
+
+  const _EvidenceThumb({required this.predictionId, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 84,
+      height: 84,
+      child: ColoredBox(
+        color: AppTheme.textPrimary,
+        child: FutureBuilder<Uint8List>(
+          future: PredictionService().evidence(id: predictionId, name: name),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const Center(
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  size: 18,
+                  color: AppTheme.borderDark,
+                ),
+              );
+            }
+
+            if (!snapshot.hasData) {
+              return const Center(
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
+
+            return Image.memory(
+              snapshot.data!,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
+            );
+          },
+        ),
+      ),
+    );
+  }
 }
 
 /// Nothing is consuming the queue -- a stuck clock icon with no explanation

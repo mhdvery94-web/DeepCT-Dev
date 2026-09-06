@@ -5,10 +5,21 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- 2. TAMBAHKAN usesCleartextTraffic="true" DI DALAM TAG APPLICATION -->
+    <!--
+      3. allowBackup="false" karena token disimpan flutter_secure_storage.
+      Android Auto Backup ikut menyalin preferensi terenkripsinya, tetapi
+      kunci pembukanya hidup di Android Keystore dan tidak pernah ikut. Data
+      yang dipulihkan ke perangkat lain (atau setelah data aplikasi diganti)
+      karena itu tidak akan pernah bisa didekripsi: setiap pembacaan token
+      melempar, selamanya. SecureStore menahan lemparan itu; ini mencegahnya
+      terjadi sejak awal.
+    -->
     <application
         android:label="deepCT-AI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:usesCleartextTraffic="true">
         
         <activity
