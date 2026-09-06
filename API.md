@@ -1,7 +1,7 @@
 # Referensi API
 
-89 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
-`php artisan route:list --path=api` per 15 Agustus 2026 — jalankan perintah itu
+103 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
+`php artisan route:list --path=api` per 25 Agustus 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 
 **Base URL:** `http://127.0.0.1:8000/api` (atau domain ngrok yang mem-forward ke
@@ -101,6 +101,28 @@ menarik satu entri saat sebuah frame benar-benar diminta.
 **Nama entri divalidasi terhadap daftar isi arsip**, bukan sekadar
 di-`basename()`. Sebuah nama yang lolos ke `getFromName()` tanpa diperiksa akan
 membaca apa pun yang ditunjuknya.
+
+**Placeholder `{name}` sengaja dilepas dari batas segmennya** dengan
+`->where('name', '.*')`. Frame di dalam arsip lazimnya berada di dalam subfolder
+— `Sample Contrast/0001.tif` — dan sebuah placeholder Laravel yang normal tidak
+merentang garis miring, sehingga nama seperti itu **tidak cocok dengan rute mana
+pun** dan dijawab 404 tanpa satu pun petunjuk bahwa yang bermasalah adalah
+routing, bukan arsipnya. Daftar frame mengembalikan nama entri lengkap, jadi
+klien cukup mengirim balik persis apa yang ia terima.
+
+**Daftar kosong punya dua arti, dan respons ini membedakannya.** Arsip yang
+sudah disapu `training:cleanup` membuat daftar frame mengembalikan koleksi
+kosong — terbaca sama persis dengan arsip yang memang tidak berisi `.tif`.
+Karena itu daftarnya membawa `meta`:
+
+```json
+{ "success": true, "data": [],
+  "meta": { "archive_deleted": true,
+            "archive_deleted_at": "2026-09-03T03:10:00+07:00" } }
+```
+
+Angka hasil latihnya masih ada; frame di baliknya tidak. Jendela retensinya
+dijelaskan di [be/README.md](be/README.md).
 
 Hasil render di-cache di samping dataset-nya, sama seperti preview frame
 prediksi, sehingga menggeser bolak-balik tidak membuka ulang ZIP setiap kali.
@@ -338,7 +360,7 @@ mengantrekan pekerjaannya. Ia menjawab:
 | `GET` | `/predictions/{id}/frames` | Daftar frame di disk (input + output) |
 | `GET` | `/predictions/{id}/frames/{name}/preview` | Frame itu sebagai PNG |
 | `GET` | `/predictions/{id}/download/results` | ZIP berisi frame hasil saja |
-| `GET` | `/predictions/{id}/download/complete` | ZIP berisi `input/`, `output/`, `metadata.json` |
+| `GET` | `/predictions/{id}/download/complete` | ZIP berisi `input/`, `output/`, `metadata.json`, `manifest.csv` |
 
 ### Syarat arsip
 
@@ -356,10 +378,19 @@ Entri di dalam subfolder tetap terbaca — ekstraksi meratakannya.
 **`POST /predictions`** — multipart `file` + `model_id`. Balasan 201:
 
 ```json
-{ "id": 6, "job_id": "6c07cb2a-…", "status": "pending",
-  "input_files_count": 2, "queue_position": 1,
-  "estimated_wait_minutes": 5, "expires_at": "2026-08-16T04:41:29+00:00" }
+{ "id": 6, "job_id": "6c07cb2a-…", "status": "uploaded",
+  "input_files_count": 2, "queue_position": null,
+  "estimated_wait_minutes": null, "expires_at": "2026-08-16T04:41:29+00:00" }
 ```
+
+`status` adalah status rekaman yang sebenarnya, dan unggahan mendarat sebagai
+`uploaded` — berkasnya ada, tetapi belum ada yang menekan START. Endpoint ini
+sempat menuliskan `"pending"` secara harfiah beserta posisi antrean, yaitu
+mengumumkan tempat dalam barisan yang belum dimasuki job tersebut.
+
+`queue_position` dan `estimated_wait_minutes` karenanya `null` sampai
+`POST /predictions/{id}/start` dijalankan; keduanya `int?` di setiap
+pembacanya.
 
 ### Pratinjau frame
 
@@ -368,6 +399,121 @@ Flutter. `preview` mengubahnya jadi PNG grayscale 8-bit di server.
 
 `GET /predictions/{id}/frames` mengembalikan `name`, `kind` (`input`/`output`),
 dan `size`.
+
+#### Asal-usul tiap frame buatan
+
+`GET /predictions/{id}` menyertakan **`frame_provenance`**, yang menjawab
+pertanyaan yang tidak bisa dijawab `interpolated_frames`: frame ini digambar di
+antara frame yang mana, dan sudah berapa kali model diberi makan keluarannya
+sendiri sebelum sampai ke sini.
+
+```json
+"frame_provenance": [
+  { "frame": "frame_002.tif", "index": 2, "from": [1, 3],
+    "generation": 2, "synthetic_parents": 1 },
+  { "frame": "frame_003.tif", "index": 3, "from": [1, 5],
+    "generation": 1, "synthetic_parents": 0 },
+  { "frame": "frame_004.tif", "index": 4, "from": [3, 5],
+    "generation": 2, "synthetic_parents": 1 }
+]
+```
+
+Bacalah contoh itu dari celah antara frame 001 dan 005. Titik tengahnya, 003,
+digambar lebih dulu dari dua frame yang **keduanya hasil pindai** —
+`generation: 1`. Baru sesudahnya 002 dan 004 digambar, masing-masing memakai
+003 sebagai salah satu batasnya: model sedang diberi keluarannya sendiri, jadi
+`generation: 2` dengan `synthetic_parents: 1`.
+
+- `generation` — 1 berarti kedua batasnya hasil pindai; lebih besar berarti
+  galat sudah berpeluang menumpuk sebanyak itu kali.
+- `synthetic_parents` — berapa dari dua batasnya yang dikarang model (0, 1 atau
+  2). Sudah tersirat dari `generation`, tetapi pembaca tabel tidak seharusnya
+  perlu menurunkannya sendiri.
+
+**Bisa `null`.** Job yang selesai sebelum kolom ini ada tidak memilikinya, jadi
+klien wajib memperlakukannya sebagai opsional alih-alih menganggapnya pasti ada
+begitu job selesai.
+
+Array yang sama ikut ditulis ke `metadata.json` di dalam
+`GET /predictions/{id}/download/complete` — enam bulan lagi arsip itu mungkin
+satu-satunya yang tersisa, dan satu folder berisi TIFF tidak bisa menyebut mana
+yang keluar dari pemindai dan mana yang digambar model.
+
+#### Seberapa bagus hasilnya
+
+`GET /predictions/{id}` menyertakan **`validation`**, hasil pemeriksaan
+*hold-out*. Frame yang ingin diisi seorang peneliti menurut definisinya tidak
+dimiliki siapa pun, jadi yang diukur adalah frame yang **memang ada**: di mana
+pun arsip memuat tiga frame berurutan, yang tengah disisihkan, digambar ulang
+dari kedua tetangganya, lalu dibandingkan dengan aslinya.
+
+```json
+"validation": {
+  "held_out_frame": "frame_002.tif", "index": 2, "from": [1, 3],
+  "mae": 41.5, "rmse": 58.2, "psnr": 61.03,
+  "pixels": 1048576, "reference_min": 1200, "reference_max": 5200
+}
+```
+
+- `mae` dan `rmse` dalam hitungan 16-bit mentah.
+- `psnr` dalam desibel terhadap rentang 16-bit penuh (65535), yang merupakan
+  konvensinya. Hati-hati membacanya: frame CT jarang mengisi rentang itu, jadi
+  angkanya cenderung terlihat bagus dibanding pengukuran yang memakai rentang
+  sebenarnya. `null` ketika kedua frame identik — tidak ada galat untuk
+  dinyatakan, dan log10(0) bukan bilangan.
+- `reference_min`/`reference_max` **wajib dibaca bersama `mae`**: 40 hitungan
+  adalah galat besar pada frame yang membentang 300 dan dapat diabaikan pada
+  frame yang membentang 60.000.
+- `{"error": "..."}` ketika pengukurannya gagal diambil. Job-nya tetap
+  `completed`: sebuah pengukuran yang gagal tidak boleh merenggut interpolasi
+  yang sudah selesai.
+
+**Bisa `null`**, dan itu kasus biasa: unggahan berisi frame 1 dan 5 tidak
+menyisakan apa pun untuk disembunyikan.
+
+#### Membandingkan dua model
+
+| Method | Endpoint | Fungsi |
+|---|---|---|
+| `POST` | `/predictions/{id}/rerun` | Jalankan frame yang sama lewat model lain |
+
+Body: `{"model_id": 2}`. Menjawab **201** dengan `{id, job_id, status,
+rerun_of_id}`, **410** bila frame aslinya sudah kedaluwarsa, **422** bila
+modelnya tidak aktif.
+
+Frame masukannya **disalin**, bukan dibagi — perbandingan yang separuhnya bisa
+lenyap sendiri-sendiri bukanlah perbandingan.
+
+`GET /predictions/{id}` lalu menyertakan **`comparison`**, seluruh run pada
+frame yang sama, terurut dari yang terlama:
+
+```json
+"comparison": [
+  { "id": 14, "is_current": true, "model": "deepCT Model",
+    "status": "completed", "output_files_count": 3, "mae": 41.5, "psnr": 61.0 },
+  { "id": 15, "is_current": false, "model": "Second opinion",
+    "status": "completed", "output_files_count": 3, "mae": 38.2, "psnr": 62.4 }
+]
+```
+
+Kosong ketika hanya ada satu run: tabel berisi satu baris bukan perbandingan,
+dan terbaca seolah ada yang gagal dimuat.
+
+#### Bukti yang hidup lebih lama dari berkasnya
+
+| Method | Endpoint | Fungsi |
+|---|---|---|
+| `GET` | `/predictions/{id}/evidence/{name}` | Satu thumbnail tersimpan, sebagai PNG |
+
+`GET /predictions/{id}` menyertakan **`evidence`**, daftar nama thumbnail yang
+disimpan permanen. Enam gambar 256px per run, diambil menyebar sepanjang
+sekuensnya, tersimpan di luar folder job supaya `predictions:cleanup` tidak
+menyentuhnya.
+
+Endpoint-nya **sengaja tidak memeriksa kedaluwarsa**. Thumbnail ini justru ada
+untuk hidup lebih lama daripada frame asalnya; menolaknya begitu yang asli
+kedaluwarsa akan meniadakan satu-satunya alasan ia disimpan. Menghapus job-nya
+tetap menghapus thumbnail-nya.
 
 `GET /predictions/{id}/frames/{name}/preview?size=512` mengembalikan PNG.
 `size` adalah sisi terpanjang (64–2048, default 512); aspek rasio dipertahankan
@@ -473,6 +619,32 @@ Ditambah dua route foto: `POST` dan `DELETE /admin/users/{id}/avatar`.
 
 `test` menjalankan **inferensi sungguhan** dengan frame contoh yang dibuat
 sendiri. Nyata memakan waktu ~18–21 detik dan memakai kuota GPU.
+
+#### Rahasia dan TLS worker
+
+`POST` dan `PUT` menerima dua medan tambahan:
+
+- **`auth_token`** — rahasia bersama yang dikirim ke worker sebagai
+  `Authorization: Bearer`. **Tulis-saja**: tidak ada satu pun endpoint yang
+  mengembalikannya, tersimpan terenkripsi, dan yang dijawab registry hanyalah
+  `has_auth_token` (boolean).
+- **`verify_tls`** — apakah sertifikat worker diperiksa. Default `false`,
+  sama dengan perilaku sebelum medan ini ada.
+
+Pada `PUT`, ketiga keadaan `auth_token` berbeda artinya:
+
+| Yang dikirim | Artinya |
+|---|---|
+| medannya **tidak ada** | rahasianya dibiarkan apa adanya |
+| `""` | rahasianya **dihapus** |
+| sebuah string | rahasianya **diganti** |
+
+Bedanya penting: form yang selalu mengirim setiap medan akan menghapus
+kredensial setiap kali ada yang membetulkan salah ketik di deskripsi.
+
+Diperlukan begitu worker berpindah dari terowongan bernama acak ke alamat tetap
+di jaringan yang bisa dijangkau orang lain — di sana, mengetahui endpoint sudah
+cukup untuk memakai GPU-nya.
 
 Health check: `online` bila terjangkau, `trouble` bila > 5 detik, `offline`
 bila gagal atau tunnel mati (`ERR_NGROK_3200`).
@@ -618,6 +790,157 @@ tidak akan pernah ada training yang selesai.
 | `GET` | `/admin/activities` — filter `user_id`, `type`, `date_from`, `date_to` |
 | `GET` | `/admin/activities/types` |
 | `GET` | `/admin/users/{id}/activities` |
+
+---
+
+## Antrean langsung
+
+| Method | Endpoint |
+|---|---|
+| `GET` | `/admin/queue` — siapa yang sedang dan akan memakai model |
+
+**Bukan dari `user_activities`.** Jejak audit mencatat peristiwa yang *sudah
+terjadi* — "memulai analisis" — tanpa mengatakan apakah run-nya masih berjalan,
+jadi menjawabnya dari sana berarti mencari peristiwa yang belum ada pasangan
+selesainya. Itu penyimpulan, dan ia salah begitu dua run bertumpang tindih.
+`analysis_records` menyatakannya langsung: `processing` untuk yang sedang
+dikerjakan, `pending` untuk yang menunggu.
+
+Keadaan sekarang, bukan riwayat. "Siapa saja yang pernah memakai model"
+dijawab riwayat prediksi dan jejak audit — pertanyaan berbeda, dan mencampur
+keduanya dalam satu daftar justru mengubur yang mendesak.
+
+`queue_position` di sini **angka yang sama** dengan yang dilihat pemilik job di
+`/predictions`, karena keduanya dihitung `App\Services\QueueBoard` — sejak
+1.35.0 benar-benar keduanya, termasuk pertanyaan satu-rekaman lewat
+`positionOf()`. Sebelumnya tiga tempat menghitung sendiri dengan
+`created_at <`, yang memberi angka sama kepada dua rekaman berdetik sama.
+Urutannya dipecah dengan `id` supaya total, bukan diserahkan ke basis data.
+
+Job yang sedang berjalan tidak diberi nomor: ia tidak sedang menunggu apa pun.
+Begitu pula `uploaded` — ia menunggu tombol START, bukan GPU.
+
+`meta` membawa keadaan `QueueHealth` beserta pesan versi administrator —
+antrean panjang dan worker mati terlihat sama dari daftar job yang menunggu,
+padahal keduanya menuntut tindakan berlawanan.
+
+```json
+{
+  "success": true,
+  "data": {
+    "running": [
+      {
+        "id": 37,
+        "job_id": "job-a1b2",
+        "status": "processing",
+        "user": { "id": 4, "name": "Alice", "email": "alice@brin.go.id" },
+        "model": { "id": 1, "name": "deepCT", "version": "v1.0" },
+        "input_files_count": 42,
+        "elapsed_seconds": 96,
+        "queue_position": null,
+        "estimated_wait_minutes": null,
+        "created_at": "2026-08-25T12:40:11+00:00"
+      }
+    ],
+    "waiting": [
+      {
+        "id": 39,
+        "status": "pending",
+        "user": { "id": 7, "name": "Bob", "email": "bob@brin.go.id" },
+        "model": { "id": 1, "name": "deepCT", "version": "v1.0" },
+        "input_files_count": 18,
+        "elapsed_seconds": 240,
+        "queue_position": 1,
+        "estimated_wait_minutes": 2,
+        "created_at": "2026-08-25T12:38:02+00:00"
+      }
+    ],
+    "minutes_per_job": 2,
+    "busy": 1,
+    "queued": 1
+  },
+  "meta": {
+    "stalled": false,
+    "waiting": 1,
+    "oldest_wait_seconds": 240,
+    "queue_message": null
+  }
+}
+```
+
+`user` bisa `null` hanya karena kolomnya mengizinkan; `analysis_records.user_id`
+memakai `cascade`, jadi baris antrean tanpa pemilik tidak bisa terbentuk.
+`model` **memang bisa** `null` — `model_id` memakai `set null`, sehingga model
+yang dicabut sementara pekerjaannya masih mengantre meninggalkannya kosong.
+
+---
+
+## Penyimpanan
+
+| Method | Endpoint |
+|---|---|
+| `GET` | `/admin/storage` — ruang kosong dan rinciannya |
+
+```json
+{
+  "mounted": true,
+  "sentinel_enforced": false,
+  "free_bytes": 42949672960,
+  "total_bytes": 107374182400,
+  "used_bytes": 64424509440,
+  "minimum_free_bytes": 2147483648,
+  "headroom_multiplier": 3.0,
+  "breakdown": {
+    "predictions": 3221225472,
+    "evidence": 1048576,
+    "training_datasets": 2147483648,
+    "temporary": 0
+  }
+}
+```
+
+Yang penting **bukan** totalnya. Volume di 90% yang sebagian besar berisi
+`predictions` baik-baik saja — sapuan retensi mengembalikannya dalam sehari.
+Volume di 90% berisi `training_datasets` tidak, karena tidak ada yang
+mengambilnya kembali. Satu angka "terpakai" tidak bisa membedakan keduanya.
+
+`mounted` bernilai false ketika volume hasil tidak ter-mount. Dalam keadaan itu
+unggahan ditolak alih-alih ditulis ke apa pun yang ada di balik mount point —
+lihat di bawah.
+
+### Unggahan yang ditolak sebelum berjalan
+
+Kedua jalur unggah memeriksa ruang lebih dulu dan menjawab **507 Insufficient
+Storage** ketika tidak ada tempat:
+
+- **`POST /predictions/uploads`** memeriksa `total_size` yang dideklarasikan,
+  sebelum satu byte pun bergerak.
+- **`POST /predictions`** memeriksa ukuran arsip yang sudah di disk, sebelum
+  ekstraksi — titik ketika satu berkas menjadi banyak.
+
+507, bukan 400: tidak ada yang salah dengan permintaannya, dan berkas yang
+lebih kecil tidak akan mendapat jawaban berbeda.
+
+Sebuah arsip menghabiskan disk **tiga kali lipat** sebelum selesai: frame yang
+diekstrak, frame yang dihasilkan darinya, dan arsip sementara untuk unduhannya.
+Diatur lewat `STORAGE_HEADROOM_MULTIPLIER`, dengan lantai absolut
+`STORAGE_MINIMUM_FREE_BYTES` (2 GB) supaya sebuah mesin tidak pernah berjalan
+sampai nol — di titik itu basis data pun tidak bisa menulis.
+
+### Membuktikan NAS-nya benar-benar ter-mount
+
+Share yang tidak ter-mount bukan kesalahan; ia direktori kosong biasa, dan
+tulisan ke dalamnya berhasil. Berkasnya mendarat di disk host dan tidak akan
+ditemukan lagi.
+
+Aktifkan dengan `STORAGE_REQUIRE_SENTINEL=true` **setelah** menjalankan:
+
+```bash
+php artisan storage:mark
+```
+
+**Mati secara default.** Instalasi satu disk tidak punya apa pun untuk absen,
+dan menyalakannya tanpa sentinel akan menolak setiap unggahan.
 
 ---
 

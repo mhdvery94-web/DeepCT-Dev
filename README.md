@@ -33,9 +33,24 @@ orchestration and access control; inference runs on a GPU host reached over
 HTTPS. The platform never loads model weights itself.
 
 **Interpolation is recursive at t=0.5.** For frames 1 and 7 the midpoint 4 is
-generated first, then used as a boundary for 1–4 and 4–7. The model was trained
-on a t-imbalanced dataset, and recursion is how the platform works around that
-bias — see [AI_EXPERIMENTS.md](AI_EXPERIMENTS.md).
+generated first, then used as a boundary for 1–4 and 4–7. Recursion is not a
+refinement here — it is the only way this model can be driven. Measured on
+4 September 2026 against real BRIN archives: moving `time_scalar` from 0 to 1
+shifts the output by **0.17%** of the distance between the two boundary frames,
+so asking for any point other than the midpoint returns the midpoint anyway.
+
+**That carries a limit worth knowing before reading any output.** Error
+compounds **1.73× per synthetic boundary**. Holding the span constant, a frame
+drawn between two scanned frames measures MAE 359.7; one drawn against a
+generated boundary, 623.6; one two levels deep, 1,174.9 — past the 555 you get
+by simply copying the neighbouring scanned frame. So **only frames whose two
+boundaries were both scanned are reliable**: a gap of 2 yields 1 of 1, a gap of
+4 yields 1 of 3, a gap of 8 yields **0 of 7**.
+
+The platform still fills wide gaps, and every frame carries how it was derived
+in `generation`, so the archive says which is which. The measurements are in
+[CHANGELOG.md](CHANGELOG.md) 1.39.0; the model journal is
+[AI_EXPERIMENTS.md](AI_EXPERIMENTS.md).
 
 Full component and schema documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
@@ -46,10 +61,19 @@ Full component and schema documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 | Area | What it does |
 |---|---|
 | **Prediction pipeline** | ZIP upload → validation → queued job → recursive interpolation → checksum-verified download |
-| **Resumable upload** | Chunked, resumable on both sides; server-computed chunk size; an interrupted upload is offered back on the device |
+| **Frame provenance** | Every generated frame records the two frames it was drawn between and its generation — 1 when both boundaries were scanned, higher when the model was fed its own output. Travels in the archive's `metadata.json` and `manifest.csv` |
+| **Hold-out validation** | Where the archive holds three consecutive frames, the middle one is set aside, regenerated, and measured against the real one: MAE, RMSE and PSNR, with the reference frame's own range so the numbers can be read |
+| **Model comparison** | The same frames re-run through another registered model, with each run's error side by side. Inputs are copied, so either run can be deleted without stranding the other |
+| **Evidence after expiry** | Six thumbnails per run kept permanently, outside the folder retention deletes — a completed job stays something you can look at, not just a row |
+| **Resumable upload** | Chunked, resumable on both sides; server-computed chunk size; an interrupted upload is offered back on the device. Bytes are read a range at a time, so a 512 MB dataset never sits in the client's heap |
 | **Frame preview** | 16-bit TIFF rendered to PNG server-side, in pure PHP — no imaging extension required |
 | **Retention** | Results deleted 24 hours after generation; the record and its audit trail remain |
+| **Dataset retention** | Training archives nobody has come back to are freed on a window measured from **last use**, not upload — a dataset is uploaded here precisely to be reused. One with a queued or running job is never swept. The run's numbers stay; the frames behind them go, and the API says which of the two an empty frame list means |
+| **Storage guard** | Both upload paths refuse with 507 when there is no room — an archive costs disk three times over before it is done. A sentinel file proves the results volume is actually mounted, because an absent share accepts writes without complaint |
+| **Storage report** | Free space on the admin dashboard, split into what retention reclaims within a day and what nothing reclaims at all |
 | **Model registry** | Multiple inference endpoints, health-checked every minute and on demand from the upload screen, with live availability in both consoles |
+| **Queue board** | Who the model is working for right now and who is waiting behind them, in the worker's own order — read from the prediction records rather than inferred from the audit trail, and numbered by the same definition the researcher sees on their own job |
+| **Worker credentials** | A per-model shared secret sent as `Authorization: Bearer` and checked by the worker in constant time, stored encrypted and write-only through the API, plus a per-model say over TLS verification — needed the moment a worker moves off a random tunnel onto a LAN address |
 | **Managed training** | Datasets, a job queue, and a GPU worker protocol that survives the worker dying mid-run |
 | **Access control** | Admin-created accounts, no self-registration, forced replacement of issued passwords |
 | **Messaging** | In-app conversations with administrators, plus a public channel for people who cannot sign in |
@@ -119,9 +143,9 @@ the status code alone never confirms success.
 ## Testing
 
 ```bash
-cd be && php artisan test        # 242 tests
+cd be && php artisan test        # 368 tests, 1,452 assertions
 cd fe && flutter analyze         # must be clean
-cd fe && flutter test            # 129 tests
+cd fe && flutter test            # 269 tests across 32 files
 ```
 
 The backend suite runs against MySQL rather than SQLite: several migrations use
@@ -185,7 +209,7 @@ pre-deployment checklist.
 | File | Contents |
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Components, data flow, database schema, technical decisions, deployment |
-| [API.md](API.md) | Complete endpoint reference (89 endpoints) |
+| [API.md](API.md) | Complete endpoint reference (104 endpoints) |
 | [be/README.md](be/README.md) | Backend setup, operations, troubleshooting |
 | [fe/README.md](fe/README.md) | Frontend structure, breakpoints, platform notes |
 | [ROADMAP.md](ROADMAP.md) | Planned work, and what was deliberately not built |

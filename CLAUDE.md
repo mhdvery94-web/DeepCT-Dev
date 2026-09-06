@@ -76,6 +76,25 @@ Confirm you are on a new process by comparing its start time to the file you
 edited. `php artisan route:list` runs in its own short-lived process and will
 happily show a route the running server has never loaded.
 
+**`octane:reload` is the third victim of the same missing function**, and it is
+the one you will reach for, because reloading workers is exactly what you want
+when the server is fine and only the code is stale. It dies inside
+`serverIsRunning()` — before reaching the reload it was going to perform — so
+you get a stack trace, an unchanged server, and no hint that the reload never
+happened.
+
+Reload the workers without going through it. `rr.exe` at the project root is
+the real RoadRunner binary (`vendor/bin/rr` is a PHP installer wrapper and has
+no `reset` command), and the RPC port is in the server state file:
+
+```bash
+./rr.exe reset -o version=3 -o rpc.listen=tcp://127.0.0.1:6001
+```
+
+Each worker becomes a new PHP process, so edited files are picked up. It does
+not disturb a running `serve:all`, which is the difference between this and
+killing the PID.
+
 ### A cached route table hides a new route completely
 
 `npm run preserve:all` runs `php artisan route:cache`, which writes
@@ -134,6 +153,30 @@ forever; without the scheduler, expired files are never deleted and model
 status goes stale. Neither starts on its own, which is why `serve:all` exists.
 `npm run octane:reset` handles the restart dance below.
 
+**`--memory` does not raise PHP's memory limit.** It only decides when the
+worker restarts itself. A bare `php artisan queue:work` runs at the 512 MB
+default, and that used to be fatal: `TiffPreview` turned every pixel into a PHP
+array entry — twice, while `unpack`'s result was copied into the accumulator —
+so a 2048×2048 frame cost **196 MB**, and two of them, which `FrameMetrics`
+holds at once, cost **262 MB**. The process died mid-job, took the run with it,
+and the screen still said `pending` with nothing to explain it.
+
+Pixels now live in a binary string and are unpacked a block at a time, so the
+same frame costs **11.7 MB** and the pair **20 MB**. The ceiling went back up
+from 2048×2048 to 4096×4096; the table of measurements and the reason it did
+not go all the way back to 8192×8192 are in the constant's docblock. The limit
+is now decoding *time*, not memory.
+
+Still use `npm run queue`, which sets `-d memory_limit=1G` **and**
+`--memory=768`. A frame is no longer the thing that will exhaust a worker, but
+nothing else about a job got smaller.
+
+**A stalled queue announces itself.** `QueueHealth` reports a job that has been
+available for over a minute and never reserved. `message()` names the command
+to type and is for administrators; `researcherMessage()` says the same fact
+without a command anyone but an admin could act on. Pick by role — sending the
+admin one to a researcher reads as an error they caused.
+
 ### The model worker's contract
 
 `POST {endpoint_url}` as **multipart**: `file_t0`, `file_t2`, `time_scalar`.
@@ -143,6 +186,37 @@ with **HTTP 200**, so the status code alone cannot tell you whether it worked.
 Interpolation is always t=0.5 and recursive: for frames 1 and 7, generate 4
 first, then use it as a boundary for 1-4 and 4-7. There is no manual
 `time_scalar` input anywhere in the product.
+
+**That is not a UI simplification — the model cannot do anything else.**
+Measured 4 September 2026: moving `time_scalar` from 0 to 1 shifts the output by
+**0.17%** of the distance between the two boundary frames. Asking for t=0.25
+returns the midpoint. Do not add a `time_scalar` control expecting it to work,
+and do not read a repo comment claiming the model "ignores" t either — it
+responds, just far too weakly to use.
+
+**Error compounds 1.73× per synthetic boundary**, so recursion has a depth
+budget. Holding the span constant: 359.7 MAE between two scanned frames, 623.6
+against a generated boundary, 1,174.9 two levels deep — past the 555 you get by
+copying the neighbouring scanned frame outright. Only frames whose two
+boundaries were both scanned are worth trusting: gap 2 gives 1 of 1, gap 4
+gives 1 of 3, gap 8 gives **0 of 7**. The `generation` field on each frame is
+how you tell which is which.
+
+**MAE and PSNR will mislead you here.** Linear blending — averaging the two
+boundary frames — beats the model on MAE (4 of 5 cases) and PSNR (5 of 5),
+because the average is the guess that minimises squared error. On **SSIM** the
+model wins **5 of 5**, and its margin widens on the harder cases. A blurry
+projection frame wrecks reconstruction, so never use MAE or PSNR alone as the
+success measure.
+
+**A shared secret needs both halves, and half of it lives on Kaggle.** The
+platform sends the model's `auth_token` as `Authorization: Bearer`; the worker
+only checks it if `WORKER_TOKEN` is set in its environment — read from Kaggle
+Secrets, never pasted into the script. Empty means open, which is the default,
+so setting the token in **Admin → Model Management** alone changes nothing
+until the Kaggle session is restarted with the secret. Both scripts print which
+mode they came up in at startup, and the training script's `GET /` reports
+`protected`.
 
 ### Flutter gotchas
 
@@ -172,19 +246,65 @@ first, then use it as a boundary for 1-4 and 4-7. There is no manual
 - Square corners everywhere (`BorderRadius.zero`), and `withValues(alpha:)`
   rather than the deprecated `withOpacity`.
 
-### Under Octane, `php.ini` upload limits mostly do not apply
+### Under Octane, `upload_max_filesize` does not apply — but `post_max_size` does
 
 RoadRunner parses the multipart body itself, so `upload_max_filesize` never gets
-a say — a 4 MB upload succeeds against a 2 MB limit. The real ceiling is
-RoadRunner's `max_request_size`. This changes if the app is ever deployed behind
-nginx + PHP-FPM.
+a say: a 4 MB upload succeeds against a 2 MB limit.
+
+**`post_max_size` is a different story, and the sentence that used to sit here
+said it was not.** Laravel's own `ValidatePostSize` middleware reads
+`ini_get('post_max_size')` and compares it to `CONTENT_LENGTH`, so the limit is
+enforced by the framework long before RoadRunner's `max_request_size` is
+reached. It was left at the stock **8M** on this machine, and the symptoms did
+not look like a size limit at all:
+
+- a training worker finishing an epoch and posting its checkpoint back got
+  **413**, recorded as `413 Client Error: Request Entity Too Large` against a
+  run that had trained perfectly for four epochs;
+- a 19 MB dataset posted whole answered **"The POST data is too large"**, while
+  the same archive sent through the chunked endpoint went up without complaint,
+  because each chunk is small.
+
+`post_max_size` is now 256M, and `upload_max_filesize` matches it so the two
+cannot disagree. **Restart Octane after changing either** — `php.ini` is read
+once per process, and the running workers keep the old value.
+
+`.rr.yaml` is empty and that is not a mistake: Octane passes RoadRunner its
+settings as `-o` flags, so there is nothing to find in that file.
+
+All of this changes again if the app is ever deployed behind nginx + PHP-FPM,
+where `client_max_body_size` becomes a third ceiling.
+
+### Mojibake spreads through ordinary editing, and nothing warns you
+
+The admin dashboard shipped `by Administrator â€¢ 4d ago`. Not a rendering
+fault — that byte sequence was **in the source file**. A UTF-8 file had been
+read back as Windows-1252 and saved again, turning `•` (E2 80 A2) into three
+characters. Eight files were affected, and one line in `prediction.dart` had
+been through it **three times** (`ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â`). Five of them were text a
+user reads.
+
+It is invisible in review: the file still parses, the tests still pass, and the
+only symptom is a glyph nobody looks at twice. So there are tripwires —
+`fe/test/source_encoding_test.dart` scans `lib/` and `test/`,
+`be/tests/Unit/SourceEncodingTest.php` scans `app/`, `routes/`, `config/`,
+`database/` and `tests/`. Both reject five mojibake patterns. **If one goes
+red, fix the file, do not relax the test.**
+
+Two things to know if you ever have to repair it by hand. Decoding once is not
+enough — loop until the result stops changing. And cp1252 has five undefined
+slots (`0x81`, `0x8D`, `0x8F`, `0x90`, `0x9D`); map each to its own byte value
+or seven lines will refuse to come back, which is exactly what happened here.
+
+The PHP guard extends PHPUnit's `TestCase`, not Laravel's, so it uses
+`dirname(__DIR__, 2)` rather than `base_path()`.
 
 ## Verify your work
 
 ```bash
-cd be && php artisan test          # 242 tests, needs the db_aict_test database
+cd be && php artisan test          # 368 tests, needs the db_aict_test database
 cd fe && flutter analyze           # must be clean
-cd fe && flutter test              # 129 tests
+cd fe && flutter test              # 269 tests
 cd fe && flutter build apk --release
 ```
 

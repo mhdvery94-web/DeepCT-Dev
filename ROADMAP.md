@@ -6,11 +6,161 @@ berjalan — centang diisi hanya setelah **diverifikasi**, bukan setelah ditulis
 Ini bukan dokumen status. Jangan buat `*_PLAN.md` atau `*_SUMMARY.md` baru;
 perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
-**Terakhir diperbarui:** 22 Agustus 2026
+**Terakhir diperbarui:** 6 September 2026
 
 ---
 
-## Sudah dikerjakan pada putaran ini
+## Diketahui, belum dikerjakan
+
+- [x] **`hyperparameters` dikirim sebagai `[]`, bukan `{}`.** *(1.35.0)*
+      Ternyata tiga tempat, bukan satu: `MeTrainingController`,
+      `TrainingWorkerController` (payload claim, yang dibaca Pydantic dan
+      **ditolak** kalau berupa list) dan bentuk detail `TrainingController`.
+      Diverifikasi di kawat terhadap server berjalan, bukan pada array yang
+      sudah didekode — keduanya terbaca sama setelah `json_decode`.
+
+- [x] **Ekstensi bobot training ditebak, dan tebakannya tidak stabil.**
+      *(1.35.0)* `storeAs()` dengan ekstensi dari nama klien, disaring lewat
+      daftar sufiks bobot yang dikenal karena nama berkas adalah masukan
+      klien. Checkpoint ikut, karena checkpoint yang tidak bisa dimuat sama
+      saja dengan tidak ada. Job 18 (2 September) mendarat sebagai `.hdf`
+      juga — tebakan yang sama, ketiga kalinya. Kedua berkas lama diganti
+      namanya ke `.h5` setelah delapan byte pertamanya dibaca dan ternyata
+      magic HDF5; keduanya kini terunduh sebagai `.h5`.
+
+- [x] **Posisi antrean dihitung di ~~dua~~ tiga tempat.** *(1.35.0)*
+      `PredictionUploadController::queuePosition()` adalah salinan ketiga yang
+      tidak disebut di catatan ini. Dan angkanya **tidak** setara: dua rekaman
+      berbagi detik yang sama membuat hitungan `created_at <` memberi keduanya
+      angka 1 sementara papan menampilkan 1 dan 2 — dibuktikan dengan tes yang
+      merah lebih dulu, lalu diulang terhadap server berjalan.
+
+- [x] **`script-api-deepct.py` diabaikan git.** *(1.35.0)* Dicabut dari
+      `.gitignore` setelah dipastikan tidak ada kredensial polos yang tersisa
+      di dalamnya. `script-deepct.py`, nama lama yang memang menyimpan token,
+      tetap diabaikan.
+
+- [x] **`TiffPreview` membangun array PHP sebesar jumlah piksel.** *(1.36.0)*
+      Piksel kini tinggal di string biner dan dibuka `unpack` per blok 8.192,
+      jadi biayanya seukuran frame-nya sendiri alih-alih kelipatannya.
+      Terukur: frame 2048×2048 turun dari **196 MB ke 11,7 MB**, dan dua frame
+      sekaligus — yang dipegang `FrameMetrics` saat membandingkan hasil
+      terhadap frame yang disembunyikan — dari **262 MB ke 20 MB**.
+
+      `MAX_PIXELS` naik lagi ke `4096×4096`, bukan kembali penuh ke
+      `8192×8192`: pada ukuran itu satu pratinjau makan 10,2 detik dan
+      perbandingan dua frame 260 MB. **Yang membatasi sekarang waktu, bukan
+      memori** — dan itu perubahan yang berarti, karena batas memori membunuh
+      prosesnya sementara batas waktu hanya membuatnya lambat.
+
+- [x] **Pratinjau dataset 404 untuk frame di dalam subfolder.** *(1.37.0)*
+      Rute diberi `->where('name', '.*')` supaya segmen itu bisa merentang
+      garis miring. Aman karena controller memeriksa nama terhadap daftar isi
+      arsip, bukan membersihkannya — dan uji traversal yang sudah ada kini
+      benar-benar menguji pemeriksaan itu, bukan lolos karena rutenya kebetulan
+      tidak cocok.
+
+      Ditemukan 2 September saat mencari frame sungguhan untuk menguji
+      `TiffPreview`. Bagian E terbukti pada arsip datar dan tidak pernah
+      bertemu yang berfolder, padahal arsip BRIN yang nyata berfolder.
+
+- [ ] **Model hanya andal pada satu frame per celah.** Diukur 4 September
+      terhadap arsip BRIN: hanya frame yang **kedua batasnya hasil pindai** yang
+      layak dipakai. Celah 2 memberi 1 dari 1, celah 4 memberi 1 dari 3, celah 8
+      memberi **0 dari 7** — ambangnya menyalin frame di sebelahnya, MAE 555.
+      Penyebabnya model mengabaikan skalar waktu (tanggapan 0,17%), sehingga
+      pengisian harus rekursif dan galat berlipat 1,73× per batas sintetis.
+
+      Sistem **tetap mengisi** celah lebar, tetapi asal-usulnya disampaikan
+      lewat `generation`. Yang belum ada: peringatan eksplisit di antarmuka
+      bahwa frame bergenerasi dua ke atas berada di bawah ambang kelayakan.
+
+- [ ] **Percobaan penyempurnaan bobot belum tuntas.** Job 19 (`balanced_t`,
+      `max_gap=8`, 20 epoch) menaikkan tanggapan `t` dari 0,17% ke 27,87%,
+      tetapi masih di bawah ambang yang dapat dibedakan mata. Kurva latih
+      **belum mendatar** — lima epoch terakhir masih menurun pada 76% laju awal.
+
+      Dua arah lanjutan, urut biaya: melanjutkan pelatihan melewati epoch 20
+      dengan laju belajar lebih besar, dan — yang sebenarnya menentukan —
+      memperoleh barisan proyeksi lebih panjang dari satu objek yang sama.
+      Sepuluh frame menghasilkan 112 contoh berhadapan dengan 21,9 juta
+      parameter. Ambang lulus ditetapkan: rasio keragaman pada objek yang tidak
+      dilatihkan ≥ 0,6, yaitu jarak antar-hasil ≥ 107 pada Sample Contrast.
+
+      Bobotnya ada di `models-ai/generator(Revisi 4 STUNet balanced-t maxgap8).h5`
+      dan **tidak dipasang**; sistem memakai bobot dasar.
+
+- [ ] **`ApiConfig.baseUrl` masih default ke terowongan ngrok pribadi.**
+      Dibiarkan atas permintaan, karena masih tahap pengembangan. Harus
+      diganti sebelum ada penyebaran publik.
+
+---
+
+## Putaran 24–25 Agustus: hasil yang bisa dipertanggungjawabkan
+
+Sepuluh item, dikerjakan berurutan dan masing-masing diverifikasi sebelum yang
+berikutnya dimulai. Latar belakangnya satu kalimat: sebuah job selesai dengan
+mengembalikan folder TIFF, jumlah berkas, dan lama proses — dan peneliti yang
+menerimanya tidak punya dasar apa pun untuk membela hasilnya.
+
+### Rantai prediksi
+
+- [x] **F2 — Jejak asal-usul frame.** Tiap frame bangkitan mencatat kedua frame
+      batasnya dan generasinya. Generasi 1 berarti kedua batasnya hasil pindai;
+      2 berarti model diberi makan keluarannya sendiri. `interpolateBetween()`
+      sudah mengetahui angkanya sepanjang waktu — ia hanya tidak pernah diminta
+      menyimpannya. Kolom baru, bukan perubahan bentuk `interpolated_frames`.
+- [x] **F1 — Validasi hold-out.** Di mana pun arsip memuat tiga frame
+      berurutan, yang tengah disisihkan, digambar ulang, dan diukur terhadap
+      aslinya: MAE, RMSE, PSNR, plus rentang frame acuannya. Satu-satunya
+      ground truth yang bisa dimiliki platform ini, karena frame yang ingin
+      diisi peneliti menurut definisinya tidak dimiliki siapa pun.
+- [x] **F3 — Manifes di dalam arsip.** `manifest.csv` menemani `metadata.json`:
+      satu baris per frame, hasil pindai atau bangkitan, lengkap induk dan
+      generasinya. Enam bulan lagi arsip itu mungkin satu-satunya yang tersisa.
+- [x] **F4 — Bandingkan dua model.** `POST /predictions/{id}/rerun`. Frame
+      masukannya disalin, bukan dibagi — perbandingan yang separuhnya bisa
+      lenyap sendiri bukanlah perbandingan.
+- [x] **F5 — Bukti setelah kedaluwarsa.** Enam thumbnail per run, permanen, di
+      luar folder yang dihapus retensi. Beberapa ratus kilobita membeli jawaban
+      atas "run itu tampak seperti apa", yang tidak bisa diberikan angka.
+
+### Menyiapkan pindah ke Raspberry Pi + workstation GPU
+
+- [x] **F7 — Autentikasi worker.** `auth_token` per model, dikirim
+      `Authorization: Bearer`, terenkripsi, tulis-saja. Dikerjakan **sebelum**
+      GPU pindah ke LAN: di Kaggle di balik terowongan bernama acak, ketiadaan
+      autentikasi adalah keamanan lewat ketidaktahuan dan ia bertahan; di
+      alamat tetap di jaringan lab ia tidak menahan apa-apa.
+      Lima duplikasi panggilan keluar dilebur jadi `WorkerRequest`.
+- [x] **F6 — Penjaga penyimpanan.** Kedua jalur unggah menolak **507** ketika
+      tidak ada tempat, dan berkas sentinel membuktikan volume hasilnya benar
+      ter-mount. Yang kedua lebih penting: share yang absen menerima tulisan
+      tanpa mengeluh.
+- [x] **F8 — Thumbnail keluar dari jalur kritis.** Enam frame adalah 10–15
+      detik satu inti di Pi, dihabiskan setelah pekerjaan yang diminta selesai.
+- [x] **F9 — Worker tak terjangkau diantrekan ulang.** Model yang *menjawab*
+      dan menolak digagalkan; yang *tidak menjawab* dikembalikan ke antrean.
+      Workstation tidur, reboot, dan dipakai main game.
+- [x] **F10 — Ruang disk terlihat.** Panel di dashboard admin, dengan rincian
+      yang memisahkan apa yang dikembalikan retensi dari apa yang tidak.
+
+**Terverifikasi:** `php artisan test` 325 lulus (1.288 asersi),
+`flutter test` 228 lulus, `flutter analyze` bersih.
+
+### Yang tidak dikerjakan, dan alasannya
+
+- **Default `ApiConfig.baseUrl` masih menunjuk terowongan ngrok pribadi.**
+  Diketahui, dan sengaja dibiarkan selama masih tahap pengembangan. **Harus
+  dibereskan sebelum deploy publik**: build produksi tanpa `--dart-define`
+  akan diam-diam menunjuk laptop pengembang.
+- **Uji ujung-ke-ujung terhadap worker sungguhan.** Menunggu endpoint-nya
+  siap. Sekarang lebih penting daripada sebelumnya: validasi hold-out
+  menambahkan satu putaran GPU yang belum pernah dijalani sungguhan.
+
+---
+
+## Sudah dikerjakan pada putaran sebelumnya
 
 Enam item di bawah semuanya selesai dan terverifikasi; no. 5, 6 dan 7 ada di
 "Sudah selesai" di bagian bawah. Catatan keputusannya sengaja dipertahankan:
@@ -245,17 +395,24 @@ Backend dan klien dua-duanya sudah terpasang dan lulus test:
 
 Yang **belum**, dan ini yang menentukan judul di atas:
 
-- [ ] **Uji end-to-end terhadap trainer sungguhan.** Belum ada satu run pun yang
-      benar-benar berjalan di GPU, dan ini **tidak bisa dikerjakan dari sini** —
-      ia butuh sesi Kaggle yang hidup dengan `script-api-train-deepct.py`
-      berjalan. Sesuai aturan CLAUDE.md, pipeline prediksi diuji ujung-ke-ujung
-      terhadap worker nyata; training belum, jadi sampai itu terjadi ini
-      antarmuka jadi di atas jalur yang belum pernah dijalani.
-- [ ] **Resume untuk unggah dataset.** Unggah prediksi menyimpan sesi yang
-      terputus dan menawarkannya kembali di perangkat; training belum — sebuah
-      unggahan yang putus harus diulang dari nol. Loop chunk di
-      `prediction_service.dart` dan `researcher_training_service.dart` layak
-      diangkat jadi satu saat itu dikerjakan.
+- [x] **Uji end-to-end terhadap trainer sungguhan.** *(1.34.0 / 1.35.0)*
+      Sudah terjadi, dua kali. Job 17 selesai 29 Agustus dalam 2m29s
+      (MAE 0,015464 · PSNR 37,5856 dB · SSIM 0,9856) dan job 18 selesai
+      2 September, keduanya di GPU Kaggle lewat jalur peneliti dengan bobot
+      87,8 MB dikembalikan ke platform. Itu **membuka gerbang** untuk butir
+      "Membersihkan `POST /admin/training/datasets`" di bawah, yang sengaja
+      ditahan sampai jalur peneliti terbukti.
+- [x] **Resume untuk unggah dataset.** *(1.38.0)* `UploadResumeStore` kini
+      punya satu slot per keperluan, jadi prediksi setengah terkirim dan
+      training setengah terkirim tidak saling menggusur. Digest dihitung
+      dengan menyusuri `ArchiveSource` per megabyte — `md5.convert(bytes)`
+      akan mengembalikan biaya memori yang baru saja dibuang.
+
+      Loop chunk-nya **belum** disatukan dengan `prediction_service.dart`.
+      Keduanya kini cukup mirip untuk itu, tapi refactor itu menyentuh
+      satu-satunya jalur unggah yang pernah terbukti ujung-ke-ujung terhadap
+      GPU sungguhan, dan pantas dapat putaran sendiri alih-alih menumpang
+      sebuah fitur.
 - [ ] **Membersihkan `POST /admin/training/datasets`.** Ia masih ada dan masih
       berfungsi, dibiarkan sengaja sampai jalur peneliti terbukti bekerja di
       GPU sungguhan — mencabut satu-satunya jalur yang pernah dijalani sebelum
@@ -267,29 +424,37 @@ Yang **belum**, dan ini yang menentukan judul di atas:
 Keduanya lahir dari perubahan di no. 10 dan tidak tercakup di daftar mana pun
 sebelum ini.
 
-- [ ] **Arsip dataset training tidak punya retensi.** `finalizeTraining()`
-      menulis ke `training/datasets/{uuid}.zip`, sampai 2 GB per run.
-      `predictions:cleanup` menyapu hasil prediksi, `temp/downloads`, dan
-      `.part` yang ditinggalkan — tapi tidak menyentuh direktori ini.
-      Satu-satunya penghapusan adalah `DELETE /admin/training/datasets/{id}`:
-      manual, admin saja. Peneliti tidak punya route hapus, dan membatalkan run
-      hanya mengubah status.
+- [x] **Arsip dataset training tidak punya retensi.** *(1.38.0)*
+      `training:cleanup`, dijadwalkan harian pukul 03:10. Arsip dan cache
+      pratinjaunya dihapus; barisnya tetap dan distempel `archive_deleted_at`,
+      seperti `files_deleted_at` pada prediksi dan karena alasan yang sama —
+      job training menunjuk ke dataset-nya.
 
-      Ini memburuk justru karena no. 10: sebelumnya admin mendaftarkan URL dan
-      platform tidak menyimpan apa pun. **Keputusan yang dibutuhkan lebih dulu:
-      berapa lama sebuah dataset disimpan, dan apakah peneliti boleh
-      menghapusnya sendiri.** Retensi 24 jam ala prediksi jelas salah — dataset
-      dipakai ulang antar run; itu justru alasannya diunggah.
+      **Jendelanya diukur dari pemakaian terakhir, bukan dari waktu unggah.**
+      Itu inti rancangannya: dataset diunggah ke platform justru supaya bisa
+      dipakai ulang, jadi jam yang berjalan sejak unggah akan menghapus arsip
+      yang dilatih setiap minggu. Dataset dengan job `queued` atau aktif tidak
+      pernah disapu, seberapa tua pun.
 
-- [ ] **Seluruh arsip dimuat ke RAM sebelum sepotong pun dikirim.**
-      `training_screen.dart` memakai `withData: true`, lalu loop chunk memotong
-      `Uint8List` yang sudah utuh di memori. Chunked upload dipakai ulang
-      justru karena dataset adalah hal terbesar yang diterima platform ini —
-      tapi yang diselamatkan chunking cuma transportnya, bukan memorinya, dan
-      perangkat Android atau tab browser mati jauh sebelum 2 GB.
-      `upload_screen.dart` berbentuk sama, tapi ZIP prediksi jauh lebih kecil.
-      Di native ada jalan keluar (`file.path` + `RandomAccessFile`, dibaca per
-      potong); di web tidak semudah itu.
+      Default 30 hari (`TRAINING_DATASET_RETENTION_DAYS`). Retensi 24 jam ala
+      prediksi jelas salah di sini: itu hasil yang diunduh sekali, ini masukan
+      yang didatangi lagi.
+
+      Peneliti yang arsipnya sudah disapu **diberi tahu**, bukan disodori
+      daftar frame kosong yang terbaca seperti arsip yang memang tidak berisi.
+
+- [x] **Seluruh arsip dimuat ke RAM sebelum sepotong pun dikirim.**
+      *(1.38.0)* `ArchiveSource` menjawab "berikan byte [start, end)". Di
+      native ia membacanya dari `RandomAccessFile`, jadi hanya potongan
+      berjalan yang pernah residen; picker diminta `withData: kIsWeb`.
+
+      **Di web tidak berubah, dan itu memang batasnya:** browser tidak memberi
+      path, jadi byte-nya tetap di memori dan `BytesArchiveSource` jujur soal
+      itu alih-alih berpura-pura. Frame lepas yang di-zip aplikasi ini sendiri
+      juga tetap di memori — ia dibangun di sana dan tidak punya tempat lain.
+
+      `upload_screen.dart` masih `withData: true`. ZIP prediksi jauh lebih
+      kecil, dan mengubahnya berarti menyentuh jalur yang sama.
 
 ### 12. Sepuluh permintaan perubahan, 22 Agustus 2026
 
@@ -402,7 +567,7 @@ C sebelum D karena D memakai widget yang lahir di C.
       Status *pending* tidak butuh migrasi: ia keadaan selama `send()` masih
       menunggu jawaban. "Terkirim" dan "terbaca" sudah bekerja hari ini
       (`messages.read_at`, `message_bubbles.dart:190`).
-- [ ] **C — Penelusur tumpukan frame, dan unggah dua langkah.** Satu widget
+- [x] **C — Penelusur tumpukan frame, dan unggah dua langkah.** Satu widget
       dipakai di layar unggah dan di hasil/riwayat, menggabungkan frame input
       dan hasil prediksi dengan penanda. Termasuk unggah beberapa `.tif`
       sekaligus yang dibungkus ZIP di sisi klien. Rancangan:
@@ -440,7 +605,7 @@ C sebelum D karena D memakai widget yang lahir di C.
         ditambah semua yang tertunda sejak bagian A, terutama **mengirim pesan
         dengan backend dimatikan**: gelembungnya harus merah dan teksnya harus
         kembali ke kolom ketik.
-- [ ] **D — Training periset.** Tab Training sisi admin dihapus; tab sisi
+- [x] **D — Training periset.** Tab Training sisi admin dihapus; tab sisi
       periset dikembangkan dengan unggah, viewer dari C, metrik PSNR/SSIM/
       MAE/MSE, dan gambar contoh per epoch yang bisa digeser. Rancangan:
       [docs/superpowers/specs/2026-08-23-d-researcher-training-design.md](docs/superpowers/specs/2026-08-23-d-researcher-training-design.md).
@@ -580,8 +745,10 @@ dilanjutkan worker berikutnya dari epoch terakhir.
 Yang belum ada cuma `train_one_epoch()` di `scripts/training_worker.py`, dan
 itu memang disengaja.
 
-Alasannya: notebook di repo ini nol kode training — modelnya generator GAN 25,6
-juta parameter yang **discriminator-nya tidak ada di sini**, dan loss,
+Alasannya: notebook di repo ini nol kode training — modelnya generator GAN
+**21,9 juta parameter** (21.921.601, dibaca langsung dari `.h5` pada
+4 September 2026; angka 25,6 juta yang beredar sebelumnya tidak pernah
+diverifikasi) yang **discriminator-nya tidak ada di sini**, dan loss,
 augmentasi, serta sampling t yang seimbang justru inti dari latihan ulangnya.
 Menuliskannya dari tebakan menghasilkan angka yang tidak bisa dipertanggung-
 jawabkan siapa pun.

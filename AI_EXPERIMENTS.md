@@ -13,6 +13,128 @@ Dokumen ini berisi catatan masalah, uji coba, dan solusi yang diterapkan pada mo
 
 ---
 
+## Generasi frame: harga yang dibayar metode rekursif, 24 Agustus 2026
+
+Rekursi t=0.5 menyelesaikan satu persoalan dan diam-diam memunculkan yang lain,
+dan yang kedua tidak pernah dituliskan sampai hari ini.
+
+Untuk celah antara frame 001 dan 005, titik tengahnya — 003 — digambar dari dua
+frame yang **keduanya hasil pindai**. Baru sesudah itu 002 dan 004 digambar, dan
+masing-masing memakai 003 sebagai salah satu batasnya. Artinya model diberi
+masukan berupa **keluarannya sendiri**, dan galat apa pun yang terkandung di 003
+kini menjadi masukan bagi dua frame berikutnya.
+
+Ketiganya keluar sebagai TIFF yang tampak setara di dalam satu direktori. Tanpa
+catatan tambahan, tidak ada yang bisa membedakan mana yang bersandar pada data
+sungguhan dan mana yang bersandar pada tebakan sebelumnya.
+
+Platform kini mencatat **generasi** tiap frame bangkitan: 1 ketika kedua batasnya
+hasil pindai, 2 ketika sekurang-kurangnya satu batasnya sendiri frame bangkitan,
+dan seterusnya. Itu hitungan berapa kali galat berpeluang menumpuk.
+
+**Konsekuensi untuk pembacaan hasil:** frame generasi 2 ke atas tidak layak
+diperlakukan sebagai data pada tingkat kepercayaan yang sama dengan generasi 1.
+Untuk analisis kuantitatif, generasi 1 adalah yang paling dekat dengan apa yang
+sebenarnya bisa dijamin model.
+
+Ini juga memperkuat catatan lama di dokumen ini: **kalau model dilatih ulang
+dengan dataset t seimbang, rekursi tidak lagi diperlukan** — dan bersamanya
+seluruh persoalan generasi ini ikut hilang, karena setiap frame akan digambar
+langsung dari dua batas pindai.
+
+---
+
+## Validasi hold-out: angka pertama yang bukan klaim, 24 Agustus 2026
+
+Sampai hari ini setiap angka kualitas di repo ini berasal dari dokumentasi model
+yang sudah ada — termasuk "94,2%" di tabel di bawah, yang **tidak diukur oleh
+penelitian ini** dan tidak boleh dilaporkan seolah-olah demikian.
+
+Platform sekarang bisa mengukur sendiri, dan caranya dibatasi oleh sesuatu yang
+mendasar: **frame yang ingin diisi seorang peneliti, menurut definisinya, tidak
+dimiliki siapa pun.** Tidak ada ground truth untuknya dan tidak akan pernah ada.
+
+Yang bisa dilakukan adalah menyembunyikan frame yang **memang ada**. Di mana pun
+arsip memuat tiga frame berurutan, yang tengah disisihkan, digambar ulang dari
+kedua tetangganya, lalu dibandingkan dengan frame yang sebenarnya ada di sana.
+Hasilnya MAE dan RMSE dalam hitungan 16-bit mentah, PSNR dalam desibel, dan
+rentang frame acuannya.
+
+Tiga peringatan untuk siapa pun yang mengutip angka ini:
+
+1. **Satu frame, satu arsip.** Ini bukti bahwa model berperilaku wajar pada data
+   itu, bukan akurasinya.
+2. **PSNR diukur terhadap rentang 16-bit penuh (65535)**, yang merupakan
+   konvensinya. Frame CT jarang mengisi rentang itu, jadi angkanya cenderung
+   terlihat bagus dibanding pengukuran yang memakai rentang sebenarnya. Ia
+   sebanding antar-run di platform ini; jangan dibandingkan dengan makalah tanpa
+   memeriksa MAX yang mereka pakai.
+3. **MAE tanpa rentang acuannya tidak berarti apa-apa.** Empat puluh hitungan
+   adalah galat besar pada frame yang membentang 300 dan dapat diabaikan pada
+   frame yang membentang 60.000. Itu sebabnya `reference_min`/`reference_max`
+   ikut disimpan.
+
+Aritmetikanya diuji terhadap angka yang dihitung tangan (`FrameMetricsTest`),
+bukan terhadap apa pun yang kebetulan dikeluarkan kodenya: konstanta yang keliru
+tidak akan membuat apa pun crash, ia hanya diam-diam menaruh angka salah ke
+dalam sebuah laporan.
+
+---
+
+## Pengukuran pertama dari GPU sungguhan, 25 Agustus 2026
+
+Sesi Kaggle hidup, dan jalur prediksi akhirnya berjalan ujung ke ujung terhadap
+model sungguhan. Ini angka pertama di repo ini yang **diukur**, bukan dikutip.
+
+Arsipnya `HONDA_Used_0051` sampai `0069`, selang satu — sepuluh frame masuk,
+sembilan dihasilkan, 36 detik.
+
+| | |
+|---|---|
+| Frame yang disembunyikan | `HONDA_Used_0053.tif`, digambar ulang dari 51 dan 55 |
+| **MAE** | **359,7** hitungan 16-bit |
+| **RMSE** | 688,1 |
+| **PSNR** | **39,58 dB** (terhadap rentang 16-bit penuh) |
+| Rentang frame acuan | 108 – 56.487 |
+| Piksel | 1.048.576 (1024 × 1024) |
+
+MAE 359,7 pada rentang 56.379 berarti galat rata-rata **0,64% dari rentang
+dinamis frame itu**. Itu pembacaan yang benar; angka MAE-nya sendiri tidak
+berarti apa pun tanpa rentangnya.
+
+### Aturan hold-out yang pertama kali ditulis ternyata keliru
+
+Arsip ini juga mematahkan asumsi yang sudah tertanam di kodenya. Syarat semula
+menuntut **tiga frame berurutan** — 1, 2, 3 — dan pada arsip nyata pertama yang
+sampai ke jalur ini tidak ada satu pun: framenya 51, 53, 55, … 69.
+
+Kekeliruannya jelas begitu dilihat: **peneliti menurut definisinya mengunggah
+frame dengan celah.** Itu seluruh produknya. Menuntut tiga yang berurutan
+berarti menuntut justru keadaan yang tidak akan pernah ada.
+
+Yang sebenarnya diperlukan lebih longgar: sebuah frame terunggah yang menjadi
+**titik tengah persis** dari dua frame terunggah lainnya. Kasus "tiga
+berurutan" hanyalah bentuk khususnya dengan jarak 2. Pada arsip di atas, 53
+adalah titik tengah 51 dan 55, dan bisa diperiksa sejak awal.
+
+Rentang **tersempit** yang dipakai, dan itu disengaja: menggambar titik tengah
+antara 51 dan 69 membentang sembilan frame gerakan, sementara 51 dan 55
+membentang dua — dan dua frame itulah pekerjaan yang sebenarnya diminta dari
+model. Mengukurnya pada rentang lebar akan melaporkan model lebih buruk
+daripada tugas yang benar-benar diberikan kepadanya.
+
+### Yang masih belum terukur
+
+Arsip `Contrast_0001, 0003, 0007` tetap tidak terukur bahkan dengan aturan
+baru, dan itu jujur: rentangnya 2, 4 dan 6, titik tengahnya 2, 4 dan 5, dan
+tidak satu pun diunggah. Sebagian arsip memang tidak menawarkan apa pun untuk
+disembunyikan.
+
+Satu pengukuran pada satu frame dari satu arsip bukan studi. Ia bukti bahwa
+model berperilaku wajar pada data itu.
+
+---
+
 ## Metrik training, 23 Agustus 2026
 
 Trainer kini melaporkan **empat** angka per epoch, bukan dua.
@@ -64,11 +186,11 @@ berkasnya terurai dan bukan bahwa `tf.image.ssim` dipanggil dengan benar.
 | **File Size** | ~84MB (87,796,792 bytes) |
 | **Input Size** | 2x grayscale images (1024x1024, 16-bit) |
 | **Output Size** | 1x grayscale image (1024x1024, 16-bit) |
-| **Parameters** | ~25.6M trainable parameters |
-| **Accuracy** | 94.2% (validation dataset) |
+| **Parameters** | 21.921.601 trainable parameters (dibaca langsung dari berkas .h5; angka ~25,6M yang beredar sebelumnya tidak pernah diverifikasi) |
+| **Accuracy** | ~~94.2% (validation dataset)~~ — **tidak terverifikasi, dan besaran ini tidak ada.** Arsitekturnya regresi dengan keluaran `tanh`; tidak ada kelas untuk dihitung benar-salahnya. Yang terukur pada 4 September 2026 adalah MAE, RMSE, PSNR dan SSIM — lihat CHANGELOG 1.39.0 |
 | **Optimal time_scalar** | 0.5 (midpoint interpolation) |
 | **Training Dataset** | Neutron CT scans dari BRIN research facility |
-| **Last Updated** | October 19, 2025 |
+| **Last Updated** | 4 September 2026 (arsitektur dan jumlah parameter dibaca ulang langsung dari berkas bobotnya) |
 
 ---
 
@@ -139,6 +261,41 @@ Actual Output:
 3. **Architecture Limitation**
    - Time conditioning layer tidak cukup expressif
    - Model architecture tidak dirancang untuk extreme gaps
+
+#### ⚠️ Koreksi terhadap analisis di atas, 4 September 2026
+
+**Gejalanya benar; penyebab yang dituliskan di atas tidak.** Analisis itu tidak
+pernah diukur, dan tiga hal di dalamnya terbantah ketika akhirnya diukur
+terhadap berkas bobot dan layanan inferensi yang sebenarnya.
+
+**1. "Neural network mengabaikan input parameter `time_scalar`" — tidak tepat.**
+Model *merespons* `t`, tetapi hanya sebesar **0,17%** dari yang seharusnya.
+Diukur dengan mengirim `t = 0` dan `t = 1` pada pasangan frame yang sama:
+keluarannya bergeser MAE 3,3, sementara kedua frame batasnya sendiri berjarak
+918,4. Bukan diabaikan — direspons secara sepele.
+
+**2. "Time conditioning layer tidak cukup expressif" — terbantah oleh bobotnya.**
+Pemeriksaan langsung berkas `.h5`: nol dari 4.096 neuron pada lapisan `Dense`
+jalur waktu yang teredam, dan pada dekoder pertama kanal peta waktu justru
+diberi bobot **2,35 kali** lebih besar daripada rerata 512 kanal citra —
+seluruh 512 kanal itu lebih lemah. Kapasitasnya ada; yang tidak ada adalah
+pelatihan yang menuntutnya dipakai.
+
+**3. "Confidence score menurun drastis" — tidak ada besaran seperti itu.**
+Arsitektur `STUNet_2to1_TimeCond` tidak menghasilkan skor keyakinan. Kalimat
+itu tidak merujuk apa pun yang dapat diperiksa.
+
+**Yang menjadi kendali pembeda.** Menukar urutan kedua gambar masukan pada `t`
+yang sama menggeser keluaran sebesar 63,94 — melalui jalur kode yang sama
+persis. Jadi skrip meneruskan masukan dengan benar; yang tidak dipakai model
+hanyalah skalar waktunya. Model memakai sumbu waktu pada tumpukan citra
+tetapi mengabaikan skalarnya. Yang membuat urutan berpengaruh adalah reduksi
+`x_T` di dalam `SkipFusion` beserta ketiga `ConvLSTM2D` — bukan lapisan
+`TimeLast` tersendiri, yang didaftarkan skrip pemuat tetapi tidak dipakai
+satu kali pun pada berkas bobot ini.
+
+Rincian pengukuran, empat cacat yang ditemukan, dan percobaan penyempurnaan
+yang mengikutinya tercatat pada `CHANGELOG.md` versi 1.39.0.
 
 #### ✅ Solusi: Interpolasi Rekursif (Recursive Interpolation)
 
@@ -445,6 +602,15 @@ def predict_with_memory_management(t0, t2):
 
 ### Inference Time
 
+> **Angka di tabel ini tidak pernah diukur oleh penelitian ini, dan yang diukur
+> membantahnya.** Pada 4 September 2026 satu panggilan inferensi memakan
+> **± 18 detik** pada kartu grafis layanan awan dan **± 150 detik** pada
+> prosesor mesin lokal — bukan 2,3 detik. Celah selebar 8 langkah menuntut tujuh
+> panggilan, jadi sekitar **dua menit** di awan dan **tujuh belas menit** di
+> mesin lokal, bukan 16,2 detik. Selisihnya bukan penghalusan; ia yang
+> menentukan apakah beban kerja ini bisa dijalankan tanpa awan sama sekali.
+
+
 | Gap Size | Frames Generated | Processing Time | Avg per Frame |
 |----------|-----------------|----------------|---------------|
 | 1 | 0 (adjacent) | N/A | N/A |
@@ -457,6 +623,19 @@ def predict_with_memory_management(t0, t2):
 **Complexity**: O(n) linear time based on gap size
 
 ### Model Accuracy
+
+> **Himpunan validasi ini tidak ada pada penelitian ini.** Arsip yang tersedia
+> berisi 10 frame (HONDA), 4 (Sample Al Cu) dan 3 (Sample Contrast) — tidak ada
+> 100 pasangan uji, dan tidak ada catatan dari mana keempat angka di bawah
+> berasal. SSIM 0,942 di sini adalah sumber "94,2%" yang sudah dicoret pada
+> tabel arsitektur.
+>
+> Yang benar-benar terukur ada di CHANGELOG 1.39.0: MAE dalam hitungan 16-bit
+> mentah **359,7 / 586,1 / 1.039,3** untuk rentang 2 / 4 / 8. Dan satu angka
+> SSIM tunggal tanpa menyebut pembandingnya tidak berarti apa-apa di sini —
+> pencampuran linier mengalahkan model pada MAE (4 dari 5) dan PSNR (5 dari 5),
+> sementara model unggul pada SSIM (5 dari 5).
+
 
 **Validation Dataset** (100 test pairs):
 - **SSIM**: 0.942 (94.2%)
@@ -524,6 +703,6 @@ Untuk pertanyaan mengenai model atau eksperimen:
 
 ---
 
-**Last Updated**: August 13, 2026  
-**Model Version**: v3.0 (GiNet TC-D Revisi)  
-**Experiment Status**: Ongoing
+**Last Updated**: 4 September 2026  
+**Model Version**: v3.0 (GiNet TC-D Revisi) — bobot yang dipakai sistem  
+**Experiment Status**: Ongoing. Percobaan penyempurnaan bobot (job 19, `balanced_t` + `max_gap=8`) menaikkan tanggapan `t` dari 0,17% ke 27,87% tetapi belum terlihat mata; bobotnya disimpan di `models-ai/` dan **tidak dipasang**. Ambang lulus untuk percobaan berikutnya sudah ditetapkan di ROADMAP.

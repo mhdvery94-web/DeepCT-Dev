@@ -33,6 +33,1995 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.39.0] - 2026-09-04
+
+### UTF-8 yang termakan tool, di delapan berkas
+
+Dasbor admin menampilkan `by Administrator â€¢ 4d ago`. Bukan cacat rendering:
+urutan bytenya ada di **kode sumbernya**. Sebuah berkas UTF-8 pernah dibaca
+sebagai Windows-1252 lalu disimpan ulang, sehingga `•` (E2 80 A2) menjadi tiga
+karakter `â€¢`.
+
+Delapan berkas terdampak, dan `prediction.dart:160` sudah melewatinya **tiga
+kali** (`ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â`). Lima di antaranya teks yang dilihat pengguna,
+termasuk `SECRET WILL BE REMOVED ON SAVE` dan `No analyses yet`.
+
+Dipulihkan dengan dekode berulang sampai stabil. Tujuh baris awalnya tidak
+pulih karena mengandung `\u009d`, slot yang tidak terdefinisi pada cp1252;
+setelah kelima slot kosong itu dipetakan ke nilai bytenya sendiri, seluruhnya
+pulih.
+
+**Penjaganya dipasang lebih dulu dan merah lebih dulu** — satu di suite Flutter
+memindai `lib/` dan `test/`, satu di suite PHP memindai `app/`, `routes/`,
+`config/`, `database/`, dan `tests/`. Keduanya menolak lima pola mojibake.
+Kerusakan ini menyebar diam-diam lewat penyuntingan biasa; tanpa tripwire ia
+akan kembali.
+
+### Empat cacat model, akhirnya diukur
+
+Model `STUNet_2to1_TimeCond` dipakai sejak awal proyek dengan keterangan yang
+tidak pernah diverifikasi. Diukur terhadap berkas bobot dan layanan inferensi
+yang berjalan, memakai arsip proyeksi BRIN yang sebenarnya:
+
+| Cacat | Bukti |
+|---|---|
+| **A.** Tanggapan terhadap skalar waktu hanya 0,17% | `t = 0` lawan `t = 1` menggeser keluaran 3,3; kedua batasnya berjarak 918,4 |
+| **B.** Galat berlipat tiap batas sintetis | Rentang ditahan sama: 359,7 → 623,6 (1,73×) → 1.174,9 (3,27×) |
+| **C.** Galat naik tajam dengan lebar rentang | 359,7 / 586,1 / 1.039,3 pada rentang 2 / 4 / 8 |
+| **D.** Celah ganjil bergeser setengah posisi | `intdiv` membulatkan; validasi hold-out justru melewati rentang ganjil |
+
+Akibatnya, dari frame yang dihasilkan hanya yang **kedua batasnya hasil pindai**
+yang layak: celah 2 memberi 1 dari 1, celah 4 memberi 1 dari 3, celah 8 memberi
+**0 dari 7**. Ambangnya adalah menyalin frame pindai di sebelahnya, MAE ≈ 555.
+
+Dua kendali memisahkan cacat model dari kesalahan skrip. Menukar urutan gambar
+masukan menggeser keluaran 63,94 melalui jalur kode yang sama, sehingga skrip
+terbukti meneruskan masukan dengan benar. Dan `script-api-deepct.py` diperiksa
+baris per baris: `time_scalar` diterima sebagai Form wajib, dibungkus menjadi
+`np.array([[t]])` berbentuk (1,1), diteruskan ke `generator.predict`.
+
+Arsitekturnya juga dibaca langsung dari `.h5`: **31 lapisan, 21.921.601
+parameter** — bukan ~25,6 juta seperti yang beredar — dengan tiga `ConvLSTM2D`
+sebagai unsur temporal dan pengondisi waktu `Dense 4096` → `Reshape 64×64` yang
+disisipkan pada lapisan tersempit. Keluarannya `tanh`, yang menjelaskan mengapa
+model bekerja pada rentang [−1, 1].
+
+### Percobaan penyempurnaan: hasil negatif, dilaporkan
+
+Job 19 dilatih dengan `balanced_t=true` dan `max_gap=8` — 112 contoh per epoch,
+naik dari 40 — selama 20 epoch. MAE 0,022817 → 0,018316, PSNR +2,09 dB.
+
+Tanggapan terhadap `t` naik dari 0,17% menjadi 27,87%, dan keragaman keluaran
+dari rasio 0,001 menjadi 0,236. **Mekanismenya terbukti dapat diajarkan tanpa
+mengubah satu lapisan pun** — arsitektur sebelum dan sesudah identik.
+
+Tetapi belum berguna. Pada Sample Contrast — objek yang tidak pernah
+dilatihkan — tiga frame yang dibangkitkan dari pasangan yang sama berjarak
+37,4, yaitu 0,065% dari rentang citra dan **di bawah ambang yang dapat
+dibedakan mata**. Pemeriksaan visual memang tidak memperlihatkan perbedaan.
+
+Sebabnya: kurva latih masih menurun pada 76% laju awal ketika pelatihan
+dihentikan, dan 10 frame berhadapan dengan 21,9 juta parameter. Bobotnya
+disimpan sebagai `models-ai/generator(Revisi 4 STUNet balanced-t maxgap8).h5`
+tetapi **tidak dipasang**; sistem tetap memakai bobot dasar.
+
+### Terverifikasi
+
+`php artisan test` **368 lulus**, `flutter analyze` bersih, `flutter test`
+**269 lulus**. Uji model memakai TensorFlow 2.21 lokal, kedua bobot dimuat pada
+proses yang sama dengan masukan dan kode yang sama.
+
+---
+
+## [1.38.0] - 2026-09-03
+
+Tiga butir fitur, dikerjakan berurutan. Ketiganya saling mengunci: yang kedua
+membuang byte arsip dari memori, dan yang ketiga langsung menagihnya kembali
+lewat digest — sehingga digest itu harus ikut dialirkan.
+
+### Arsip dataset training akhirnya punya retensi
+
+`predictions:cleanup` menyapu hasil prediksi, `temp/downloads`, dan `.part`
+yang ditinggalkan sejak awal, dan tidak pernah menyentuh `training/datasets` —
+tempat setiap run terhosting meninggalkan sampai 512 MB. Satu-satunya
+penghapusan adalah `DELETE /admin/training/datasets/{id}`: manual, admin saja,
+dan tidak ada yang melakukannya. Empat belas dataset menumpuk **219 MB**.
+
+`training:cleanup` menutupnya, dijadwalkan harian pukul 03:10.
+
+**Jendelanya diukur dari pemakaian terakhir, bukan dari waktu unggah**, dan itu
+inti rancangannya. Sebuah dataset diunggah ke platform ini — alih-alih diambil
+sendiri oleh worker dari sebuah URL — justru supaya bisa dipakai ulang antar
+run. Jam yang berjalan sejak unggah akan menghapus arsip yang dilatih orang
+setiap minggu, tepat di bawah tangannya. Jadi jendelanya berjalan dari yang
+terbaru di antara: pembuatan dataset, dan apa pun yang terakhir dilakukan
+job-jobnya.
+
+Dataset dengan job `queued` atau aktif **tidak pernah** disapu, seberapa tua
+pun. Mengambil sumber dari run yang sedang berjalan menghabiskan jam GPU yang
+tidak bisa diambil kembali; membiarkan arsip tua satu hari lagi tidak
+merugikan siapa pun.
+
+Yang dihapus: berkas arsip dan cache pratinjau yang diturunkan darinya. Yang
+**tidak**: barisnya. Job training menunjuk ke dataset-nya, jadi membebaskan
+disk dengan menghapus baris akan meninggalkan riwayat setiap run menunjuk ke
+ketiadaan. Sama seperti `files_deleted_at` pada prediksi, dan karena alasan
+yang sama.
+
+Default 30 hari lewat `TRAINING_DATASET_RETENTION_DAYS`; nol mematikannya.
+Retensi 24 jam ala prediksi jelas salah di sini — itu hasil yang diunduh
+sekali, ini masukan yang didatangi lagi.
+
+**Peneliti diberi tahu.** `archiveFrames()` mengembalikan koleksi kosong ketika
+arsipnya tidak ada di disk, dan layar membacanya sebagai "No .tif frames were
+found inside that archive" — menyalahkan unggahan peneliti untuk berkas yang
+justru kami hapus. Sekarang endpoint-nya membawa `meta.archive_deleted` dan
+layar memilih kalimatnya dari situ.
+
+### Unggahan tidak lagi memuat seluruh arsip ke RAM
+
+Chunked upload sudah ada sejak awal, dan sempat terlihat seperti sudah
+menyelesaikan masalah yang melahirkannya. Belum. `withData: true` menyerahkan
+seluruh berkas ke heap Dart, lalu loop chunk memotong `Uint8List` yang sudah
+utuh di sana — jadi chunking menyelamatkan **transportnya** dan tidak lebih.
+Dataset terhosting boleh 512 MB; ponsel atau tab browser sudah mati jauh
+sebelum itu.
+
+`ArchiveSource` adalah sambungan yang memperbaikinya: ia tahu panjangnya dan
+bisa menghasilkan rentang mana pun sesuai permintaan, yang sebenarnya satu-satunya
+hal yang pernah dibutuhkan loop unggah. Di native, rentangnya datang dari
+`RandomAccessFile` — bukan `openRead`, karena loop bisa dimundurkan oleh retry
+yang menemukan server lebih jauh dari dugaan, dan aliran sekuensial tidak bisa
+menjawab itu; seek bisa.
+
+**Di web tidak berubah, dan itu memang batasnya.** Browser tidak memberi path,
+jadi byte-nya tetap di memori dan `BytesArchiveSource` jujur soal itu alih-alih
+berpura-pura. Frame lepas yang di-zip aplikasi ini sendiri juga tetap di
+memori — bundelnya dibangun di sana dan tidak punya tempat lain.
+
+### Unggahan dataset yang terputus ditawarkan kembali
+
+Unggah prediksi mengingat sesi yang terputus dan menawarkannya di perangkat
+sejak lama; training tidak, jadi unggahan yang putus harus diulang dari nol —
+sementara separuh yang sudah dipegang server duduk di sana sampai sapuannya
+sendiri.
+
+`UploadResumeStore` kini punya **satu slot per keperluan**. Seorang peneliti
+bisa meninggalkan prediksi setengah terkirim lalu memulai run training; satu
+slot akan menggusur salah satunya tanpa berkata apa-apa. Kunci lama
+(`pending_upload`) tetap dipakai keperluan prediksi, jadi unggahan yang
+terputus sebelum perubahan ini masih bisa dilanjutkan, dan rekaman tanpa
+medan `purpose` terbaca sebagai prediksi — memang semuanya prediksi.
+
+**Digest-nya dialirkan.** `md5.convert(bytes)` membutuhkan seluruh arsip
+residen, persis biaya yang baru saja dibuang butir sebelumnya — memakainya di
+sini akan membatalkan unggahan mengalir tepat pada langkah yang menjaganya.
+`digestOf()` menyusuri `ArchiveSource` per megabyte lewat
+`md5.startChunkedConversion`.
+
+Banner-nya sengaja sebentuk dan sekata dengan milik layar prediksi: seorang
+peneliti bertemu keduanya, dan unggahan terputus tidak boleh terbaca sebagai
+dua jenis peristiwa berbeda tergantung tab mana ia terjadi. Dan ia benar-benar
+melanjutkan, bukan hiasan — sebuah rekaman tertunda mengarahkan unggahan ke
+`resume()`, yang memeriksa digest lebih dulu.
+
+**Yang belum:** loop chunk-nya masih belum disatukan dengan
+`prediction_service.dart`. Keduanya kini cukup mirip untuk itu, tapi refactor
+itu menyentuh satu-satunya jalur unggah yang pernah terbukti ujung-ke-ujung
+terhadap GPU sungguhan, dan pantas dapat putaran sendiri.
+
+### Terverifikasi
+
+`php artisan test` **367 lulus** (dari 359, 1.451 asersi) — delapan tes
+retensi, semuanya merah lebih dulu.
+
+`training:cleanup --dry-run` terhadap disk yang sungguhan, dua kali:
+
+- dengan jendela **30 hari** yang sebenarnya: *0 archive(s) to consider* —
+  benar, dataset tertua baru delapan hari;
+- dengan jendela **1 hari**, untuk melihat ia memang bekerja: keempat belas
+  dataset terdaftar dengan umur dan ukurannya, **would free 218.6 MB** —
+  cocok dengan 219 MB yang diukur `du`.
+
+`flutter analyze` bersih. Tes Flutter baru semuanya merah lebih dulu.
+
+**Satu tes memori awalnya tidak membedakan, dan itu ketahuan karena diperiksa.**
+`walking a large file does not pull it into memory` lulus melawan implementasi
+sengaja-salah yang membaca seluruh berkas per potongan — karena helper penulis
+fixture-nya membangun 64 MB sebagai satu `Uint8List` lebih dulu, sehingga heap
+VM sudah sebesar itu sebelum pengukuran dimulai. Helper-nya kini menulis per
+megabyte, dan implementasi salah yang sama menaikkan RSS **167 MB** dan gagal.
+
+Sebuah tes yang lulus melawan kode yang salah tidak menguji apa pun, dan
+satu-satunya cara mengetahuinya adalah menjalankannya melawan kode yang salah.
+
+---
+
+## [1.37.0] - 2026-09-02
+
+### Pratinjau dataset 404 untuk setiap frame di dalam folder
+
+Daftar frame mengembalikan nama beserta awalan foldernya —
+`input/HONDA_Used_0051.tif` di dataset job 18, `Sample Contrast/Contrast_0001.tif`
+di arsip lain — dan endpoint pratinjau tidak bisa menerimanya kembali.
+
+Segmen `{name}` pada rute tidak boleh memuat garis miring. Klien menyusun
+URL-nya dengan `Uri.encodeComponent`, menghasilkan `%2F`, dan **Symfony
+mencocokkan rute pada path yang sudah didekode** — jadi `%2F` kembali jadi
+pemisah, URL menyebut dua segmen di tempat rute mengharapkan satu, dan tidak
+ada rute yang cocok sama sekali. Bukan `abort(404)` dari controller;
+404 dari lapisan routing, yang tidak punya apa pun untuk dikatakan.
+
+Dibuktikan dengan mencocokkan ketiga bentuk penulisan terhadap tabel rute
+langsung, bukan dengan menebak dari gejalanya:
+
+| Dikirim | Cocok rute? | `$name` yang sampai |
+|---|---|---|
+| `input%2F…` (yang klien kirim) | **tidak** | — |
+| `input%252F…` | ya | `'input%2FHONDA_Used_0051.tif'`, harfiah |
+| nama telanjang | ya | tidak ada di arsip |
+
+Rutenya kini `->where('name', '.*')`. Aman karena controller memeriksa nama
+terhadap **daftar isi arsip** alih-alih membersihkannya: nama yang bukan entri
+ditolak apa pun bentuknya. Perbaikan sisi server saja — klien sudah mengirim
+bentuk yang benar sejak awal.
+
+Efek sampingnya bagus: `test_a_name_outside_the_archive_is_refused` selama ini
+lolos karena rutenya kebetulan tidak cocok dengan `..%2F..%2F.env`, bukan
+karena pemeriksaannya bekerja. Sekarang rutenya cocok, dan tes itu benar-benar
+menguji apa yang tertulis di docblock-nya.
+
+**Kenapa ini lolos sampai sekarang:** setiap arsip yang pernah dilihat suite
+ini datar. Bagian E diverifikasi 23 Agustus terhadap fixture datar, dan arsip
+BRIN yang nyata berfolder. Fixture baru `foldedJob()` menutup celah itu.
+
+Kembarannya di jalur prediksi **tidak** punya masalah yang sama, dan itu
+diperiksa, bukan diasumsikan: `PredictionIntake` mengekstrak dengan
+`basename()` — komentarnya menyebut itu juga menetralkan `../` — sehingga nama
+frame prediksi tidak pernah memuat garis miring.
+
+### Perbaikan pertama tidak berhasil, dan alasannya layak dicatat
+
+`->where()` ditambahkan, tesnya tetap merah. Penyebabnya bukan perbaikannya:
+`bootstrap/cache/routes-v7.php` ada di disk sejak pukul 21:50, dan selama
+berkas itu ada **`routes/api.php` tidak dibaca sama sekali** — tidak oleh
+server, tidak oleh `route:list`, tidak oleh suite. Jebakan ini sudah tertulis
+di CLAUDE.md dan tetap memakan satu putaran.
+
+Artinya juga: setiap `php artisan test` sebelum ini pada sesi 2 September
+berjalan terhadap tabel rute yang di-cache, bukan terhadap berkasnya. Tidak
+ada hasil yang batal — tidak ada rute yang diubah sebelum putaran ini — tapi
+itu fakta yang lebih baik dicatat daripada ditemukan lagi nanti.
+
+Cache-nya dibersihkan dan **dibiarkan bersih**. `npm run preserve:all`
+mengembalikannya kalau memang diinginkan.
+
+### Terverifikasi
+
+`php artisan test` **359 lulus** (dari 358, 1.428 asersi), dan ini kali pertama
+pada sesi ini suite membaca `routes/api.php` yang sesungguhnya.
+
+Tes barunya merah lebih dulu dengan gejala produksi yang sama persis: daftar
+memberi `input/frame_001.tif`, pratinjaunya `Expected response status code
+[200] but received 404`.
+
+Terhadap server berjalan, dataset job 18 yang sungguhan:
+
+| Yang diperiksa | Hasil |
+|---|---|
+| `input%2FHONDA_Used_0051.tif` | **200 image/png**, 125.284 byte, 0,87 dtk |
+| Struktur PNG | signature sah, IHDR 512×512 depth 8 colorType 0, IEND ada |
+| Cache tertulis | `…/preview/18/512_input/HONDA_Used_0051.tif.png` |
+| `..%2F..%2F.env` | **403** — ditolak RoadRunner sebelum mencapai aplikasi |
+| `../.env` mentah | 404 |
+| Tanpa token | 401 |
+
+Traversal menjawab 403 di server sungguhan dan 404 di suite: RoadRunner
+menolak path itu lebih dulu, sementara di lingkungan uji pemeriksaan daftar
+isi arsip yang menolaknya. Dua lapisan, dua jawaban, keduanya penolakan.
+
+---
+
+## [1.36.0] - 2026-09-02
+
+### `TiffPreview` tidak lagi membangun satu entri array PHP per piksel
+
+Ini yang membunuh queue worker pada 25 Agustus. Setiap piksel jadi satu entri
+array — dua kali sekaligus, selagi hasil `unpack` disalin ke akumulator — dan
+entri array PHP berharga puluhan byte untuk piksel yang di disk cuma dua.
+`memory_limit` terlampaui di tengah job, prosesnya mati membawa run-nya, dan
+layar tetap berkata "queued" tanpa satu pun penjelasan.
+
+Yang dilakukan waktu itu adalah menurunkan `MAX_PIXELS` dari `8192×8192` ke
+`2048×2048`. Itu memindahkan temboknya, bukan merobohkannya. Berapa jauh
+temboknya, baru terukur sekarang:
+
+| Frame | TIFF | `toPng` sebelum | `toPng` sesudah |
+|---|---|---|---|
+| 2048×2048 | 8 MB | **196 MB** | **11,7 MB** |
+| dua frame (jalur `FrameMetrics`) | 16 MB | **262 MB** | **20 MB** |
+
+Dua ratus enam puluh dua megabyte, di dalam worker yang saat itu dianggarkan
+512 MB. Berkasnya sendiri 8 MB.
+
+Sekarang piksel tinggal sebagai string biner dari awal sampai akhir:
+
+- `decode()` menyambung strip sebagai **byte**, tidak menafsirkan apa pun, lalu
+  menormalkannya ke 16-bit little-endian sekali jalan. Untuk frame yang memang
+  sudah 16-bit LE — yaitu semua yang ditangani platform ini — string itu
+  dikembalikan apa adanya, tanpa disalin ulang.
+- `range()` mencari min/maks per blok, memakai `min()`/`max()` yang berjalan di
+  kecepatan C. Ia publik, karena `FrameMetrics` mengutip rentang frame acuan di
+  samping angka galatnya dan dua implementasi "rentang frame ini berapa" akan
+  jadi dua jawaban.
+- `downscale()` membuka hanya baris sumber yang dibutuhkan satu baris keluaran
+  — empat baris untuk frame 2048 lebar menuju 512 — lalu mengemasnya kembali
+  jadi string selagi dihasilkan.
+- `windowTo8Bit()` menerima min dan maks sebagai argumen alih-alih menghitung
+  ulang, karena itu lintasan yang sudah dijalani.
+
+Kuncinya `unpack` per blok 8.192 piksel: kerja byte tetap di C, tapi tidak
+pernah ada lebih dari satu blok yang berwujud array PHP. Ini bukan menukar
+memori dengan kecepatan — 2048×2048 selesai dalam 0,69 detik.
+
+`FrameMetrics` ikut, karena ia yang memegang dua frame sekaligus.
+
+### `MAX_PIXELS` naik ke 4096×4096, dan tidak lebih
+
+Plafonnya boleh naik lagi sekarang, tapi tidak kembali penuh ke `8192×8192`
+seperti semula:
+
+| Frame | TIFF | `toPng` | dua frame | waktu |
+|---|---|---|---|---|
+| 1024×1024 | 2 MB | 5,7 MB | 8 MB | 0,30 dtk |
+| 2048×2048 | 8 MB | 11,7 MB | 20 MB | 0,69 dtk |
+| 4096×4096 | 32 MB | 36,6 MB | 68 MB | 2,36 dtk |
+| 8192×8192 | 128 MB | 142,8 MB | 260 MB | **10,24 dtk** |
+
+**Yang membatasi sekarang waktu, bukan memori.** Endpoint pratinjau yang
+menjawab dalam 2,4 detik itu lambat tapi bisa dipertanggungjawabkan; sepuluh
+detik tidak. Itu perubahan yang berarti: batas memori mematikan prosesnya,
+batas waktu hanya membuatnya lambat.
+
+### Terverifikasi
+
+`php artisan test` **358 lulus** (dari 355, 1.422 asersi). Tiga tes baru,
+**semuanya merah lebih dulu**:
+
+- `decoding 2048x2048 used 196.0 MB — Failed asserting that 205525064 is less
+  than 33554432`
+- `decoding two 2048x2048 frames used 262.0 MB`
+- plafon 4096×4096 ditolak selagi konstantanya masih `2048×2048`
+
+Dua belas tes perilaku `TiffPreview` yang sudah ada — 8-bit, big-endian,
+WhiteIsZero, rentang sempit, frame datar, downscale, penolakan — **tidak satu
+pun diubah**, dan semuanya tetap hijau. Itu jaring pengaman penulisan ulang
+ini, dan alasannya bisa disebut penulisan ulang alih-alih penulisan baru.
+
+Lalu terhadap frame BRIN sungguhan dari arsip dataset di disk
+(`Sample Contrast/Contrast_0001.tif`, 1024×1024 16-bit, 2 MB):
+
+| Yang diperiksa | Hasil |
+|---|---|
+| PNG keluaran | 512×512, depth 8, colorType 0, signature sah, 138.963 byte |
+| Rentang frame | 290–58.633 — jauh dari penuh 16-bit, yang memang alasan windowing ada |
+| Memori | **8,3 MB** |
+| Waktu | 0,38 detik |
+
+### Ditemukan, tidak diperbaiki: pratinjau dataset 404 untuk frame berfolder
+
+Muncul saat mencari frame sungguhan untuk pengujian di atas.
+`GET /me/training/jobs/{id}/dataset/frames` mengembalikan nama beserta awalan
+foldernya, sementara segmen `{name}` pada rute pratinjau tidak bisa memuat
+garis miring. Ketiga bentuk penulisan sama-sama 404.
+
+Arsip BRIN yang nyata berfolder — job 18 memakai `input/`, arsip lain memakai
+`Sample Contrast/`. Jadi bagian E terbukti pada arsip datar dan tidak pernah
+bertemu yang berfolder. Dicatat di ROADMAP, tidak dikerjakan pada putaran ini.
+
+---
+
+## [1.35.0] - 2026-09-02
+
+Empat hal yang sudah lama tercatat sebagai "diketahui, belum dikerjakan".
+Tidak ada yang baru di sini — semuanya sudah dijelaskan di ROADMAP, dan yang
+berubah adalah dari tertulis menjadi terpasang.
+
+### Bobot training yang tersimpan dengan nama yang tidak bisa dimuat
+
+`store()` menurunkan ekstensi dari **MIME type**, bukan dari nama yang dikirim
+worker. Trainer mengunggah `.h5` sebagai `application/octet-stream`, dan
+jawabannya tidak konsisten:
+
+| Kapan | Mendarat sebagai |
+|---|---|
+| 17 Agustus | `.bin` |
+| 29 Agustus, job 17 | `.hdf`, 87,8 MB |
+| 2 September, job 18 | `.hdf`, 87,8 MB |
+
+Keras 3 memilih loader dari sufiks dan tidak mengenal satu pun dari keduanya.
+Jadi administrator yang menekan DOWNLOAD WEIGHTS menerima 87,8 MB hasil
+training yang benar — dan tidak bisa memuatnya. Nama yang benar tidak tercatat
+di mana pun, jadi tidak ada cara menebaknya kecuali membuka berkasnya.
+
+`storeWeights()` sekarang memakai `storeAs()` dengan ekstensi dari nama klien,
+dipilih dari daftar sufiks bobot yang dikenal. Nama berkas tetap
+`Str::random(40)` seperti sebelumnya, jadi bentuk path tidak berubah selain
+sufiksnya. Daftar itu ada karena namanya kini datang dari klien:
+`../../../public/evil.php` harus tidak bisa ikut menentukan path, dan ekstensi
+di luar daftar jatuh ke `bin` — persis yang dihasilkan tebakan MIME dulu.
+
+Checkpoint mendapat perlakuan sama. Ia yang dipakai worker berikutnya untuk
+melanjutkan, jadi checkpoint yang tidak bisa dimuat sama saja dengan tidak ada.
+
+**Dua berkas yang sudah telanjur tersimpan diperbaiki namanya**, dan itu bukan
+tebakan: delapan byte pertama keduanya adalah `89 48 44 46 0d 0a 1a 0a`, magic
+number HDF5. Job 17 dan 18 kini terunduh sebagai `.h5` dari server yang
+berjalan.
+
+### `hyperparameters` sebagai `[]` — kali kelima keluarga bug ini
+
+PHP hanya punya satu tipe array dan `json_encode` menulis yang kosong sebagai
+list, jadi sebuah map yang belum berisi apa pun berangkat sebagai `[]`.
+`TrainerDispatcher` sudah belajar ini di 1.29.0 dan `metrics` di 1.33.0; tiga
+baris di sebelahnya tidak pernah ikut:
+
+- `GET /me/training/jobs/{id}` — dibaca klien Dart;
+- `POST /training/worker/claim` — dibaca **Pydantic**, yang mendeklarasikan
+  dict dan menolak list mentah-mentah;
+- `GET /admin/training/jobs/{id}` pada bentuk detailnya.
+
+Yang kedua yang paling tajam: bentuk kawat yang salah di sana adalah 422 yang
+sama persis dengan yang sudah punya komentar sendiri di `TrainerDispatcher`.
+
+### Posisi antrean dihitung di tiga tempat, bukan dua
+
+ROADMAP menyebut dua; ada tiga. `getQueuePosition()`, `start()` dan
+`PredictionUploadController::queuePosition()` masing-masing menghitung
+`created_at <` lalu tambah satu, sementara `QueueBoard` menomori urutan.
+
+Keduanya setara sampai dua rekaman berbagi detik yang sama — dan unggahan
+berpotong selesai dirakit dalam jauh di bawah satu detik. Saat itu terjadi,
+hitungan `created_at <` memberi **keduanya** angka 1, sedangkan papan
+administrator menampilkan 1 dan 2. Peneliti membaca "antrean ke-1" di
+riwayatnya sementara admin melihatnya di urutan kedua.
+
+`QueueBoard::positionOf()` kini menjawab pertanyaan satu-rekaman, dan
+`positions()` memakai `id` sebagai pemecah seri supaya urutannya total, bukan
+diserahkan ke apa pun yang kebetulan dikembalikan basis data.
+
+Dua akibat yang ikut terbawa, keduanya lebih jujur daripada sebelumnya:
+
+- `queue_position` menjadi `null` untuk rekaman yang tidak sedang antre.
+  Berkas ber-status `uploaded` menunggu tombol START, bukan menunggu GPU; klien
+  Dart sudah membacanya sebagai `int?` di semua tempat.
+- `POST /api/predictions` berhenti mengumumkan `"status": "pending"` secara
+  harfiah. Intake mendaratkan run sebagai `uploaded`, jadi respons itu
+  menyebutkan antrean untuk pekerjaan yang belum masuk antrean.
+
+### `script-api-deepct.py` tidak lagi diabaikan git
+
+Alasannya dulu benar: berkas itu memuat authtoken ngrok polos. Sejak 1.34.0 ia
+membaca kredensial dari environment atau Kaggle Secrets dan tidak memegang apa
+pun. Alasannya habis, dan harganya terlihat: path bobot yang ditulis keras
+bertahan berminggu-minggu di sana tanpa muncul di satu diff pun, sementara
+kembarannya yang dilacak ketahuan di setiap commit.
+
+`script-deepct.py` — nama lama yang memang menyimpan token — tetap di daftar
+supaya salinan basi tidak bisa masuk.
+
+### Terverifikasi
+
+`php artisan test` **355 lulus** (dari 350, 1.411 asersi). Lima tes baru,
+**empat di antaranya dijalankan merah lebih dulu** dan gagal dengan pesan yang
+diharapkan: `.bin` bukan `.h5`, `"hyperparameters":[]` dua kali, dan "record 2
+is in a different place on each screen — Failed asserting that 1 is identical
+to 2". Yang kelima menjaga agar nama dari klien tidak bisa memilih path; ia
+hijau sejak awal karena tebakan MIME memang mengabaikan nama, dan ditulis
+sebelum kode yang bisa merusaknya.
+
+Diverifikasi juga terhadap server yang **sedang berjalan**, bukan hanya suite:
+
+| Yang diperiksa | Hasil |
+|---|---|
+| `GET /me/training/jobs/17` dan `/18` | `"hyperparameters":{}` |
+| `GET /admin/queue` vs `GET /predictions/{id}` | dua baris berdetik sama: papan 1 dan 2, layar peneliti 1 dan 2 |
+| `GET /admin/training/jobs/17/weights` | 200, `job-17-….h5`, 87.794.816 byte |
+| `GET /admin/training/jobs/18/weights` | 200, `job-18-….h5`, 87.794.816 byte |
+
+Dua baris antrean uji itu dibuat untuk pemeriksaan tersebut dan dihapus
+setelahnya; tiga token debug dicabut.
+
+**Catatan cara kerja:** Octane yang berjalan memuat kelas PHP saat proses
+dimulai, jadi berkas yang diedit pukul 22:52 tidak terlihat oleh server yang
+naik pukul 21:51. `php artisan octane:reload` **tidak menolong** — ia korban
+ketiga `posix_kill()` di Windows dan mati di `serverIsRunning()` sebelum
+sempat me-reset apa pun. `./rr.exe reset -o version=3 -o
+rpc.listen=tcp://127.0.0.1:6001` bekerja, tidak mengganggu `serve:all`, dan
+itulah yang dipakai sebelum tabel di atas diambil.
+
+Flutter tidak disentuh pada putaran ini, jadi `flutter analyze` dan
+`flutter test` tidak dijalankan ulang — angka terakhirnya ada di 1.34.0.
+
+---
+
+## [1.34.0] - 2026-08-26
+
+### Path bobot yang ditulis keras di empat salinan, dan tiga di antaranya berbeda
+
+Dua notebook Kaggle yang sedang berjalan diminta dan dibandingkan dengan skrip
+di repo. Keduanya tidak sinkron, dan penyebabnya satu baris yang sama.
+
+Kaggle menyusun path model yang dilampirkan dari slug, framework dan versi yang
+dipilih **saat melampirkannya**. Jadi satu berkas yang sama punya tiga alamat:
+
+| Salinan | Path | Nyata hari ini |
+|---|---|---|
+| Notebook prediksi | `deepct-ai/tensorflow2/default/1/` | ya — prediksi jalan |
+| Notebook training | `deepct-unet/keras/v1/1/` | tidak — `[Errno 2]` |
+| `script-api-train-deepct.py` | `train-deepct/tensorflow2/version-1/1/` | tidak pernah diuji |
+
+Yang membuatnya mahal bukan salahnya, melainkan **kapan** salahnya terlihat.
+Path itu baru dibuka setelah trainer menerima job, mengunduh dataset, dan mulai
+memuat bobot — jadi peneliti melihat runnya berangkat, lalu jadi `failed`
+karena sesuatu yang tidak bisa diperbaiki dari sisi mana pun di platform.
+
+`1.30.0` mengumumkan `find_base_model()` sebagai perbaikannya. Fungsi itu tidak
+pernah ditulis; yang benar-benar dikerjakan hanya mengganti konstantanya dengan
+tebakan lain. Sekarang fungsinya ada, di **kedua** skrip dan identik, karena
+dua salinan yang berbeda adalah keadaan yang baru saja menghabiskan satu sesi.
+
+Ia mencari `*.h5` dan `*.keras` di bawah `/kaggle/input`, mendahulukan berkas
+bernama `generator` — sebuah folder checkpoint bisa juga memuat discriminator,
+dan memuat yang itu menghasilkan model yang jalan dan mengembalikan omong
+kosong, satu-satunya dari tiga hasil yang tidak melempar apa pun.
+`BASE_MODEL_PATH` tetap menang bila diisi, dan diisi-tapi-tidak-ada adalah
+galat, bukan alasan untuk kembali mencari: diam-diam melewati path yang
+diketik seseorang berarti melatih di atas bobot yang bukan pilihan mereka.
+
+Skrip prediksi **menolak berdiri** tanpa bobot — tanpa itu ia tidak punya apa
+pun untuk dilayani. Skrip training tetap membuka terowongannya dan melaporkan
+`"base_model": null` di `GET /`, karena "worker terlihat offline tanpa
+penjelasan" adalah keadaan yang lebih buruk daripada "worker terlihat online
+dan mengatakan apa yang kurang".
+
+Diperiksa dengan menjalankan fungsinya terhadap pohon direktori palsu, bukan
+dengan membacanya: menemukan `generator` alih-alih `discriminator`,
+mengembalikan `None` ketika tidak ada apa-apa, mengalah pada `BASE_MODEL_PATH`,
+dan melempar ketika `BASE_MODEL_PATH` menunjuk berkas yang tidak ada — empat
+pemeriksaan, di kedua skrip.
+
+### Panel training yang memakan daftar model
+
+`Training runs ready to register` adalah satu-satunya jalan keluar dari
+pipeline training — mendaftarkan bobot *adalah* membuat versi model — jadi ia
+memang milik layar Model Management. Yang keliru bukan tempatnya, melainkan
+bahwa ia sebuah `Column` tanpa batas tinggi yang duduk **di sebelah**
+`Expanded` milik grid model.
+
+Artinya setiap run yang selesai mencuri sekitar delapan puluh piksel dari grid
+di atasnya, permanen, tanpa cara mengembalikannya. Delapan run menyisakan satu
+baris kartu model di jendela laptop dan tidak ada sama sekali di ponsel. Dan
+satu-satunya tombol yang ditawarkan untuk membersihkan panelnya adalah DELETE —
+yang menghapus bobotnya dari disk. Tata letaknya diam-diam mendorong orang ke
+satu-satunya tombol tak-bisa-dibatalkan di layar itu, dan pada 26 Agustus
+delapan run selesai terhapus dalam kurang dari dua menit.
+
+Sekarang panelnya memakan jumlah tetap berapa pun yang menunggu: paling banyak
+188 piksel baris, digulung di dalam batasnya sendiri, di bawah kepala yang
+membawa hitungannya — `Training runs ready to register (8)`. Daftar yang
+menggulung menyembunyikan panjangnya sendiri, dan angka itulah yang menentukan
+apakah seseorang perlu menggulungnya.
+
+Di ponsel tombolnya turun ke bawah judul dan boleh pecah dua baris. Itu bukan
+kehati-hatian: `REGISTER AS MODEL` dan `DELETE` bersama-sama menuntut 374
+piksel, sebuah ponsel 360 piksel menawarkan 328, dan selisihnya muncul sebagai
+luapan 46 piksel yang terukur di tes.
+
+Panelnya keluar dari `model_management_screen.dart` menjadi
+`TrainingHandoffPanel`, karena sebuah `Column` privat di dalam sebuah layar
+yang butuh klien jaringan tidak bisa diuji tata letaknya. Tujuh tes: dua belas
+run tidak memakan lebih banyak ruang daripada enam, satu run tidak menahan
+ruang untuk run yang tidak ada, run terakhir bisa dicapai dengan menggulung,
+kepalanya menyebut hitungannya, kosong menggambar nol piksel, dan ponsel tidak
+meluap.
+
+### Dua notebook memperebutkan satu domain ngrok
+
+Begitu skrip prediksi yang benar dijalankan di Kaggle, ia menolak berdiri:
+
+```
+ERR_NGROK_334: The endpoint 'https://fester-resend-envelope.ngrok-free.dev'
+is already online.
+```
+
+Nama di pesan itu adalah URL **trainer**, untuk sebuah `ngrok.connect()` yang
+tidak menyebut domain apa pun. Sebabnya: satu akun ngrok gratis punya satu
+domain reserved, dan connect tanpa nama mengambil domain itu. Kedua notebook
+membaca Kaggle secret yang sama — `ngrok-endpoint` — jadi keduanya adalah akun
+yang sama, dan yang menyala belakangan kalah.
+
+Ini tidak pernah terlihat karena notebook prediksi yang lama menempelkan
+authtoken akun **lain** langsung di dalam sel. Itu menyelesaikan bentrokannya
+secara kebetulan, dan membayarnya dengan kredensial polos di dalam kode —
+kredensial yang sejak itu ikut tersalin ke mana-mana dan harus dicabut.
+
+Kredensialnya kini punya urutan: `NGROK_AUTHTOKEN` menang, lalu secret milik
+notebook itu sendiri (`ngrok-predict` / `ngrok-train`), baru secret bersama.
+Notebook yang punya tokennya sendiri tidak pernah bertabrakan; yang belum punya
+tetap jalan seperti sebelumnya. `NGROK_DOMAIN` menyematkan domain reserved bila
+ada.
+
+Dan pesannya diterjemahkan. pyngrok melempar bentrokan ini sebagai HTTP 502
+dengan empat puluh baris traceback, dan satu-satunya kalimat yang bisa
+ditindaklanjuti terkubur di dalam JSON di baris terakhir. Sekarang yang muncul
+menyebut penyebabnya dan dua jalan keluarnya.
+
+Tujuh pemeriksaan per skrip, dijalankan merah lebih dulu: variabel lingkungan
+menang, secret sendiri mendahului yang bersama, jatuh ke yang bersama bila
+tidak ada, melempar dan menyebut kedua nama bila tidak ada apa-apa,
+ERR_NGROK_334 diterjemahkan, dan galat lain dibiarkan lewat apa adanya.
+
+### Terverifikasi
+
+`flutter analyze` bersih, `flutter test` **250 lulus** (dari 243),
+`php artisan test` **350 lulus** (1.386 asersi), `flutter build apk --release`
+**61,8 MB, exit 0**. Backend tidak disentuh pada putaran ini.
+
+`find_base_model()` **terbukti di produksi**, bukan hanya di pemeriksaan: sesi
+training melaporkan `train-deepct/tensorflow2/version-1/1/` dan sesi prediksi
+memuat `deepct-ai/tensorflow2/default/1/` — dua path berbeda pada hari yang
+sama, keduanya ditemukan tanpa ada yang mengetik apa pun.
+
+Ketujuh tes panel dijalankan **merah lebih dulu**: lima gagal terhadap panel
+yang lama, termasuk luapan 46 piksel di ponsel dan dua belas run yang memakan
+dua kali lipat ruang enam run. `find_base_model()` diuji dengan menjalankannya
+terhadap pohon direktori palsu, bukan dengan membacanya.
+
+**Yang tidak bisa diverifikasi dari sini:** kedua notebook Kaggle masih
+menjalankan salinan lama. Sesi prediksi masih memuat `/predict_png` dan
+`/generate_gif` dan menjawab 404 di `GET /`; sesi training masih membuka
+`deepct-unet/keras/v1/1/`. Perbaikan di berkas ini tidak berlaku sampai kedua
+notebook dijalankan ulang dengan isi yang sekarang.
+
+---
+
+## [1.33.0] - 2026-08-25
+
+### MY RUNS berputar selamanya, dan penyebabnya array kosong PHP — untuk keempat kalinya
+
+Endpoint-nya sehat: 200 dalam 50 milidetik. Yang macet klien, dan bukti ada di
+dalam jawabannya sendiri:
+
+```json
+"metrics":[]
+```
+
+PHP hanya punya satu tipe array dan `json_encode` menulis yang kosong sebagai
+`[]`, jadi run yang belum melaporkan apa pun tiba sebagai **list** di tempat
+sebuah map dideklarasikan. Di Dart, `as Map?` terhadap List tidak menghasilkan
+null — ia **melempar**. Lemparan itu lolos dari `catch` yang hanya menangkap
+`ApiException`, `_loading` tidak pernah dikembalikan ke `false`, dan daftarnya
+berputar selamanya di web maupun di ponsel tanpa satu pun pesan di layar.
+
+Diperbaiki di dua tempat, karena keduanya salah:
+
+- **Backend** mengirim objek — `(object) ($job->metrics ?? [])` — di daftar
+  peneliti, di riwayat per epoch, dan di konsol admin.
+- **Frontend** berhenti bisa digantung: `asMetrics()` menerima bentuk apa pun
+  dan `_load()` menangkap **semua** galat. Parsing adalah tempat yang salah
+  untuk bersikap ketat — sebuah layar tidak boleh bisa mati karena bentuk kolom
+  yang hanya ia tampilkan.
+
+Empat tes regresi menjaganya, termasuk satu yang melempar galat sembarang dari
+loader dan menuntut spinner-nya berhenti.
+
+### Angka hasil training terlihat tanpa membuka baris
+
+Tabel per epoch — EPOCH, MAE, MSE, PSNR, SSIM — sudah ada sejak lama, tapi
+hanya muncul saat baris dibuka, dan tidak pernah terlihat karena layarnya tidak
+pernah lewat dari spinner. Sekarang epoch terakhir ikut di baris ringkas:
+`epoch 2 · PSNR 38.79 · SSIM 0.9862 · MAE 0.01469`. Daftar yang menyembunyikan
+hasilnya di balik satu ketukan adalah daftar nama.
+
+### Antrean training, dan antrean yang benar-benar bergerak
+
+Run yang menunggu kini menyebut posisinya, dan kepala MY RUNS menyebut beban
+seluruh trainer — `1 running · 6 waiting across everyone` — karena penantian
+seseorang terbuat dari pekerjaan orang lain, yang tidak bisa ditunjukkan oleh
+daftar miliknya sendiri.
+
+**Tanpa perkiraan waktu, dan itu disengaja.** Antrean prediksi bisa memberikan
+satu karena setiap run berbentuk sama; sebuah run training sebanyak epoch yang
+diminta pemiliknya, jadi job di depan Anda bisa memakan empat menit atau empat
+jam. Angka dengan sebaran seperti itu lebih buruk daripada tidak ada — orang
+merencanakan sesuatu di atasnya, lalu ia meleset.
+
+Menampilkan nomor antrean langsung memunculkan masalah kejujuran: **nomor
+menjanjikan barisan yang bergerak, dan barisan ini tidak bisa.** Sebuah run
+di-dispatch tepat sekali, saat ia dibuat; percobaan yang gagal meninggalkannya
+di `queued` selamanya. Enam menumpuk begitu dalam satu sore.
+
+Daripada melemahkan tampilannya, antreannya yang dibuat nyata:
+`training:dispatch-queued`, dijadwalkan tiap menit, mengirim run tertua ketika
+trainer bebas. Satu per satu — trainer memegang satu GPU dan menolak job kedua,
+jadi mengirim lebih banyak hanya memanen penolakan. Urutannya `created_at`,
+sama persis dengan yang ditampilkan sebagai posisi; dua definisi "berikutnya"
+akan berselisih dan selisihnya muncul sebagai antrean yang melompat.
+
+Run yang tidak bisa dikirim menuliskan alasannya di barisnya sendiri, bukan
+hanya di log — kegagalan yang diam adalah justru yang ingin diakhiri perintah
+ini. Dan gagal mengirim **bukan** kegagalan perintah: trainer yang mati adalah
+keadaan biasa di sini, dan exit non-nol hanya akan memenuhi log penjadwal
+dengan alarm tentang sesuatu yang tak bisa diperbaiki dari sisi ini.
+
+Lima tes, salah satunya menangkap kekeliruan saya sendiri: `Http::fake()` yang
+dipanggil dua kali **menambah** stub alih-alih menggantinya, jadi pola `*`
+pertama tetap menang dan "pemulihan" yang hendak diuji tidak pernah terjadi.
+
+---
+
+## [1.32.0] - 2026-08-25
+
+### Training peneliti: 422 yang bertahan karena ia hanya menyerang job baru
+
+Perbaikan `hyperparameters` di `1.30.0` benar, tapi bukan penyebab terakhirnya.
+Yang tersisa hanya terlihat setelah payload yang dikirim **Octane yang sedang
+berjalan** ditangkap apa adanya — bukan dibangun ulang di proses baru:
+
+```json
+"resume_from_epoch": null
+```
+
+`current_epoch` di database `NOT NULL DEFAULT 0`. MySQL menerapkan default itu
+saat INSERT dan **tidak pernah memberi tahu Eloquent**: objek yang dikembalikan
+`create()` hanya memegang atribut yang dioper kepadanya, jadi kolom itu terbaca
+`null` sampai ada yang memanggil `fresh()`. Trainer mendeklarasikan
+`resume_from_epoch: int = 0`, yang bukan Optional, dan Pydantic menolaknya
+dengan `"Input should be a valid integer"`.
+
+Itulah sebabnya ia bertahan begitu lama. Job yang **baru dibuat** peneliti
+selalu ditolak; job yang sama yang di-dispatch ulang belakangan — sudah
+bolak-balik lewat database — selalu lolos. Menguji dengan tangan lewat tinker
+hanya pernah menyentuh bentuk yang kedua. Jebakan yang sama menggigit
+`verify_tls` sehari sebelumnya.
+
+Diselesaikan di tepi tempat JSON-nya dibuat, seperti `hyperparameters`:
+`(int) ($job->current_epoch ?? 0)`. Tesnya memeriksa **kawatnya**, bukan array
+hasil decode — di PHP `null` dan `0` sama-sama falsy, dan yang dibaca trainer
+adalah JSON-nya.
+
+### Penolakan trainer kini menyebut alasannya
+
+"The trainer refused the job (HTTP 422)" menyebut angka dan membuang
+satu-satunya bagian yang bisa ditindaklanjuti. FastAPI selalu mengirim
+`{"detail":[{"loc":[...],"msg":"..."}]}` yang menyebut persis kolom mana dan
+apa yang salah dengannya — dan kami membuangnya, lalu menebak. Dua kali.
+
+`whyRefused()` kini melampirkannya: `body.resume_from_epoch: Input should be a
+valid integer`. Angka statusnya tetap, karena ia memisahkan "ditolak" dari
+"tidak terjangkau"; kalimatnya yang menyebut apa yang harus diubah.
+
+### `post_max_size` 8M memutus training tepat di garis akhir
+
+Catatan lama di `CLAUDE.md` mengatakan batas `php.ini` "sebagian besar tidak
+berlaku" di bawah Octane. Itu benar untuk `upload_max_filesize` — RoadRunner
+mengurai multipart sendiri — dan **salah** untuk `post_max_size`, yang dipaksakan
+middleware `ValidatePostSize` Laravel jauh sebelum RoadRunner ikut bicara.
+
+Nilainya masih bawaan **8M**, dan gejalanya tidak terlihat seperti batas ukuran:
+
+- run yang sudah melatih empat epoch dengan benar mati dengan
+  `413 Client Error: Request Entity Too Large` ketika mengirim bobotnya pulang;
+- dataset 19 MB yang dikirim utuh dijawab "The POST data is too large",
+  sementara arsip yang sama lewat jalur berkeping naik tanpa keluhan, karena
+  tiap kepingnya kecil.
+
+Sekarang 256M, dan `upload_max_filesize` disamakan supaya keduanya tidak bisa
+berselisih. `php.ini` dibaca sekali per proses, jadi Octane harus dilahirkan
+ulang setelah mengubahnya.
+
+`.rr.yaml` kosong dan itu bukan kekeliruan: Octane mengoper setelan RoadRunner
+sebagai flag `-o`, jadi tidak ada apa pun untuk dicari di berkas itu.
+
+### Terbukti ujung ke ujung
+
+Bukan "diterima", melainkan selesai:
+
+| Tahap | Hasil |
+|---|---|
+| Unggah dataset 19,5 MB | lolos (sebelumnya "POST data is too large") |
+| Dispatch ke Kaggle | diterima (sebelumnya 422) |
+| Training | MAE 0,014374 · PSNR 39,06 dB · SSIM 0,9863 |
+| Unggah bobot 83,7 MB | tersimpan (sebelumnya 413) |
+| Job | `completed` |
+
+Run sebelumnya di sesi yang sama menunjukkan loss turun antar epoch: MAE
+0,014994 → 0,014686, PSNR 38,21 → 38,79 dB.
+
+---
+
+## [1.31.0] - 2026-08-25
+
+### Siapa yang sedang memakai model, tanpa ada yang perlu menyimpulkannya
+
+Satu-satunya cara administrator menjawab "job siapa yang sedang dikerjakan GPU"
+adalah membaca activity log dan mencari "memulai analisis" yang belum ada
+penyelesaiannya. Itu penyimpulan, dan ia salah begitu dua run bertumpang
+tindih atau sebuah worker mati di tengah jalan.
+
+Sumber yang benar bukan log itu. `user_activities` adalah jejak audit: ia
+mencatat peristiwa yang **sudah terjadi**, dan tidak mengatakan apa pun tentang
+apakah run-nya masih berjalan. `analysis_records` menyatakannya langsung —
+`processing` untuk yang sedang dikerjakan, `pending` untuk yang menunggu — dan
+barisnya sudah membawa `user_id`, `model_id`, `input_files_count` dan
+`created_at`. Tidak ada yang perlu diturunkan, dan tidak ada yang bisa
+melenceng dari kenyataan, karena inilah kenyataan yang dikerjakan worker.
+
+`GET /api/admin/queue`: yang berjalan di atas, lalu barisan antrean menurut
+urutan kedatangan, masing-masing dengan pemilik, model, jumlah frame, sudah
+berapa lama, nomor posisi, dan perkiraan tunggu.
+
+**Satu definisi antrean, bukan dua.** Nomor posisi di layar administrator
+berasal dari `App\Services\QueueBoard`, dan `AnalysisController` kini membaca
+dari sana juga alih-alih menghitung sendiri. Dua implementasi "posisi ke
+berapa" akan berselisih pada perubahan pertama, dan perselisihannya muncul
+sebagai layar satu orang membantah layar orang lain. Sebuah tes memaksa
+keduanya menjawab angka yang sama untuk job yang sama.
+
+Job yang sedang berjalan **tidak** diberi nomor: ia tidak sedang menunggu apa
+pun, dan menomorinya bersama antrean akan mengatakan ia masih di dalam barisan.
+
+`meta` membawa keadaan `QueueHealth` dengan pesan versi administrator —
+lengkap dengan perintahnya. Antrean panjang dan worker mati terlihat identik
+dari daftar job yang menunggu, padahal yang satu menuntut kesabaran dan yang
+lain menuntut `npm run serve:all`.
+
+Hanya baca. Membatalkan run milik orang lain dari sini adalah fitur lain dengan
+akibat lain, dan menyelipkannya ke layar yang tugasnya menjawab pertanyaan
+mengundang orang melakukannya tanpa sengaja.
+
+Delapan tes, termasuk dua yang mengoreksi asumsi yang salah: baris antrean
+**tidak** bisa hidup lebih lama dari pemiliknya (`user_id` memakai `cascade`,
+jadi menghapus akun ikut membersihkan pekerjaannya dan penomorannya merapat),
+sementara model **memang** bisa dicabut sementara pekerjaannya masih mengantre
+(`model_id` memakai `set null`).
+
+### Layarnya
+
+**Admin → Queue**, di sebelah Model Management karena ia menjawab pertanyaan
+tentang model, bukan tentang jejak audit. Yang berjalan ada di atas dengan
+spinner alih-alih nomor; barisan di bawahnya bernomor `#1`, `#2` — angka itulah
+yang pertama ditemukan mata, dan ia adalah urutan seluruh halaman. Setiap baris
+menyebut nama dan surel pemiliknya, modelnya, jumlah frame, sudah berapa lama,
+dan "mulai kira-kira N menit lagi".
+
+Polling sepuluh detik, secadans yang sama dengan strip status model. Papan yang
+hanya berubah bila tombol ditekan adalah tangkapan layar, dan hal pertama yang
+akan dilakukan orang dengannya adalah menekan tombol itu berulang-ulang.
+
+Poll yang gagal **tidak** mengosongkan papan yang sudah tampil: angka yang agak
+basi mengalahkan halaman kosong, dan tick berikutnya membereskannya tanpa siapa
+pun menyentuh apa pun.
+
+Rata-rata per run ikut di kepala halaman, karena setiap perkiraan di situ
+dibangun darinya — layar yang menunjukkan cara kerjanya sendiri, bukan angka
+yang muncul entah dari mana.
+
+Dua kesalahan nyata sempat lolos ke `admin_queue_service.dart` dan tidak akan
+pernah dikompilasi: `ApiClient()` — konstruktornya privat, yang ada hanya
+`ApiClient.instance` — dan pembacaan `response.data`, padahal `get()` sudah
+mengembalikan `Map` yang sudah di-decode. Keduanya diperbaiki.
+
+Sembilan tes untuk lapisan di bawah layarnya, masing-masing memagari satu
+perbedaan yang akan hilang diam-diam: job berjalan tanpa nomor, model yang
+sudah dicabut terbaca "Model removed" alih-alih ruang kosong, dan antrean macet
+dibedakan dari antrean yang sekadar panjang.
+
+---
+
+## [1.30.0] - 2026-08-25
+
+Sesi pengujian di perangkat sungguhan, dengan sesi Kaggle hidup untuk prediksi
+dan training. Enam keluhan, dan hampir semuanya berakhir di tempat yang bukan
+tebakan pertama.
+
+### Training tidak pernah berangkat, karena tiga hal berturut-turut
+
+Peneliti mengunggah dataset, menekan start, dan layar kembali meminta unggahan
+baru. Empat job menumpuk di `queued`, dan log trainer di Kaggle hanya berisi
+`GET /` — tidak sekali pun `POST /train`.
+
+Tiga penyebab, ditemukan satu demi satu karena masing-masing menyembunyikan
+yang berikutnya:
+
+1. **`callback_url` masih `http://localhost`.** `TrainerDispatcher` memang
+   menolak berangkat dalam keadaan itu, dan penolakannya benar: host GPU di
+   Kaggle tidak mungkin menjangkau alamat itu untuk melapor balik. Yang salah
+   bukan penjaganya, melainkan tidak ada yang pernah menyetel
+   `TRAINING_CALLBACK_URL`. Tailscale tidak bisa dipakai di sini — itu jaringan
+   privat, dan Kaggle tidak ada di dalamnya.
+
+2. **HTTP 405.** Notebook mencetak akar terowongannya dan berkata "daftarkan
+   ini sebagai trainer URL", jadi itulah yang ditempelkan. Tapi route-nya
+   `POST /train`, dan FastAPI menjawab POST ke akar dengan 405 — penolakan yang
+   terbaca seperti trainer menolak pekerjaan, padahal platform sedang mengetuk
+   pintu yang salah. Endpoint inferensi didaftarkan lengkap dengan path-nya
+   (`…/predict`) karena notebook prediksi mencetaknya begitu, jadi dua konvensi
+   hidup berdampingan di registry dan tidak ada yang keliru. `trainEndpoint()`
+   menambahkan path hanya bila tidak ada.
+
+3. **HTTP 422: `{"loc":["body","hyperparameters"],"msg":"Input should be a
+   valid dictionary","input":[]}`.** PHP hanya punya satu tipe array, dan
+   `json_encode` menulis yang kosong sebagai `[]`. Trainer mendeklarasikan
+   `hyperparameters: dict`, jadi **setiap run yang dibiarkan pada nilai
+   bawaannya ditolak**, sementara run yang satu saja hyperparameter-nya diisi
+   lolos — kegagalan yang bergantung pada kolom yang tidak pernah disentuh
+   siapa pun.
+
+Setelah ketiganya: trainer menerima job, mengunduh dataset, mencoba memuat
+bobot, gagal, **dan melaporkan kegagalannya kembali** — job jadi `failed`
+dengan pesan nyata, bukan menggantung selamanya. Itu perbedaan yang dicari.
+
+Tiga tes baru menjaganya. Yang lama memakai `Http::fake(['*' => …])`, yang
+menerima URL apa pun dan tidak memeriksa badan permintaan, jadi ia tidak
+mungkin menangkap dua bug terakhir.
+
+### Path bobot di skrip training menunjuk dataset yang tidak ada
+
+Kegagalan pertama setelah dispatch berhasil: errno 2 pada
+`deepct-unet/keras/v1/1/…`, sementara bobot yang benar-benar terpasang ada di
+`deepct-ai/tensorflow2/default/1/…` — path yang dipakai skrip inferensi dan
+terbukti berhasil.
+
+Kaggle menyusun path itu dari slug, framework dan versi yang dipilih saat model
+dilampirkan, jadi ia berubah karena alasan yang tidak ada hubungannya dengan
+kode ini. `find_base_model()` mencari berkasnya, mendahulukan yang bernama
+`generator`, dan berkata apa yang harus dilakukan bila tidak menemukan apa pun.
+`BASE_MODEL_PATH` tetap menang bila diisi.
+
+### Bingkai model merah padahal online
+
+Bukan soal data: API menjawab `"status":"online"`, dan `ModelHealthChecker`
+memang sudah memperlakukan 404 di akar sebagai tanda hidup.
+
+`AppTheme.primary` adalah **merah BRIN**, dan kartu model memakai
+`selected ? AppTheme.primary : AppTheme.border`. Jadi memilih model yang sehat
+menggambar bingkai merah di sekelilingnya — merah yang sama yang dipakai strip
+di atasnya untuk "offline". Seleksi dan status diucapkan dalam satu bahasa, dan
+status yang kalah.
+
+Warna kini milik kesehatan; seleksi dibawa ketebalan bingkai dan tombol radio,
+yang sejak awal tidak pernah ambigu.
+
+### Slider frame yang patah-patah
+
+`FrameStackViewer` memanggil `loader` dari dalam `itemBuilder` sebuah
+`PageView`. Setiap langkah memulai pengambilan baru dan menaruh spinner di
+layar sampai dijawab — jadi menarik slider menghasilkan rentetan lingkaran
+abu-abu, bukan gerakan. Tidak ada yang lambat di widget itu; ia diminta
+mengunduh justru selama gerakan yang harus mulus.
+
+ImageJ terasa kontinu karena stack-nya sudah ada di RAM sebelum scrollbar
+melakukan apa pun. Sekarang seluruh stack dimuat di muka — dari frame yang
+sedang dilihat ke luar, empat sekaligus — dengan progress yang menyebut
+angkanya. Setelah itu satu langkah berharga satu `setState` dan nol I/O.
+
+Ditambah tombol putar dengan pilihan 4/8/15 fps, panah kiri-kanan, spasi untuk
+putar-jeda, dan `divisions` dibuang dari `Slider` supaya ibu jari tidak
+tersangkut di takik. Tombol **PLAY STACK** di halaman Frames, karena sebelumnya
+scrubber itu hanya bisa ditemukan dengan mengetuk thumbnail — tidak ada yang
+mengumumkan keberadaannya.
+
+Tesnya menangkap penyebabnya, bukan gejalanya: menyusuri seluruh stack dua kali
+tidak boleh menambah satu pun pemanggilan loader.
+
+### Antrean yang tidak punya bentuk
+
+`queue_position` sudah dihitung — **hanya di endpoint detail**, yang tidak
+pernah dipanggil layar riwayat. Jadi satu-satunya tempat orang menunggu
+menerima `null` dan tidak menggambar apa pun. Seseorang yang menatap spinner
+tanpa angka tidak bisa membedakan antrean satu dari antrean sembilan, dan
+setelah beberapa menit kesimpulan yang masuk akal adalah bahwa itu rusak.
+
+Posisi kini ikut di daftar, satu kueri untuk seluruh halaman. Estimasinya
+berhenti menebak: `position × 5 menit` ditulis sebelum satu run pun diukur, dan
+run sungguhan memakan 50 detik sampai dua setengah menit — tebakannya
+melebih-lebihkan tiga kali lipat, dan estimasi yang selalu salah ke arah yang
+sama mengajari orang mengabaikannya. Sekarang rata-rata dua puluh run terakhir,
+dari `processing_time_seconds` yang memang sudah dicatat.
+
+### Peringatan yang benar, dibacakan kepada orang yang salah
+
+"Nothing has picked this job up for 11 minute(s) … `npm run serve:all`" tepat
+untuk administrator yang harus mengetiknya, dan tepat-tepat salah di layar
+peneliti: terbaca sebagai kesalahan yang mereka buat, dalam kosakata yang tak
+berguna bagi mereka, di atas pekerjaan yang tidak bisa mereka lanjutkan.
+
+Diam bukan jawabannya — itu mengembalikan orang ke keadaan yang justru ingin
+dihindari kelas ini. Jadi faktanya tetap disampaikan, penyebabnya disebut
+sebagai urusan kami, dan perintahnya tidak.
+
+Peringatan itu memang benar hari ini: `queue:work` sungguh tidak berjalan,
+empat job menunggu, yang tertua 1714 detik.
+
+### Queue worker mati kehabisan memori di tengah job
+
+Ditemukan justru karena worker-nya dinyalakan: keempat job selesai (53 detik,
+2m27s, 55 detik — panggilan GPU sungguhan), lalu prosesnya keluar.
+
+Dua kesalahan bertumpuk. `npm run queue` tidak menyetel `--memory` sama sekali,
+dan `--memory` sendiri **tidak menaikkan `memory_limit`** — ia hanya menentukan
+kapan worker merestart dirinya. Batas sebenarnya 512 MB.
+
+Yang menabraknya: `TiffPreview` menjadikan setiap piksel satu entri array PHP,
+dua kali sekaligus selagi hasil `unpack` disalin ke akumulator, dan entri array
+PHP berharga puluhan byte untuk piksel yang di disk hanya dua byte.
+
+`MAX_PIXELS` adalah `8192 × 8192` — enam puluh tujuh juta piksel, yang tidak
+pernah sanggup dikerjakan implementasinya. Penjaganya mengizinkan apa yang tak
+bisa dilalui kodenya, jadi kegagalannya bukan penolakan melainkan fatal error
+di dalam queue worker: proses mati di tengah job, membawa run-nya, dan
+meninggalkan "queued" di layar tanpa apa pun yang menjelaskan.
+
+Sekarang `2048 × 2048` — empat kali lipat frame 1024×1024 yang dipakai platform
+ini — dan `php -d memory_limit=1G … --memory=768`, supaya worker mendaur ulang
+dirinya sebelum menabrak batas keras. Frame yang melampauinya ditolak dengan
+kata-kata; hanya *pratinjau*-nya yang ditolak, berkasnya tetap bisa diunduh.
+
+Menulis ulang dekoder itu agar tidak membangun array sejuta integer adalah
+perbaikan tersendiri, dan dicatat sebagai itu di ROADMAP — bukan dikerjakan
+setengah jalan di akhir sesi.
+
+### QUALITY CHECK keluar dari hasil prediksi
+
+Ia menjawab "model ini bagus atau tidak", yang merupakan pertanyaan tentang
+sebuah model, bukan tentang satu run milik peneliti — dan pada prediksi yang
+sudah selesai ia terbaca sebagai nilai atas pekerjaan yang sudah mereka terima.
+
+Angkanya **tidak dihapus**, dan perhitungannya tetap jalan: tabel perbandingan
+model berdiri di atas `mae` dan `psnr` yang sama. Menghapus pengukurannya akan
+mengosongkan fitur perbandingan itu.
+
+### Endpoint worker yang tidak dipakai siapa pun
+
+`/predict_png` dan `/generate_gif` dibuang dari skrip prediksi. Platform hanya
+mem-POST ke `endpoint_url`; PNG pratinjau dirender Laravel sendiri di
+`TiffPreview` (PHP murni, tanpa ekstensi imaging), dan GIF digantikan penampil
+stack di dalam aplikasi. Endpoint yang tidak dipanggil hanya menambah permukaan
+yang harus dijaga.
+
+Sebagai gantinya skrip prediksi kini punya `GET /`, seperti kembarannya. Health
+check memang sudah menerima 404 sebagai tanda hidup, tapi log notebook jadi
+penuh 404 yang terlihat seperti kesalahan padahal bukan. Ia melaporkan
+`protected`, jadi satu lirikan menjawab apakah rahasianya sudah berlaku.
+
+---
+
+## [1.29.2] - 2026-08-25
+
+### Sisi worker dari rahasia bersama, yang membuat F7 baru separuh jadi
+
+Diminta sebuah skrip training untuk Kaggle. Skripnya **sudah ada** —
+`script-api-train-deepct.py`, 533 baris, lengkap dengan custom layer, sampling
+`balanced_t`, checkpoint, heartbeat, satu PNG per epoch, dan pembuka terowongan.
+Itulah yang dipanggil `TrainerDispatcher`. Menuliskan yang kedua hanya akan
+menghasilkan dua skrip yang saling menyimpang pada sentuhan pertama.
+
+Yang **tidak** ada adalah pemeriksaan rahasianya.
+
+`1.28.0` membuat platform mengirim `Authorization: Bearer` pada setiap panggilan
+ke worker. Tidak satu pun skrip worker memeriksanya. Fitur keamanannya baru
+separuh: platform mengirim kredensial yang tidak ada yang memvalidasi, dan
+`POST /train` menerima perintah dari siapa pun yang tahu URL terowongannya.
+Begitu pula `/predict`, `/predict_png` dan `/generate_gif` di skrip inferensi.
+
+Sekali lagi, di Kaggle di balik terowongan bernama acak itu bertahan — tidak
+ada yang menebak namanya. Di workstation beralamat tetap di jaringan lab, ia
+tidak menahan apa-apa: siapa pun di jaringan itu bisa memulai training
+berjam-jam di kartu orang lain.
+
+Keempat endpoint kerja kini memeriksanya. `hmac.compare_digest`, bukan `==`:
+perbandingan string biasa berhenti pada byte pertama yang berbeda, dan selisih
+waktunya cukup untuk memulihkan rahasia satu karakter demi satu karakter.
+
+`GET /` **sengaja dibiarkan terbuka**. Ia tidak memulai apa pun dan tidak
+menghabiskan apa pun, dan bisa memeriksa terowongan masih hidup dari peramban —
+tanpa menempelkan kredensial ke bilah alamat — lebih berharga daripada
+menyembunyikan keberadaan endpoint-nya. Ia kini melaporkan `protected`, supaya
+satu lirikan menjawab "rahasianya sudah berlaku atau belum".
+
+**Kosong berarti terbuka, dan itu tetap default-nya.** Sama seperti
+`verify_tls`: menyalakannya diam-diam akan memutus sesi Kaggle yang sedang
+berjalan, dan keputusan itu harus dibuat di tempat yang terlihat.
+
+---
+
+## [1.29.1] - 2026-08-25
+
+### Analisis yang berhenti di "queued", dan aturan yang ditemukan keliru karenanya
+
+#### Tidak ada yang mengonsumsi antreannya
+
+Dilaporkan: analisis tidak pernah diproses. Buktinya tidak ambigu — dua job
+duduk di tabel `jobs` dengan `attempts: 0`, **nol** job gagal, dan tidak ada
+satu pun proses `queue:work`. Yang berjalan hanya Octane dan empat worker
+RoadRunner. Jobnya masuk antrean dengan benar, payloadnya utuh, tidak ada yang
+error. Tidak ada yang **mengambilnya**.
+
+`README.md` proyek ini sudah menuliskannya sejak lama: tanpa `queue:work`,
+"uploads succeed but predictions stay `pending` forever". Kegagalannya
+sepenuhnya senyap — tidak ada error, tidak ada log, `failed_jobs` kosong.
+
+Penyebabnya skrip `start.ps1` yang dibuat untuk pengujian Tailscale: ia
+menyalakan MySQL, Octane, dan server web statis, dan **melewatkan queue worker
+beserta scheduler**. Kini kelimanya dijaga, dengan pemeriksaan berbasis proses
+karena keduanya tidak punya port untuk diuji, dan skripnya menutup dengan
+kalimat yang menyebut gejala ini apa adanya.
+
+Scheduler yang hilang punya kegagalan senyapnya sendiri, hanya lebih lambat
+terasa: hasil kedaluwarsa tidak pernah dihapus, dan `models.status` menyimpan
+apa pun yang ditulis health check manual terakhir — sehingga worker yang mati
+tetap terbaca online.
+
+#### Aturan hold-out ternyata menuntut keadaan yang tidak akan pernah ada
+
+Begitu antreannya jalan, dua prediksi selesai terhadap GPU sungguhan dan
+keduanya mengembalikan `validation: NULL`. Bukan kegagalan — syaratnya memang
+tidak terpenuhi. Tetapi arsipnya menjelaskan kenapa syarat itu salah sejak
+awal: framenya **51, 53, 55, … 69**, selang satu.
+
+Aturan semula menuntut tiga frame **berurutan**. Peneliti, menurut definisinya,
+mengunggah frame **dengan celah** — itu seluruh produknya. Menuntut tiga yang
+berurutan berarti menuntut justru keadaan yang paling tidak mungkin ada.
+
+Yang sebenarnya diperlukan: sebuah frame terunggah yang menjadi **titik tengah
+persis** dari dua frame terunggah lainnya. "Tiga berurutan" hanyalah bentuk
+khususnya dengan jarak 2. Pada arsip itu, 53 adalah titik tengah 51 dan 55 dan
+bisa diperiksa sejak semula.
+
+Rentang **tersempit** yang dipilih, disengaja: titik tengah antara 51 dan 69
+membentang sembilan frame gerakan, sementara 51 dan 55 membentang dua — dan dua
+itulah pekerjaan yang sebenarnya diminta dari model. Mengukur pada rentang
+lebar akan melaporkan model lebih buruk daripada tugasnya.
+
+#### Angka pertama yang diukur, bukan dikutip
+
+Arsip yang sama, dijalankan ulang dengan aturan baru:
+
+| | |
+|---|---|
+| Frame disembunyikan | `HONDA_Used_0053.tif`, digambar ulang dari 51 dan 55 |
+| MAE | **359,7** hitungan 16-bit |
+| RMSE | 688,1 |
+| PSNR | **39,58 dB** |
+| Rentang frame acuan | 108 – 56.487 |
+
+Galat rata-rata **0,64% dari rentang dinamis frame**. Setiap angka kualitas
+sebelum ini di repo berasal dari dokumentasi model yang sudah ada; ini yang
+pertama diukur oleh platform terhadap data penggunanya sendiri.
+
+Sepuluh frame masuk, sembilan dihasilkan, 36 detik. `CaptureResultEvidence`
+berjalan setelahnya dalam satu detik — pemisahan di 1.29.0 bekerja seperti
+rancangannya.
+
+#### Terverifikasi
+
+`php artisan test` **327 lulus** (dari 325, 1.296 asersi). Tiga test menutup
+arsip berjarak tetap yang kini terukur, arsip yang memang tidak menawarkan
+titik tengah, dan rentang ganjil yang tidak boleh dipilih — bertambah dua
+bersih, karena yang kedua menggantikan test lama yang menguji aturan "tiga
+berurutan" yang sudah tidak ada.
+
+---
+
+## [1.29.0] - 2026-08-25
+
+### Empat hal yang dibutuhkan sebelum platform ini pindah ke Raspberry Pi
+
+Rencananya: Pi sebagai server platform, workstation ber-GPU sebagai worker,
+NAS sebagai tempat berkas. Semuanya lebih kecil, lebih lambat, dan lebih mudah
+mati daripada laptop pengembangan — dan empat asumsi yang selama ini aman
+berhenti aman di sana.
+
+#### Disk penuh berhenti jadi kejutan
+
+Tidak ada satu pun pemeriksaan ruang kosong sebelum menerima arsip. Unggahan
+2 GB ke mesin bersisa 3 GB berhasil, menghasilkan frame lebih banyak daripada
+yang diterimanya, lalu berhenti dengan disk di angka nol — dan di titik itu
+MySQL tidak bisa menulis, antrean tidak bisa mencatat kegagalannya, dan log
+yang akan menjelaskan semuanya juga tidak bisa ditulis.
+
+Sebuah arsip menghabiskan disk **tiga kali lipat** sebelum selesai: frame yang
+diekstrak darinya, frame yang dihasilkan model dari itu, dan arsip sementara
+yang dibangun untuk mengembalikan hasilnya. Frame bangkitan rutin melebihi
+jumlah yang diunggah — dua batas mengelilingi celah lima menghasilkan empat —
+jadi tiga adalah lantai, bukan margin.
+
+Ditolak dengan **507**, bukan 400: tidak ada yang salah dengan permintaannya,
+dan berkas yang lebih kecil tidak akan mendapat jawaban berbeda.
+
+#### NAS yang lepas berhenti jadi tak terlihat
+
+Ini kegagalan yang lebih berbahaya dan seluruhnya senyap. Share yang tidak
+ter-mount **bukan** kesalahan — ia direktori kosong biasa, dan `Storage::put()`
+menulis ke dalamnya tanpa mengeluh. Frame-nya mendarat di disk milik host,
+peneliti diberi tahu jobnya berhasil, dan berkasnya ada di tempat yang tidak
+akan dicari siapa pun.
+
+Jadi mount-nya membawa berkas sentinel yang hanya ada di sana. Hilang berarti
+tidak ter-mount, dan tidak ter-mount berarti menolak alih-alih menulis ke
+tempat yang keliru.
+
+**Mati secara default.** Instalasi satu disk tidak punya apa pun untuk absen,
+dan menyalakannya tanpa membuat sentinel lebih dulu akan menolak setiap
+unggahan pada setiap deployment yang ada. `php artisan storage:mark`
+membuatnya, dan perintahnya menolak melakukannya diam-diam: ia menunjukkan
+ukuran volume lebih dulu, karena angka itulah pemeriksaannya — mount point yang
+kosong melaporkan disk host, yang biasanya berukuran sangat berbeda.
+
+#### Thumbnail berhenti menahan antrean
+
+Merender TIFF 16-bit jadi PNG adalah PHP murni dan CPU-bound: sekitar setengah
+detik per frame 1024×1024 di sini, dan beberapa kali lipat itu di Raspberry Pi.
+Enam frame berarti sepuluh sampai lima belas detik satu inti — dihabiskan
+**setelah** pekerjaan yang diminta peneliti selesai, sementara GPU menganggur
+dan job berikutnya menunggu di belakangnya.
+
+Sekarang `CaptureResultEvidence` adalah job tersendiri. Interpolasinya selesai
+dan peneliti diberi tahu; gambarnya menyusul sesaat kemudian.
+
+#### Worker yang tidur berhenti menghanguskan pekerjaan
+
+`tries` naik dari 1 ke 3, tetapi hanya satu jenis kegagalan yang memakainya.
+
+Model yang **menjawab** dan menolak akan menolak dengan cara yang sama dua
+menit lagi; itu digagalkan di tempat, karena mengulangnya berarti mengerjakan
+ulang frame yang sudah jadi untuk sampai ke jawaban yang sama. Worker yang
+**tidak menjawab sama sekali** adalah hal yang benar-benar berbeda, dan itulah
+yang terjadi ketika GPU tinggal di workstation alih-alih di pusat data.
+Workstation tidur. Ia reboot untuk pembaruan. Seseorang mencabutnya untuk main
+game. Menggagalkan job seorang peneliti karena sebuah mesin tertidur sembilan
+puluh detik bukan laporan kesalahan — itu pekerjaan yang hilang.
+
+Dibedakan lewat tipe exception, bukan lewat kata-kata dalam pesan:
+`ConnectionException` adalah Guzzle mengatakan permintaannya tidak pernah
+selesai, sementara setiap penolakan yang dilempar job ini sendiri adalah
+`Exception` biasa yang membawa kata-kata worker.
+
+Dan pesannya kini sama baiknya entah bisa diantrekan ulang atau tidak.
+`cURL error 7: Failed to connect` adalah kalimat yang benar dan tidak berguna:
+ia tidak memberi tahu peneliti apa pun yang bisa ditindaklanjuti, dan terbaca
+seolah unggahan merekalah yang salah.
+
+#### Ruang disk jadi sesuatu yang bisa dilihat
+
+`GET /admin/storage` dan sebuah panel di dashboard admin. Yang penting bukan
+totalnya: volume di 90% yang sebagian besar berisi keluaran prediksi baik-baik
+saja, karena sapuan retensi mengembalikannya dalam sehari. Volume di 90% berisi
+dataset training tidak, karena tidak ada yang mengambilnya kembali. Satu angka
+"terpakai" tidak bisa membedakan keduanya, jadi rinciannya dipisah.
+
+#### Terverifikasi
+
+`php artisan test` **325 lulus** (dari 310, 1.288 asersi), `flutter analyze`
+bersih, `flutter test` **228 lulus** (dari 220). Total **553**.
+
+---
+
+## [1.28.0] - 2026-08-25
+
+### Worker-nya akhirnya punya kunci
+
+Worker inferensi tidak pernah punya autentikasi apa pun. Di Kaggle, di balik
+terowongan bernama acak, itu keamanan lewat ketidaktahuan — dan ia bertahan,
+karena tidak ada yang menebak `reaffirm-bullwhip-subzero`. Di sebuah workstation
+pada alamat tetap di jaringan lab, ia tidak menahan apa-apa: siapa pun di
+jaringan itu bisa memakai GPU-nya, dan catatan keamanan proyek ini sendiri sudah
+menuliskan bahwa mengetahui endpoint berarti melewati platform sepenuhnya.
+
+Ini dikerjakan **sebelum** GPU-nya pindah ke LAN, bukan sesudah. Menutup pintu
+setelah ia dibuka adalah pekerjaan yang berbeda.
+
+#### Lima duplikasi jadi satu
+
+Sebelum menambahkan apa pun, ada masalah yang lebih dulu: **lima tempat**
+membangun panggilan keluar ke worker, masing-masing mengulang dua baris yang
+sama dengan tangan — job interpolasi, health check (dua kali: tunggal dan
+pooled), trainer dispatcher, dan test prediction milik admin.
+
+Menambahkan kredensial ke lima titik panggil berarti lima tempat untuk lupa,
+dan yang terlupa persis yang bocor. `WorkerRequest` sekarang membangun
+semuanya. `withoutVerifying` kini hanya muncul di satu berkas.
+
+#### Rahasianya
+
+Dikirim sebagai `Authorization: Bearer` — konvensi yang sudah diketahui proxy
+dan pembersih log untuk disunting, sementara `X-Worker-Token` buatan sendiri
+akan melenggang ke dalam log dalam bentuk polos.
+
+Disimpan **terenkripsi**: sebuah dump basis data tidak boleh menyerahkan kunci
+ke GPU orang lain. Dan **tulis-saja** melalui API — administrator bisa
+memasangnya atau menghapusnya, tidak pernah membacanya kembali. Yang dijawab
+registry hanyalah `has_auth_token`.
+
+`$hidden` pada modelnya, bukan penyaringan di controller: model mencapai klien
+dari setengah lusin tempat — daftar registry, pemilih di layar unggah, metadata
+sebuah baris aktivitas — dan melewatkan satu saja berarti menerbitkan kredensial
+itu ke setiap peneliti yang login.
+
+Satu perilaku yang sengaja dijaga: pada pembaruan, **field yang tidak dikirim
+membiarkan rahasianya utuh**, dan string kosong yang menghapusnya. Form yang
+selalu mengirim setiap field akan menghapus kredensial setiap kali ada yang
+membetulkan salah ketik di deskripsi. Ada test untuk itu.
+
+#### TLS jadi pilihan, bukan keputusan yang sudah diambil
+
+`verify_tls` **default false** — persis yang dilakukan kode sebelum ini, karena
+`withoutVerifying()` di-hardcode di kelima tempat itu untuk sertifikat ngrok dan
+Colab. Membuatnya default true berarti menyalakan verifikasi TLS pada endpoint
+hidup yang belum pernah diuji dengan itu.
+
+Sebagai gantinya, form admin menawarkannya **tercentang saat membuat model
+baru**. Endpoint baru mendapat jawaban yang aman; yang lama tidak berubah
+perilakunya diam-diam. Keputusannya dibuat di tempat seseorang bisa melihatnya.
+
+#### Terverifikasi
+
+`php artisan test` **310 lulus** (dari 298, 1.241 asersi), `flutter analyze`
+bersih, `flutter test` **220 lulus** (dari 215). Total **530**.
+
+Dua belas test backend menutup rahasianya sampai ke worker, tidak pernah sampai
+ke klien, terenkripsi saat disimpan, dan tidak terhapus tanpa sengaja.
+
+---
+
+## [1.27.1] - 2026-08-24
+
+### Satu gangguan jaringan tidak lagi mengosongkan gambar selamanya
+
+`AuthedImageCache` menyimpan **setiap** kegagalan sebagai `null` dan
+menyimpannya untuk seumur hidup aplikasi. Satu koneksi yang putus sedetik
+berarti gambar itu kosong sampai aplikasi ditutup, tanpa satu pun percobaan
+ulang. Itu bug yang ikut terkirim sejak kelas ini ditulis, dan ia ditemukan
+saat menelusuri halaman depan yang gambarnya hilang.
+
+Cache-nya sendiri tidak opsional — tanpa itu daftar dua puluh baris memicu dua
+puluh permintaan HTTP setiap kali widget-nya dibangun ulang. Yang keliru adalah
+apa yang dianggap layak diingat.
+
+Sebuah **"tidak ada"** layak diingat: 404 dan 410 adalah server yang berbicara,
+dan akun tanpa foto besok pun tetap tanpa foto. Sebuah **kegagalan** tidak:
+koneksi yang putus, timeout, 500, atau terowongan yang tertutup tidak
+mengatakan apa pun tentang ada atau tidaknya gambar itu. Yang kedua kini tidak
+dimasukkan ke cache sama sekali, sehingga pembangunan ulang berikutnya bertanya
+lagi.
+
+Kelas ini sebelumnya **tidak punya satu pun test**, padahal justru jalur inilah
+yang terlihat rusak. Sekarang ada tujuh, dan yang terpenting menuntut sebuah
+kegagalan **tidak meninggalkan apa pun** untuk dipercaya belakangan.
+
+`flutter test` **215 lulus** (dari 208), `flutter analyze` bersih.
+
+---
+
+## [1.27.0] - 2026-08-24
+
+### Sebuah hasil yang bisa dipertanggungjawabkan, bukan sekadar sekantong berkas
+
+Sampai kemarin sebuah job selesai dengan mengembalikan folder TIFF, jumlah
+berkas, dan lama proses. Peneliti yang menerimanya tidak punya dasar apa pun
+untuk membela hasilnya: tidak ada angka kualitas, tidak ada cara membandingkan
+model, dan setelah 24 jam tidak ada apa pun yang tersisa untuk dilihat lagi.
+Empat perubahan berikut menutup keempat lubang itu.
+
+#### Validasi hold-out: angka kualitas dari data peneliti sendiri
+
+Frame yang ingin diisi seorang peneliti, menurut definisinya, adalah frame yang
+tidak dimiliki siapa pun — jadi tidak ada ground truth untuknya dan tidak akan
+pernah ada. Yang bisa dilakukan platform adalah menyembunyikan frame yang
+**memang ada**: di mana pun arsip memuat tiga frame berurutan, yang tengah
+disisihkan, digambar ulang dari kedua tetangganya, lalu diukur terhadap frame
+yang sebenarnya ada di sana.
+
+Hasilnya tersimpan di kolom `validation`: MAE dalam hitungan 16-bit mentah,
+RMSE, PSNR dalam desibel, dan rentang frame acuannya sendiri. Yang terakhir itu
+bukan hiasan — MAE 40 tidak berarti apa-apa tanpa tahu frame-nya membentang 300
+hitungan atau 60.000.
+
+Ongkosnya satu putaran tambahan ke worker. Ia dijalankan **setelah** hasilnya
+selesai, dan setiap kegagalannya ditelan menjadi catatan alih-alih dilempar:
+sebuah pengukuran yang gagal tidak boleh merenggut interpolasi yang sudah
+ditunggu berjam-jam.
+
+`null` ketika arsipnya tidak memuat tiga frame berurutan. Itu kasus biasa, bukan
+kegagalan — unggahan berisi frame 1 dan 5 memang tidak menyisakan apa pun untuk
+disembunyikan.
+
+Aritmetikanya diuji terhadap angka yang dihitung tangan, bukan terhadap apa pun
+yang kebetulan dikeluarkan kodenya: konstanta yang keliru atau kuadrat di tempat
+yang salah tidak akan membuat apa pun crash, ia hanya diam-diam menaruh angka
+salah ke dalam sebuah skripsi.
+
+#### Manifes di dalam arsip
+
+`manifest.csv` kini menemani `metadata.json`, satu baris per frame: hasil pindai
+atau hasil bangkitan, dan untuk yang bangkitan, kedua frame asalnya beserta
+generasinya. CSV karena orang yang membukanya sama mungkinnya meraih spreadsheet
+seperti meraih pengurai.
+
+#### Dua model pada frame yang sama
+
+`POST /predictions/{id}/rerun` menjalankan frame yang sama lewat model lain.
+Registry sejak dulu bisa menampung beberapa endpoint inferensi lengkap dengan
+health check — tetapi tidak pernah ada cara menaruh dua di antaranya pada satu
+set frame dan melihat mana yang lebih baik. Registry-nya pipa; ini yang
+menjadikannya alat ukur.
+
+Frame masukannya **disalin, bukan dibagi**. Menunjuk dua record ke satu folder
+berarti menghapus salah satu job — atau membiarkannya kedaluwarsa — ikut
+membawa masukan milik yang lain, dan perbandingan yang separuhnya bisa lenyap
+sendiri-sendiri bukanlah perbandingan.
+
+Endpoint detailnya kini mengembalikan `comparison`: seluruh run pada frame yang
+sama, dengan MAE dan PSNR masing-masing. Kosong ketika hanya ada satu, karena
+tabel berisi satu baris terbaca seolah ada yang gagal dimuat.
+
+#### Bukti yang hidup lebih lama dari berkasnya
+
+Hasil dihapus 24 jam setelah dibuat — 1,5 GB TIFF per job bukan sesuatu yang
+bisa disimpan mesin lab — dan sampai kemarin itu menyisakan catatan yang
+mengatakan sebuah job selesai tanpa bukti apa pun tentang apa yang dihasilkannya.
+
+Enam thumbnail 256px kini disimpan permanen di `prediction-evidence/{id}`, di
+luar folder job karena `predictions:cleanup` menghapus folder itu utuh — hidup
+di luarnya justru intinya. Diambil menyebar sepanjang run, bukan enam yang
+pertama: enam frame awal sebuah sekuens panjang semuanya duduk di sebelah
+batas pindai yang sama dan tidak mengatakan banyak tentang sisanya.
+
+Beberapa ratus kilobita membeli jawaban permanen atas "run itu tampak seperti
+apa", yang tidak bisa diberikan angka: MAE 40 tidak mengatakan apakah modelnya
+menggambar irisan yang masuk akal atau sebuah noda.
+
+Selamat dari kedaluwarsa bukan berarti selamat dari penghapusan — menghapus
+sebuah job ikut membawa thumbnail-nya, dan ada test untuk keduanya.
+
+#### Terverifikasi
+
+`php artisan test` **298 lulus** (dari 282, 1.207 asersi), `flutter analyze`
+bersih, `flutter test` **208 lulus** (dari 202). Total **506**.
+
+---
+
+## [1.26.0] - 2026-08-24
+
+### Setiap frame buatan kini menyebutkan asal-usulnya
+
+Sampai hari ini sebuah job selesai dengan mengembalikan daftar:
+`["frame_002.tif", "frame_003.tif", "frame_004.tif"]`. Daftar itu menyebut
+frame mana saja yang dihasilkan, dan tidak lebih.
+
+Yang tidak bisa dikatakannya justru yang paling penting. Untuk celah antara
+frame 001 dan 005, titik tengahnya — 003 — digambar lebih dulu dari **dua frame
+hasil pindai**. Baru sesudah itu 002 dan 004 digambar, dan keduanya memakai 003
+sebagai salah satu batasnya: model sedang diberi makan keluarannya sendiri.
+Ketiganya keluar sebagai berkas TIFF yang tampak setara di dalam satu folder,
+padahal satu di antaranya berdiri di atas data sungguhan dan dua lainnya
+berdiri di atas tebakan model.
+
+Rekursi memang inti metode ini — ia ada untuk menyiasati model yang mengabaikan
+`time_scalar` selain 0,5 — tetapi rekursi jugalah yang membuat sebagian
+keluaran menjadi turunan keluaran. Sebuah platform riset yang tidak mencatat
+bedanya meminta orang mempercayai hasilnya alih-alih memeriksanya.
+
+#### Yang dicatat
+
+Kolom `frame_provenance` pada `analysis_records`, satu entri per frame buatan:
+
+```json
+{ "frame": "frame_002.tif", "index": 2, "from": [1, 3],
+  "generation": 2, "synthetic_parents": 1 }
+```
+
+`generation` bernilai 1 ketika kedua batasnya hasil pindai, 2 ketika salah
+satunya sendiri frame buatan, dan naik terus. Itu hitungan berapa kali galat
+berpeluang menumpuk, dan `interpolateBetween()` sudah mengetahuinya sepanjang
+waktu — ia hanya tidak pernah diminta menyimpannya.
+
+#### Kolom baru, bukan bentuk baru
+
+`interpolated_frames` **tidak disentuh**. Menambahkan bidang ke sana, atau
+mengubah tipenya, adalah persis yang mematikan setiap klien terpasang di
+1.25.1: APK lama membaca `json['username']` ke `String` non-nullable dan
+penguraiannya melempar pada respons 200 yang sehat. Pelajaran itu cukup mahal
+untuk dipegang, jadi yang lama tetap apa adanya dan yang baru berdiri sendiri.
+
+Nilainya `null` pada setiap job yang selesai sebelum ini ada. Klien
+memperlakukannya sebagai opsional — dua test menuntut galeri tetap tergambar
+untuk job lama, dan satu lagi menuntut entri yang cacat hanya merugikan
+barisnya sendiri, bukan seluruh halaman.
+
+#### Terlihat di tempat orang melihat frame
+
+Di galeri, frame buatan dulu semuanya memakai lencana `AI` yang sama. Sekarang
+frame generasi pertama tetap `AI`, sementara generasi kedua ke atas berbunyi
+`AI G2` dalam warna peringatan, dengan tooltip yang menyebut kedua frame
+asalnya. Perbedaan itulah intinya: keluaran model dan keluaran model yang
+disuapkan kembali ke model bukan bukti yang sama.
+
+#### Ikut di dalam arsip
+
+`metadata.json` di dalam unduhan lengkap kini membawa array yang sama. Enam
+bulan lagi arsip itu mungkin satu-satunya yang tersisa, dan satu folder berisi
+TIFF tidak bisa menyebut mana yang keluar dari pemindai dan mana yang digambar
+model — apalagi mana yang digambar di antara dua frame yang juga digambar.
+
+#### Terverifikasi
+
+`php artisan test` **282 lulus** (dari 279), `flutter analyze` bersih, dan
+`flutter test` **202 lulus** (dari 197). Test barunya memeriksa angka, bukan
+niat: untuk celah 001–005 ia menuntut 003 tercatat `from: [1,5]` generasi 1,
+sementara 002 dan 004 tercatat generasi 2 dengan satu induk buatan.
+
+---
+
+## [1.25.6] - 2026-08-24
+
+### Poster klip yang bukan foto post, dan satu kolom admin yang berhenti berarti
+
+#### Video memuat frame pertamanya sendiri
+
+Poster sebuah klip selama ini adalah **foto post itu sendiri**, diserahkan oleh
+pemanggilnya. Di tampilan artikel hasilnya terlihat jelas: blok foto, lalu tepat
+di bawahnya foto yang sama lagi dengan tombol putar merah di atasnya. Dua blok
+yang seharusnya berbeda membawa satu gambar yang sama, dan tak satu pun dari
+keduanya mengatakan apa pun tentang isi klipnya.
+
+`NewsVideoPlayer` kini membuka klipnya sendiri saat dibangun dan berhenti di
+frame pertama. Frame itulah posternya — satu-satunya poster yang memang tentang
+videonya. Parameter `poster` dibuang seluruhnya, bukan sekadar tidak diisi:
+tidak ada lagi yang boleh menyodorkan gambar lain ke sana.
+
+Di platform native ini murah. `initialize()` membaca header kontainer dan satu
+frame — beberapa ratus kilobita, bukan berkasnya. **Web sengaja dikecualikan**:
+di sana tidak ada streaming sama sekali, `_downloadForWeb` menarik seluruh klip
+ke memori, dan melakukan itu untuk sesuatu yang belum diminta siapa pun adalah
+tagihan, bukan poster. Peramban tetap mendapat panel gelap dan tombol putar.
+
+Frame yang diam perlu terlihat bisa ditekan, atau ia tak terbedakan dari sebuah
+foto. Tombol putar besar karena itu tetap ada di atasnya sampai pemutaran mulai,
+digambar oleh `ValueListenableBuilder` yang mendengarkan controller-nya langsung
+— tidak ada hal lain di sana yang membangun ulang saat pemutaran dimulai.
+
+#### "Slide order" hilang dari panel admin
+
+Tidak ada slideshow lagi sejak 1.25.5: halaman depan menampilkan post terbaru
+dan mendaftar sisanya. Sebuah angka yang menentukan slide mana lebih dulu
+karena itu tidak lagi menentukan apa pun yang bisa dilihat seorang editor.
+Urutannya kini tanggal terbit, yang memang arti sebuah kanal berita.
+
+Kolomnya **tetap ada** di basis data dan API masih mengirimkannya, jadi nilai
+yang sudah ada terus mengurutkan seperti sebelumnya. Yang berubah: tidak ada
+lagi yang menuliskannya. `save()` menghilangkan field itu alih-alih mengirim 0,
+karena mengirim 0 berarti menomori ulang sebuah post diam-diam setiap kali ada
+yang menyunting judulnya.
+
+#### Terverifikasi
+
+`flutter analyze` bersih; Flutter 197 test. Satu test diperbarui: jaminan
+"klipnya tidak diberi foto post" tidak bisa lagi diperiksa lewat properti
+`poster` yang sudah tidak ada, jadi ia kini menuntut tidak ada `AuthedImage`
+sama sekali di dalam subtree pemutarnya.
+
+---
+
+## [1.25.5] - 2026-08-24
+
+### Bagian news di halaman depan, dirancang ulang
+
+Keluhannya empat, dan yang pertama menjelaskan sisanya.
+
+#### Video dan foto berhenti berebut satu tempat
+
+Seluruh masalahnya ada pada satu baris. Ketika sebuah post punya klip,
+`_buildMedia` mengembalikan `NewsVideoPlayer` **sebagai pengganti**
+`AuthedImage`, dengan fotonya diserahkan sebagai poster di belakang tombol
+putar. Satu slot dipakai berdua, dan yang kalah selalu fotonya: pada post yang
+punya keduanya, gambarnya tidak pernah benar-benar terlihat.
+
+`NewsArticleView` tidak pernah punya masalah ini karena ia menyusun keduanya
+sebagai blok terpisah, atas-bawah. Itu sebabnya "read more" terasa benar
+sementara slide-nya tidak.
+
+`_MediaColumn` kini melakukan hal yang sama di halaman depan: foto dapat
+bloknya, klip dapat bloknya, bertumpuk, dipisah garis rambut dua piksel yang
+meneruskan warna kartunya. Pemutarnya **tidak lagi diberi poster** —
+menyerahkan foto ke sana persis yang membuat klip terlihat seperti menelan
+gambarnya.
+
+Dua test mengunci ini, dan keduanya memeriksa geometri alih-alih niat: persegi
+panjang foto dan persegi panjang klip tidak boleh beririsan, dan klipnya harus
+duduk di bawah foto. Satu lagi memastikan `poster` tetap null.
+
+#### Satu tata letak, bukan dua — dan itu yang membuat penumpukan berhasil
+
+Percobaan pertama menumpuknya di dalam kolom media yang berdampingan dengan
+teks, dan itu **gagal karena alasan baru**. Kolom itu hanya 5/11 lebar kartu,
+sekitar 250 piksel, lalu tingginya harus dibagi dua lagi. Foto dapat 250×210,
+klip dapat 250×210: terlalu kecil untuk membaca diagram, terlalu kecil untuk
+memakai scrubber. Tumpang-tindihnya hilang dengan mengorbankan keduanya.
+
+Tata letak kiri-kanan karena itu dibuang seluruhnya. Media kini pita
+**selebar kartu**, satu susunan yang sama di setiap lebar layar — persis
+sebabnya `NewsArticleView` selalu terbaca benar. Kodenya ikut menyusut:
+tidak ada lagi cabang `isNarrow` untuk struktur, tidak ada `LayoutBuilder`
+penghitung tinggi, tidak ada pasangan `bounded`/`sizesItself` yang hanya ada
+karena `Flexible` menuntut batas pada sumbu utamanya.
+
+Tinggi pitanya 16:9 dengan batas atas: 340 piksel untuk satu pita, 240 ketika
+ada dua. Tanpa batas itu, 16:9 selebar kartu 1100 piksel berarti 619 piksel
+foto yang mendorong judulnya keluar layar; dan sebuah post dengan foto sekaligus
+klip akan jadi 880 piksel kartu sebelum judulnya sendiri. Di ponsel batas itu
+tidak pernah mengikat, jadi pitanya memang 16:9.
+
+#### `cover`, bukan `contain`
+
+Teaser-nya sempat `contain` untuk menyelamatkan diagram potret 971×1620 —
+tetapi itu **satu berkas uji**, dan harganya dibayar setiap foto lanskap biasa
+yang lalu mengambang di antara dua pita hitam tebal. Memotong adalah tugas
+sebuah cuplikan; menampilkan utuh adalah tugas artikelnya, dan justru itu yang
+dijanjikan tombol READ MORE. `NewsArticleView` tetap `contain`, tidak berubah.
+
+#### Carousel dibuang
+
+Ia menampilkan satu berita pada satu waktu dan membuat pembaca menunggu tujuh
+detik untuk berikutnya, di halaman yang muat memuat empat sekaligus. Untuk itu
+ia harus memelihara `Timer.periodic`, sebuah `PageView` yang membuang slide di
+belakang punggung pembaca, dan penghitung `_holds` supaya tidak berputar dari
+bawah dialog yang terbuka — mesin yang persis membuat tombol CLOSE tampak mati
+di 1.25.3.
+
+Gantinya bentuk editorial: satu berita unggulan, lalu sisanya sebagai baris
+berthumbnail. Semuanya terlihat sekaligus, dan tidak ada yang berputar — jadi
+tidak ada lagi yang perlu ditahan. Seluruh kelas bug itu hilang bersama
+mesinnya, bukan diperbaiki satu per satu.
+
+Dibatasi enam di halaman depan: ini pintu masuk, bukan arsip.
+
+#### Proporsi
+
+Kartu setinggi 460 piksel mati itu ditala untuk satu ponsel dan keliru di layar
+lain. Tingginya kini tidak dipatok sama sekali: pita medianya berukuran seperti
+di atas, dan teksnya yang menentukan sisanya.
+
+Thumbnail pada baris tetap `cover` dan tidak pernah dipertimbangkan lain: pada
+lebar 96 piksel, potret yang di-*contain* hanya jadi seiris tinta di hamparan
+hitam.
+
+#### Karakter
+
+Tetap kotak dan institusional sesuai DESIGN.md — tanpa bayangan, gradien, atau
+sudut membulat, karena sistem ini memang tidak punya ketiganya. Yang
+ditambahkan: garis merah 4 piksel di tepi kiri kartu unggulan sebagai
+satu-satunya penanda, pemisah hairline antar baris, dan chip `▶ VIDEO · 18.2 MB`
+yang punya barisnya sendiri di bawah judul — klipnya diumumkan, bukan
+ditumpangkan ke thumbnail.
+
+Header sempat membawa penghitung berita, ditaruh di sana untuk mengisi ruang
+yang ditinggalkan titik indikator. Itu dibuang lagi: tidak ada yang perlu tahu
+ada berapa berita, dan angka yang tidak dibaca siapa pun bukan hiasan.
+
+Baris tidak memuat pemutar. Lima pemutar di halaman depan adalah lima elemen
+video yang tidak diminta siapa pun; barisnya menyebut ada klip, artikelnya yang
+memutarnya.
+
+#### Berkas
+
+`lib/widgets/news_carousel.dart` dihapus, digantikan
+`lib/widgets/news_section.dart`. Nama lamanya jadi kebohongan begitu
+carousel-nya tidak ada. Tiga komentar di berkas lain yang menyebut
+`NewsCarousel` ikut diperbarui.
+
+#### Terverifikasi
+
+`flutter analyze` bersih; Flutter **197 test** (dari 191). Test rotasi otomatis
+dan "CLOSE tetap bekerja setelah 25 detik" dihapus karena perilaku yang
+diujinya sudah tidak ada; delapan test baru menggantikannya, termasuk ketiga
+test geometri di atas dan satu yang menuntut `BoxFit.cover` di teaser.
+
+Satu catatan tentang harness-nya: `_host` di `news_test.dart` sekarang
+membungkus widget-nya dengan `SingleChildScrollView`. Sebelumnya ia menaruhnya
+langsung di `Scaffold`, dan begitu kartunya melewati 600 piksel sembilan test
+gagal karena overflow — kegagalan yang berasal dari harness, bukan dari widget:
+tidak ada apa pun di halaman sungguhan yang diminta muat dalam 800×600.
+
+---
+
+## [1.25.4] - 2026-08-24
+
+### Membuka sebuah berita kini menampilkan beritanya, dan videonya jalan di web
+
+Dua keluhan lanjutan dari bagian news yang sama, dan keduanya soal hal yang
+dipotong: satu memotong isi, satu lagi memotong web dari yang didapat mobile.
+
+#### Slide adalah cuplikan; yang terbuka bukan
+
+`READ MORE` dulu membuka dialog berisi **teks body dan tidak ada yang lain** —
+tanpa tanggal, tanpa ringkasan, tanpa foto, tanpa klip. Padahal slide-nya
+memang memotong dengan sengaja: judul dua baris, ringkasan dua baris di ponsel,
+dan foto yang di-`cover` ke dalam kotak 200px.
+
+Untuk foto lanskap pemotongan itu tidak terasa. Untuk diagram potret 971×1620
+ia menghapus sekitar tiga perempat tingginya, dan tidak ada satu tempat pun di
+produk ini untuk melihat sisanya.
+
+`NewsArticleView` sekarang menampilkan seluruh isi post dalam satu gulungan,
+dengan urutan yang disengaja: tanggal dan judul, lalu ringkasan, lalu isi, lalu
+gambar, lalu video. Pembaca yang hanya ingin intinya sudah mendapatkannya
+sebelum media mulai dimuat. Gambarnya `BoxFit.contain` di atas panel gelap —
+utuh, dengan pita hitam bila perlu — dan ringkasannya tidak lagi ber-`maxLines`.
+
+Karena foto yang terpotong kini punya tempat untuk dilihat utuh, tombolnya juga
+muncul pada post yang **hanya** berisi foto, dengan label `VIEW POST`; "read
+more" akan menjadi bohong pada post tanpa artikel. Post yang isinya cuma video
+tetap tanpa tombol: klipnya sudah diputar di slide itu sendiri.
+
+#### Video di web: peramban tidak boleh memasang header, maka Dio yang memasang
+
+Yang tercatat di v1.25.3 masih berlaku — ngrok memutuskan menyajikan
+interstitial berdasarkan User-Agent, menjawabnya dengan **HTTP 200 dan
+`Content-Type: text/html`**, dan `video_player_web` hanya mengisi atribut `src`
+sebuah elemen `<video>`, tempat peramban melarang halaman menempelkan header.
+Jadi Android memutar, web tidak.
+
+Jalan memutarnya memanfaatkan satu perbedaan: Dio di web memakai XHR, dan XHR
+**boleh** membawa header kustom. Buktinya sudah berjalan sejak lama — `/api/news`
+sendiri hanya berhasil di web karena `BaseOptions` mengirim
+`ngrok-skip-browser-warning`. Maka di web klipnya kini diambil lewat
+`ApiClient.getBytes()`, dibungkus jadi object URL oleh `lib/utils/blob_url.dart`,
+dan `blob:` itulah yang diserahkan ke pemutar. Cincin kemajuannya determinate
+dengan persentase, karena menatap spinner tak tentu selama 18 MB tidak bisa
+dibedakan dari menatap sesuatu yang menggantung.
+
+Biayanya harus dikatakan terang-terangan: **tidak ada streaming di web**. Tidak
+ada yang diputar sampai bita terakhir tiba, dan berkasnya menetap di memori
+sampai widget-nya dibuang. Itu tawar-menawar yang wajar untuk klip berita
+pendek dan keliru untuk apa pun yang besar — karenanya ada
+`NewsVideoPlayer.webDownloadLimitBytes`, 30 MB, dan di atasnya web jatuh ke
+tombol `OPEN VIDEO` yang sudah ada (pengunjung bertemu interstitial ngrok di
+sana, lalu menekan "Visit Site"). Jangan jadikan ini pola untuk media besar
+lain di aplikasi ini.
+
+Ini juga sementara. Perbaikan sebenarnya adalah menyajikan media dari alamat
+tanpa interstitial — paket ngrok berbayar, atau `api.brin.fajrianhost.my.id`
+begitu DNS-nya ada. Hari itu tiba, seluruh cabang blob ini boleh dibuang dan
+`<video src>` biasa akan streaming dengan range request yang benar, yang justru
+lebih baik daripada blob.
+
+`dart:js_interop` dan `package:web` dipakai lewat conditional export, jebakan
+yang sama dengan `dart:html`: mengimpornya tanpa syarat merusak build Android
+di tahap kernel compilation walaupun jalurnya tidak pernah dieksekusi.
+
+#### Yang tidak dikerjakan
+
+Slide di halaman depan tidak berubah — ia memang cuplikan. Gambar di tampilan
+terbuka tidak bisa di-zoom; `InteractiveViewer` akan berebut gestur dengan
+gulungan dialognya. Dan sebuah post yang klipnya sedang diputar di slide akan
+punya dua pemutar begitu artikelnya dibuka; pemutar kedua diam sampai ditekan,
+tapi yang pertama tidak ikut berhenti sendiri.
+
+Diverifikasi: `flutter analyze` bersih, `flutter test` 191 lolos (enam di
+antaranya baru — untuk isi yang muncul, foto yang tidak terpotong, ringkasan
+yang tidak dipendekkan, dan ukuran klip yang dibutuhkan web sebelum mengunduh),
+`flutter build web --release` dan `flutter build apk --release` keduanya jadi.
+`AuthedImageCache.seed()` ditambahkan khusus untuk pengujian: tanpa itu setiap
+tes yang memuat foto membuka permintaan HTTP sungguhan yang timer-nya masih
+menggantung saat tes berakhir.
+
+---
+
+## [1.25.3] - 2026-08-24
+
+### Bagian news: klip yang tidak bisa diputar, tombol tutup yang tidak menutup
+
+Tiga keluhan dari satu bagian halaman, dan dua di antaranya punya penyebab yang
+sama sekali tidak terlihat dari gejalanya.
+
+#### "This video could not be played here."
+
+Pemutar video adalah **satu-satunya** hal di aplikasi ini yang mengambil data
+dari API tanpa melewati `ApiClient`: pengurainya berjalan di kode native, dari
+sebuah URL. Karena itu ia tidak pernah membawa `ngrok-skip-browser-warning`
+yang dipasang `BaseOptions` untuk semua permintaan lain.
+
+Diuji langsung ke terowongan: ngrok menjawab interstitial HTML-nya dengan
+**HTTP 200 dan `Content-Type: text/html`** — bahkan untuk permintaan yang
+membawa `Accept: video/*` dan `Sec-Fetch-Dest: video`, persis seperti yang
+dikirim sebuah elemen `<video>`. Jadi pemutarnya menerima HTML di tempat ia
+menunggu MP4, gagal inisialisasi, dan satu-satunya yang bisa ia laporkan adalah
+bahwa videonya tidak dapat diputar. Berkasnya tidak pernah bermasalah.
+
+`newsVideoHeaders()` sekarang mengirim header itu, berikut bearer token bila
+ada — sehingga pratinjau draf oleh administrator ikut jalan, tawar-menawar yang
+sama seperti `AuthedImage` untuk foto. **Ini tidak menjangkau build web**:
+`video_player_web` mengisi `src` sebuah elemen `<video>`, dan peramban tidak
+mengizinkan halaman menempelkan header di sana.
+
+#### Tombol CLOSE yang tidak menutup apa pun
+
+`onPressed` dialognya memanggil `Navigator.pop(context)` dengan context milik
+**slide**, bukan milik dialog. Sementara itu carousel terus berputar setiap 7
+detik di balik dialog yang terbuka, dan `PageView` membuang slide yang sudah
+digeser menjauh. Begitu elemen itu mati, `Navigator.of` di atasnya melempar
+alih-alih menutup — dan dari luar terlihat seperti tombol yang tidak berfungsi.
+Semakin lama artikelnya dibaca, semakin pasti rusaknya.
+
+Dua perbaikan, keduanya perlu. Tombolnya kini mengambil context dari sebuah
+`Builder` **di dalam** dialog, jadi ia tidak lagi bergantung pada umur slide.
+Dan carousel menahan diri selama ada yang menuntut perhatian — artikel terbuka,
+atau klip sedang diputar — dihitung, bukan sekadar bendera, karena dialog yang
+dibuka di atas video menahan dua kali dan harus dilepas dua kali.
+
+#### Video sekarang ada di halamannya
+
+Klip dulu duduk di balik tombol `READ MORE & WATCH` yang membuka dialog. Kini
+ia menempati sisi media slide itu sendiri: poster foto dengan tombol putar,
+lalu pemutar dengan scrubber, jam, dan tombol bisu di tempat yang sama.
+
+Tidak ada yang diunduh sampai tombol putar ditekan — halaman depan tetap
+berbiaya satu foto kecil untuk dilihat, bukan puluhan megabita klip yang belum
+tentu ditonton. Karena itu pula post yang hanya berisi video tidak lagi
+memerlukan tombol apa pun.
+
+#### Tampilan
+
+Panah navigasi pindah dari atas foto ke baris judul, bersama penghitung slide —
+dua target 40px yang melintang di sebuah gambar adalah tempat yang keliru
+ketika masih ada ruang kosong di sebelah judul. Judul bagian memakai garis
+merah 40×3 yang sama dengan heading lain di landing page. Kartunya kini putih
+berbingkai `borderDark` alih-alih nyaris menyatu dengan latar seksinya; panel
+medianya gelap, sehingga foto, video berpita hitam, dan bingkai kosong sama-sama
+terbaca sebagai bagian dari kartu yang sama. Titik indikator menjadi bilah
+tipis, dan tinggi kartu dinaikkan karena bagian teks yang tetap sempat tinggal
+dua piksel dari batasnya di 360×640.
+
+#### Tombol CANCEL sheet dukungan, penyakit yang sama
+
+Ditangkap dari perangkat sungguhan, lengkap dengan stack trace-nya:
+
+```
+Null check operator used on a null value
+#1  Element.findAncestorStateOfType
+#2  Navigator.of
+#3  Navigator.pop
+#4  _PublicMessageSheetState._buildForm.<anonymous closure>
+    (package:fe/screens/messages/public_message_sheet.dart:190)
+```
+
+Persis penyakit tombol CLOSE di atas, di berkas yang berbeda:
+`Navigator.pop(context)` mencari ancestor-nya **pada saat tombol ditekan**, dan
+sheet yang sudah dalam perjalanan menutup punya elemen yang sudah mati saat itu.
+Kedua tombolnya kini mengambil `NavigatorState` sewaktu build, ketika elemennya
+pasti masih hidup. Menyimpan state itu aman: Navigator hidup lebih lama daripada
+sheet mana pun yang ia tampilkan.
+
+#### Gambar berita: apa yang sebenarnya ditemukan
+
+Dilaporkan bahwa slide hanya menampilkan bingkai kosong. Seluruh rantainya
+ditelusuri, dan **tidak ada satu pun lapisan yang cacat**:
+
+- keempat berkas ada di disk, dan `is_published = 1` untuk keempat post, jadi
+  cabang admin di `NewsController::image` tidak pernah dijalani;
+- `/api/news/{1,2,3,4}/image` menjawab **200 `image/png`** dengan byte PNG yang
+  sah — lokal maupun lewat terowongan, dengan dan tanpa header ngrok;
+- sebuah probe Dart yang menirukan `ApiClient` persis, di atas `dart:io` yang
+  sama dengan Android, mengambil keempatnya tanpa kesalahan;
+- video 19 MB terunduh penuh dalam 11,8 detik tanpa mengganggu Octane —
+  dugaan bahwa unduhan besar menjatuhkan worker terbantah.
+
+Akhirnya dijalankan di **perangkat sungguhan** dengan instrumentasi sementara.
+Hasilnya: `PROBE ok /news/4/image bytes=10010`, `/news/3/image bytes=877522`,
+`/news/1/image bytes=594` — terambil **dan** terdekode, tanpa satu pun kegagalan.
+
+Jadi gejalanya **tidak dapat direproduksi** pada kode ini. Yang berubah sejak
+APK yang diuji: perbaikan `SecureStore` di 1.25.2 dan penulisan ulang carousel
+di atas. Mana dari keduanya yang menyelesaikannya tidak dibuktikan, dan tidak
+diklaim di sini.
+
+Satu pelajaran yang tetap berlaku: probe pertama tidak menghasilkan apa-apa
+karena aplikasinya berada di latar belakang, dan Flutter berhenti membangun
+frame di sana — `AuthedImage` tidak pernah dibangun, sehingga permintaannya
+tidak pernah terjadi. Diam bukan bukti kegagalan.
+
+#### Terverifikasi
+
+`flutter analyze` bersih; Flutter 185 test (dari 181). Empat test baru menutup
+klip yang tampil di slide, tidak adanya unduhan sebelum tombol putar ditekan,
+dan CLOSE yang tetap bekerja 25 detik setelah dialog dibuka — tiga kali masa
+tayang slide, dengan empat post, karena `PageView` menahan satu halaman
+bersebelahan dan dua post tidak cukup untuk membuang yang pertama.
+
+Pengambilan gambar diverifikasi di perangkat sungguhan (Galaxy A32, Android),
+bukan lewat test.
+
+---
+
+## [1.25.2] - 2026-08-24
+
+### Satu penyimpanan token yang rusak, dua gejala yang tampak seperti backend mati
+
+Aplikasi di ponsel tetap menjawab **"An unexpected error occurred"** saat masuk,
+dan carousel berita di halaman depan tetap kosong — sesudah perbaikan 1.25.1.
+Karena dua bagian yang tidak berhubungan gagal bersamaan, dugaannya adalah
+backend belum tersambung ke frontend.
+
+Rantai backend diperiksa lapis demi lapis dan **seluruhnya sehat**: MySQL
+menyala dengan empat berita berstatus terbit, Octane menyala di port 8000,
+ngrok menembus ke Octane, `GET /api/news` menjawab 200 `application/json`
+berisi keempat berita itu, dan `GET /api/user` dengan bearer token menjawab 200
+dengan payload yang **persis** cocok dengan `UserModel.fromJson` — tidak ada
+lagi `username` di sana, jadi bukan pula kasus 1.25.1 yang berulang.
+
+Penyebabnya satu, dan letaknya di klien.
+
+#### Interceptor yang menjatuhkan permintaan yang tidak butuh token
+
+Setiap permintaan di aplikasi ini melewati interceptor `onRequest` Dio yang
+membaca bearer token dari `flutter_secure_storage`. Di Android pembacaan itu
+bukan pencarian di map: plugin-nya mendekripsi nilai dengan kunci yang tinggal
+di Android Keystore, dan kunci itu tidak selalu selamat. Memasang APK yang
+dibangun berbeda di atas yang lama, atau membiarkan Android Auto Backup
+memulihkan preferensi terenkripsinya ke perangkat yang keystore-nya tidak
+pernah memegang kunci tersebut, meninggalkan byte yang tidak akan pernah bisa
+didekripsi. Pembacaannya melempar, dan melempar setiap kali.
+
+Lemparan di dalam interceptor menggagalkan **seluruh permintaan**, jadi
+gejalanya tidak pernah berupa "Anda keluar dari sesi":
+
+- `GET /api/news` bersifat publik dan tidak meminta token sama sekali, tetapi
+  interceptor berjalan lebih dulu dan tidak pernah sampai ke sana.
+  `NewsCarousel` sengaja diam ketika permintaannya gagal, jadi halaman depan
+  terbaca seperti sebelum ada berita apa pun.
+- `POST /api/login` gagal dengan `DioException` yang membungkus
+  `PlatformException`. Exception seperti itu tidak membawa response, sehingga
+  jatuh ke cabang terakhir `_handleError` — yang berbunyi persis
+  "An unexpected error occurred".
+
+Web tidak terpengaruh karena di sana plugin yang sama memakai penyimpanan
+peramban, bukan Android Keystore. Itulah sebabnya web normal sementara ponsel
+tidak, dan itu pula yang membuat backend terlihat sebagai tersangka.
+
+#### Yang berubah
+
+`lib/services/secure_store.dart` kini berdiri di depan plugin tersebut, dengan
+tawar-menawar yang sengaja dibuat tidak simetris:
+
+- **Baca** yang gagal menjawab `null` dan membuang data yang tak terbaca itu.
+  Ongkosnya satu kali masuk ulang, dan perangkatnya pulih permanen —
+  menyimpannya berarti setiap pembacaan berikutnya gagal selamanya.
+- **Tulis** atau **hapus** yang gagal hanya merugikan token yang di-cache sesi
+  ini. Tokennya sudah terbit; kehilangan cache tidak sebanding dengan
+  menggagalkan login yang baru saja berhasil.
+
+`ApiClient`, `AuthService` dan `UploadResumeStore` semuanya lewat sana sekarang;
+tidak ada lagi yang menyentuh `FlutterSecureStorage` langsung.
+
+`android:allowBackup="false"` mencegah kerusakan itu terjadi sejak awal —
+`SecureStore` menahan lemparannya, manifest menghentikan sumbernya.
+
+Dan pesan-pesan terakhir `_handleError` berhenti menyesatkan: sebuah kegagalan
+tanpa response kini menyebut alamat yang dituju berikut error aslinya, dan body
+non-JSON dari ngrok dikenali sebagai interstitial terowongan alih-alih dilaporkan
+sebagai "An error occurred".
+
+#### Terverifikasi
+
+`flutter analyze` bersih; Flutter 181 test (dari 176), termasuk lima test
+`SecureStore` yang ditulis lebih dulu dan gagal sampai implementasinya ada.
+Rantai backend diverifikasi lewat terowongan sungguhan, bukan lewat test.
+
+---
+
 ## [1.25.1] - 2026-08-23
 
 ### Dua bug yang ditemukan saat menguji di perangkat
@@ -3923,7 +5912,7 @@ php artisan storage:link
 - [GitHub Repository](#)
 - [Issue Tracker](#)
 - [Documentation](./README.md)
-- [API Documentation](./API_DOCS.md)
+- [API Documentation](./API.md)
 
 ---
 

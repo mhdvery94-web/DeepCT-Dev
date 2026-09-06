@@ -31,6 +31,19 @@
 rr.exe
 rr
 
+# Arsip proyeksi BRIN dan keluaran percobaan (~93 MB). Dua alasan, dan yang
+# kedua lebih penting daripada ukurannya: ini data penelitian yang belum
+# diterbitkan, dan seluruh rancangan sistem ini bertumpu pada janji bahwa ia
+# tidak berpindah ke luar kendali institusi. Sebuah repositori yang suatu hari
+# memperoleh remote akan mengingkari janji itu tanpa ada yang menyadarinya.
+#
+# Berkasnya tetap di tempatnya di samping repo, bukan di dalamnya.
+Examples ZIP/
+
+# ImageJ (~109 MB), aplikasi pihak ketiga yang dipasang di samping repo.
+# Melewati batas 100 MB GitHub dan dapat diunduh ulang kapan saja.
+ImageJ/
+
 # --- OS / editor -------------------------------------------------------------
 Thumbs.db
 ehthumbs.db
@@ -47,14 +60,23 @@ $RECYCLE.BIN/
 
 # Kaggle notebook exports that carry an ngrok auth token in plain text. It is a
 # credential for the tunnel account, not source code, and it must not travel
-# with the repository. `script-deepct.py` was renamed to `script-api-deepct.py`
-# and kept its token, so both names are listed.
+# with the repository.
 #
-# `script-api-train-deepct.py` is *not* here: it reads NGROK_AUTHTOKEN from the
-# environment and holds no credential, which is why it can be committed.
+# Neither `script-api-deepct.py` nor `script-api-train-deepct.py` is listed any
+# more: both now read the token from the environment or from a Kaggle secret
+# and hold no credential of their own. Ignoring the prediction script was the
+# reason it could drift away from the notebook without appearing in a single
+# diff — the hard-coded weights path it carried for weeks was invisible here,
+# while its tracked twin's showed up on every commit.
+#
+# `script-deepct.py` is the old name, which did keep its token. Nothing on this
+# machine answers to it now, and the line stays so a stale copy cannot arrive.
 script-deepct.py
-script-api-deepct.py
 scripts/*-secret.py
+
+# Byte-code beside the Kaggle scripts, now that those scripts are tracked.
+__pycache__/
+*.pyc
 
 # Personal connection helpers. `koneksi-vps.bat` carries a server address and
 # is a local convenience, not part of the project.

@@ -144,15 +144,48 @@ dengan sadar. Ia menuntut `TiffPreview.php` diporting ke Dart: 302 baris
 parsing IFD, penurunan 16-bit ke 8-bit, dan encoder PNG tulis tangan, dengan
 hasil dua dekoder yang bisa saling berbeda tanpa ada yang menyadarinya.
 
-`queuePosition` menghitung record ber-status `pending`, jadi unggahan yang
+Posisi antrean menghitung record ber-status `pending`, jadi unggahan yang
 belum dimulai memang tidak terlihat olehnya tanpa perubahan apa pun. Dan
 `expires_at` sudah disetel saat record dibuat, sehingga unggahan yang
 ditinggalkan tetap disapu `predictions:cleanup` seperti yang lain.
 
+**Definisinya satu, di `QueueBoard`.** Angka itu muncul di tiga tempat —
+riwayat periset, respons `POST /predictions/{id}/start`, dan papan antrean admin
+— dan sempat dihitung ulang di masing-masing. Dua salinan dari aturan yang sama
+akan menyimpang diam-diam, dan yang terlihat oleh periset pada job-nya sendiri
+akan berbeda dari yang dilihat admin pada baris yang sama. `QueueBoard::positions()`
+menyusun urutannya sekali, `positionOf()` mengambil satu baris darinya, dan
+`board()` melayani panel admin dari urutan yang sama persis.
+
 ### `models` — registry model AI
-`name`, `version`, `endpoint_url`, `status` (enum online/offline/trouble),
-`is_active`, `last_health_check`, `health_check_error`, `health_check_reason`,
-`current_jobs_count`, `total_predictions`, `accuracy`, `deployed_at`.
+`name`, `version`, `endpoint_url`, `auth_token`, `verify_tls`, `status` (enum
+online/offline/trouble), `is_active`, `last_health_check`,
+`health_check_error`, `health_check_reason`, `current_jobs_count`,
+`total_predictions`, `accuracy`, `deployed_at`.
+
+**`auth_token` adalah rahasia bersama yang diharapkan worker**, dikirim sebagai
+`Authorization: Bearer`. Terenkripsi saat disimpan, dan `$hidden` pada
+model-nya — bukan disaring di controller, karena model mencapai klien dari
+setengah lusin tempat dan melewatkan satu berarti menerbitkan kredensialnya ke
+setiap peneliti yang login. Yang dijawab API hanyalah `has_auth_token`.
+
+**Sisi worker memeriksanya lewat `WORKER_TOKEN`.** Rahasia bersama butuh dua
+pihak; sampai `1.29.2` hanya platform yang mengirim, dan tidak ada yang
+memvalidasi. Kedua skrip Kaggle — `script-api-deepct.py` dan
+`script-api-train-deepct.py` — kini membandingkannya dengan
+`hmac.compare_digest`, bukan `==`, karena perbandingan string biasa berhenti
+pada byte pertama yang berbeda dan selisih waktunya bisa dipakai memulihkan
+rahasia satu karakter demi satu karakter. `WORKER_TOKEN` kosong berarti
+terbuka, dan itu default-nya: menyalakannya diam-diam akan memutus sesi Kaggle
+yang sedang berjalan. `GET /` sengaja tetap terbuka — ia tidak memulai apa pun,
+dan melaporkan `protected` supaya satu lirikan menjawab apakah rahasianya sudah
+berlaku.
+
+**`verify_tls` default `false`**, persis perilaku sebelum kolom ini ada:
+`withoutVerifying()` di-hardcode di setiap pemanggil worker untuk sertifikat
+ngrok dan Colab. Default `true` akan menyalakan verifikasi pada endpoint hidup
+yang belum pernah diuji dengannya. Form admin menawarkannya tercentang untuk
+model **baru**, jadi keputusannya dibuat di tempat yang terlihat.
 
 `health_check_error` menyimpan kata-kata pemeriksa apa adanya —
 `"Tunnel is not running (ERR_NGROK_3200)"` — dan **hanya terlihat admin**,
@@ -166,11 +199,52 @@ melewati platform dan menembak worker GPU langsung, jadi `/api/me/models`
 sengaja mengembalikan bentuk yang lebih sempit.
 
 ### `analysis_records` — satu job interpolasi
-`job_id` (uuid), `user_id`, `model_id`, `file_name`, `input_folder`,
-`output_folder`, `interpolated_frames` (json), `input_files_count`,
+`job_id` (uuid), `user_id`, `model_id`, `rerun_of_id`, `file_name`,
+`input_folder`, `output_folder`, `interpolated_frames` (json),
+`frame_provenance` (json), `validation` (json), `input_files_count`,
 `output_files_count`, `processing_time_seconds`, `status`
 (pending/processing/completed/failed), `error_message`, `expires_at`,
 `files_deleted_at`.
+
+**`validation` adalah satu-satunya angka kualitas yang bisa dimiliki platform
+ini.** Frame yang ingin diisi seorang peneliti, menurut definisinya, tidak
+dimiliki siapa pun — tidak ada ground truth untuknya. Yang bisa dilakukan
+adalah menyembunyikan frame yang *memang ada*: di mana pun arsip memuat tiga
+frame berurutan, yang tengah disisihkan, digambar ulang dari kedua tetangganya,
+lalu diukur terhadap aslinya. Isinya `mae`, `rmse`, `psnr`, `pixels`,
+`reference_min`, `reference_max`, `held_out_frame`, `index`, dan `from`.
+
+`reference_min`/`reference_max` bukan hiasan: MAE 40 hitungan adalah galat
+besar pada frame yang membentang 300 hitungan dan galat yang dapat diabaikan
+pada frame yang membentang 60.000. `null` ketika arsipnya tidak memuat tiga
+frame berurutan — kasus biasa, bukan kegagalan.
+
+**`rerun_of_id`** menunjuk job yang di-run ulang dengan model lain. Frame
+masukannya **disalin**, tidak dibagi: dua record yang menunjuk satu folder
+berarti menghapus salah satunya ikut membawa masukan milik yang lain, dan
+perbandingan yang separuhnya bisa lenyap sendiri-sendiri bukanlah perbandingan.
+`nullOnDelete`, karena kehilangan job aslinya tidak boleh membawa serta
+perbandingannya.
+
+**`frame_provenance` mencatat dari mana tiap frame buatan berasal**, dan itu
+bukan hal yang sama dengan `interpolated_frames`. Yang satu menyebut frame mana
+saja yang dihasilkan; yang satunya menyebut frame 4 digambar di antara frame 1
+dan 7 yang **keduanya hasil pindai**, sementara frame 2 digambar di antara
+frame 1 dan frame 4 yang **baru saja dikarang model itu sendiri**. Keduanya
+tidak sama-sama layak dipercaya, dan sebelum ini tidak ada apa pun di catatan
+yang membedakannya.
+
+Tiap entri: `frame`, `index`, `from` (dua indeks batasnya), `generation`, dan
+`synthetic_parents`. `generation` bernilai 1 ketika kedua batasnya hasil
+pindai, 2 ketika salah satunya sendiri frame buatan, dan naik terus seiring
+galat menumpuk — angka itulah yang menjadikan metode rekursif bisa diperiksa
+orang lain, bukan sekadar dipercaya.
+
+Kolom baru, **bukan** perubahan bentuk `interpolated_frames`. Mengubah tipe
+sebuah field yang sudah ada di payload persis yang mematikan setiap klien
+terpasang di 1.25.1; pelajarannya cukup mahal untuk dipegang. Nilainya `null`
+pada job yang selesai sebelum ini ada, jadi setiap pembaca wajib
+memperlakukannya sebagai opsional.
 
 > `t0_image_path`, `t2_image_path`, `t1_result_path` dan `time_scalar` adalah
 > peninggalan desain lama yang berbasis sepasang gambar. Alur sekarang berbasis
@@ -285,6 +359,39 @@ sampai, dan mengirim ulang dari offset basi justru dijawab 409. Sesi hanya
 dihapus kalau server menolak secara tegas (mis. 422) — kalau kegagalannya
 berbau jaringan, sesi sengaja ditinggalkan supaya masih bisa dilanjutkan.
 
+**Byte-nya tidak pernah utuh di heap.** Sampai 3 September 2026 klien memilih
+berkas dengan `withData: true`, sehingga picker menyerahkan seluruh berkas ke
+heap Dart dan loop potongan hanya mengiris `Uint8List` yang sudah tergeletak di
+sana — yang dihemat chunking cuma *transport*-nya, dan itu bukan bagian yang
+menjadi masalah. Sebuah dataset boleh 512 MB; sebuah tab peramban atau telepon
+sudah hilang jauh sebelum angka itu.
+
+`ArchiveSource` adalah sambungan yang memperbaikinya. Sebuah sumber tahu
+panjangnya dan bisa menghasilkan rentang mana pun saat diminta — dan hanya itu
+yang sebenarnya pernah dibutuhkan loop unggah. Di target native rentangnya
+dibaca dari disk, jadi tidak ada yang menetap selain potongan yang sedang
+berjalan (`file_archive_io.dart`). Di web tidak ada handle berkas untuk dibuka,
+jadi byte-nya memang di memori, dan `BytesArchiveSource` menyatakan itu apa
+adanya alih-alih berpura-pura (`file_archive_web.dart`).
+
+### Kenapa piksel preview hidup di untai biner, bukan array PHP
+
+`TiffPreview` dulu meletakkan tiap piksel sebagai satu entri array PHP — dan
+dua kali, karena hasil `unpack()` disalin ke akumulator. Sebuah frame 2048×2048
+berbiaya **196 MB**, dan sepasang frame, yang memang ditahan `FrameMetrics`
+sekaligus, berbiaya **262 MB**.
+
+Worker antrean berjalan pada batas bawaan 512 MB, jadi prosesnya mati di tengah
+job dan membawa seluruh run bersamanya, sementara layar masih menulis `pending`
+tanpa satu pun keterangan. `--memory` tidak menolong: ia hanya memutuskan kapan
+worker mendaur diri, bukan menaikkan batas PHP.
+
+Piksel sekarang tinggal di untai biner dan dibongkar satu blok pada satu waktu.
+Frame yang sama berbiaya **11,7 MB**, sepasang **20 MB** — turun 94%. Plafon
+`MAX_PIXELS` naik kembali dari 2048² ke **4096²**; tabel pengukurannya dan
+alasan ia tidak kembali sampai 8192² ada di docblock konstanta itu. Yang
+membatasi sekarang adalah *waktu* dekode, bukan memori.
+
 ### Kenapa tiket dukungan diganti jadi pesan biasa
 
 Model tiket memaksa orang yang sedang bermasalah **mengklasifikasikan
@@ -390,6 +497,15 @@ per jam sebagai jaring pengaman.
 | Kepemilikan upload | Dipaksa lewat path storage — `upload_id` akun lain menghasilkan 404 |
 | Integritas unduhan | `X-Checksum-MD5`, diverifikasi ulang di klien |
 | Rahasia | `endpoint_url` model tidak pernah keluar ke non-admin |
+| Autentikasi worker | `auth_token` per model, dikirim `Authorization: Bearer`, terenkripsi saat disimpan, tulis-saja lewat API |
+| Ruang disk | Kedua jalur unggah menolak dengan **507** ketika tidak ada tempat; lihat `StorageGuard` |
+| Volume hasil | Berkas sentinel membuktikan NAS-nya ter-mount, karena share yang absen menerima tulisan tanpa mengeluh |
+| TLS ke worker | `verify_tls` per model; satu-satunya tempat `withoutVerifying()` tersisa adalah `WorkerRequest` |
+
+Semua panggilan keluar ke worker dibangun **satu tempat**, `WorkerRequest`.
+Sebelumnya ada lima, masing-masing mengulang dua baris dengan tangan; menambah
+kredensial ke lima titik panggil berarti lima tempat untuk lupa, dan yang
+terlupa persis yang bocor.
 
 Yang **belum** ada: HTTPS milik sendiri (masih menumpang ngrok), audit
 dependensi, dan pembatasan ukuran storage per user.
