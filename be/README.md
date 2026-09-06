@@ -18,7 +18,7 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (89 Total)
+### API Endpoints (104 Total)
 
 Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
@@ -199,12 +199,48 @@ must reach nothing but these six routes. Generate one with
 set, every worker route answers **503**: a half-configured deployment fails
 closed.
 
+**`TRAINING_CALLBACK_URL` must be an address the GPU host can reach**, and on a
+development machine it is not set, so it falls back to `APP_URL` — which is
+`http://localhost` almost everywhere. `TrainerDispatcher` refuses to dispatch in
+that state on purpose: without it the trainer would accept the job and then have
+every callback fail silently, leaving the run at `queued` for ever with nothing
+to say why.
+
+A Tailscale address does not work here. That is a private network, and Kaggle is
+not on it. Use the ngrok tunnel that already fronts the API:
+
+```bash
+TRAINING_CALLBACK_URL=https://<your-tunnel>.ngrok-free.dev
+```
+
+Then restart Octane — config is read once per process, so an edited `.env` does
+nothing until it comes back (`npm run octane:reset && npm run octane`).
+
+**Register the trainer URL with or without `/train`.** The notebook prints its
+tunnel root and asks you to paste that; the inference notebook prints the full
+`…/predict`. Both conventions therefore live in the registry, and
+`TrainerDispatcher::trainEndpoint()` appends `/train` only when no path was
+given. Before it did, a bare root produced **405 Method Not Allowed**, which
+reads like the trainer refusing the job.
+
 **A worker going quiet is not a failure.** A Kaggle session ending is the
 normal course of events, so `training:reclaim` (scheduled every 5 minutes)
 returns a job whose heartbeat is older than 15 minutes to `queued` **with its
 checkpoint intact**, and the next worker resumes from the epoch already
 reached. Without that, every expired session would strand a job forever and a
 multi-day training could never finish.
+
+**The queue moves on its own.** `training:dispatch-queued` (scheduled every
+minute) sends the oldest waiting run whenever no run is in progress. Before it,
+a job was dispatched exactly once — at creation — so a single failed attempt
+left it at `queued` for ever, and the position shown to its owner was a promise
+nothing could keep. One at a time, because the trainer holds a single GPU and
+refuses a second job; `created_at` order, the same ordering the researcher is
+shown, so the two can never disagree.
+
+A run that cannot be sent records the reason on its own row rather than only in
+the log, and the command still exits zero: a trainer that is down is an ordinary
+state here, not something the scheduler should raise an alarm about.
 
 **A job can be pushed as well as pulled.** `dispatch` posts the job to a URL on
 the GPU host — the same shape as a prediction posted to a model endpoint — so an
@@ -336,6 +372,32 @@ only change needed to speed uploads up.
 ⚠️ **Predictions need a queue worker.** Without `php artisan queue:work` an
 upload succeeds but the job stays `pending` forever.
 
+⚠️ **Start it through `npm run queue`, not bare `queue:work`.** The script is
+
+```
+php -d memory_limit=1G artisan queue:work --tries=1 --timeout=7200 --memory=768
+```
+
+and both numbers matter. `--memory` does **not** raise PHP's limit — it only
+decides when the worker restarts itself — so a bare `queue:work` runs at the
+512 MB default. `-d memory_limit=1G` raises the real ceiling; `--memory=768`
+recycles the worker before it reaches it, so a heavy job ends in a clean restart
+rather than a fatal error.
+
+**A frame is no longer what exhausts a worker, and it used to be.**
+`TiffPreview` turned every pixel into a PHP array entry — twice, while
+`unpack()`'s result was copied into the accumulator — so one 2048×2048 frame
+cost **196 MB**, and the pair `FrameMetrics` holds at once cost **262 MB**. At
+the 512 MB default the process died mid-job and took the run with it, while the
+screen still read `pending` with nothing to explain it.
+
+Pixels now live in a binary string, unpacked a block at a time: **11.7 MB** for
+the same frame, **20 MB** for the pair. `MAX_PIXELS` went back up from 2048² to
+**4096²**, and the measurements behind that ceiling — including why it did not
+go all the way back to 8192² — are in the constant's docblock. Decoding *time*
+is the limit now, not memory. Keep using `npm run queue` anyway: nothing else
+about a job got smaller.
+
 ### Scheduled Commands
 Registered in `routes/console.php` (Laravel 12 has no `app/Console/Kernel.php`):
 
@@ -344,6 +406,13 @@ Registered in `routes/console.php` (Laravel 12 has no `app/Console/Kernel.php`):
 - `php artisan predictions:cleanup` - Enforce the 24-hour retention window on
   prediction output, and sweep abandoned uploads / orphaned download archives
   (hourly). Supports `--dry-run`.
+- `php artisan training:cleanup` - Free dataset archives nobody has come back
+  to (daily, 03:10). Supports `--dry-run`, and start there: the window is
+  measured from the dataset's **last use**, not from its upload, because a
+  dataset is uploaded here precisely so it can be reused. One with a queued or
+  running job is never swept. `TRAINING_DATASET_RETENTION_DAYS` (default 30)
+  sets the window; 0 disables it. The archive and its rendered previews go;
+  the row stays, stamped `archive_deleted_at`.
 
 ⚠️ **These only run if a scheduler process is running.** Neither Laragon nor
 Octane starts one. Without it, `models.status` in the database goes stale — it
@@ -354,6 +423,41 @@ npm run serve:all             # API + queue worker + scheduler, one command
 ```
 
 Or individually: `npm run octane`, `npm run queue`, `npm run schedule`.
+
+### Storage on a mounted volume
+
+When results live somewhere other than this machine's own disk — a NAS, an
+external drive — there is one failure worth guarding against, and it is silent.
+**An unmounted share is not an error.** It is an ordinary empty directory, and
+`Storage::put()` writes into it without complaint: the frames land on the
+host's own disk, the researcher is told the job worked, and nobody finds the
+files again.
+
+So the volume carries a file that only exists there:
+
+```bash
+# after mounting, once:
+php artisan storage:mark
+```
+
+Then set `STORAGE_REQUIRE_SENTINEL=true` and run `php artisan config:cache`.
+
+**The order matters.** Running `storage:mark` while the share is absent writes
+the sentinel onto the empty mount point — which is exactly the state it exists
+to detect. The command shows the volume's size before writing anything and asks
+you to confirm, because that number is the check: an empty mount point reports
+the host's disk, which is usually a very different size.
+
+Two more settings, both with sensible defaults:
+
+| Variable | Default | What it does |
+|---|---|---|
+| `STORAGE_HEADROOM_MULTIPLIER` | `3.0` | An archive costs disk three times over: frames extracted from it, frames generated from those, and the archive built to hand results back |
+| `STORAGE_MINIMUM_FREE_BYTES` | 2 GB | A floor whatever the upload. A machine that runs to zero cannot write to MySQL, cannot record the failure, and cannot log why |
+
+Both upload paths answer **507** when there is no room, before doing any work.
+`GET /api/admin/storage` reports what is used and — more usefully — how much of
+it retention will hand back on its own.
 
 Run `php artisan models:health-check` by hand to refresh statuses on demand.
 
@@ -529,7 +633,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**242 tests, 976 assertions, 35-60s.** They run against MySQL, not sqlite: three
+**368 tests, 1,452 assertions, 35-60s.** They run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:
@@ -548,10 +652,18 @@ CREATE DATABASE db_aict_test;
 | `NewsPostTest` | the publish switch, slide order, the upload guard, a draft's photo staying private |
 | `TrainingTest` | worker auth, the claim lock, resume-after-death, checkpoint rotation, registering weights |
 | `AvatarTest` | own vs anyone else's, the upload guard, `avatar_url` in every payload, the 404 for no photo |
-| `PredictionPipelineTest` | recursive interpolation, worker contract, failure paths, counter release |
+| `PredictionPipelineTest` | recursive interpolation, worker contract, failure paths, counter release, frame provenance, the hold-out measurement, re-runs, kept thumbnails |
 | `ChunkedUploadTest` | ordering, idempotency, ownership, session cleanup |
 | `PredictionCleanupTest` | 24-hour retention and the temp sweeps |
+| `WorkerAuthTest` | the shared secret reaching the worker, never reaching a client, encrypted at rest, and surviving an unrelated edit |
+| `StorageGuardTest` | refusing an upload with nowhere to put it, and noticing a results volume that is not mounted |
 | `TiffPreviewTest` (unit) | TIFF decoding, windowing, downscaling, PNG output, and the formats it must refuse |
+| `FrameMetricsTest` (unit) | MAE, RMSE and PSNR against numbers worked out by hand — a wrong constant here would quietly put wrong figures in a report |
+| `TrainingDatasetPreviewTest` | listing an archive without extracting it, the entry-name check, and a frame inside a subfolder — the case a normal route placeholder 404s on |
+| `TrainingDatasetRetentionTest` | the window measured from last use rather than upload, a dataset with live work never swept, and what the frame list says once the archive is gone |
+| `QueueHealthTest` | a job available but never reserved, and that the admin wording naming a command is not the wording a researcher gets |
+| `AdminQueueTest` | the board's ordering, and that a researcher's own position matches the number the admin sees on that same row |
+| `SourceEncodingTest` (unit) | a tripwire, not a feature: it fails if any source file grows a mojibake sequence. UTF-8 read back as Windows-1252 corrupts text through ordinary editing, and without this it comes back |
 
 Five things to know before adding tests. Each one produced a test that passed
 while proving nothing, or failed for a reason that had nothing to do with the

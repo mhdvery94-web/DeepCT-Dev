@@ -186,4 +186,69 @@ class TrainingDatasetPreviewTest extends TestCase
 
         $this->apiAs($token)->get($url)->assertOk();
     }
+
+    /**
+     * A second dataset, with its frames inside a folder.
+     *
+     * The shared fixture above is flat, and every archive this suite has ever
+     * been given was flat — which is exactly why nothing noticed. The real
+     * ones are not: job 18's dataset holds `input/HONDA_Used_0051.tif`, and
+     * another on this machine holds `Sample Contrast/Contrast_0001.tif`.
+     */
+    private function foldedJob(): TrainingJob
+    {
+        $path = 'training/datasets/folded.zip';
+        Storage::put($path, '');
+
+        $zip = new ZipArchive();
+        $zip->open(Storage::path($path), ZipArchive::OVERWRITE | ZipArchive::CREATE);
+        $zip->addFromString('input/frame_001.tif', $this->tiff());
+        $zip->addFromString('input/frame_002.tif', $this->tiff());
+        $zip->close();
+
+        $dataset = TrainingDataset::create([
+            'name' => 'Folded',
+            'source_type' => 'upload',
+            'archive_path' => $path,
+            'uploaded_by' => $this->owner->id,
+        ]);
+
+        return TrainingJob::create([
+            'name' => 'Folded run',
+            'training_dataset_id' => $dataset->id,
+            'status' => 'queued',
+            'total_epochs' => 5,
+            'created_by' => $this->owner->id,
+        ]);
+    }
+
+    /**
+     * The listing hands out a name; the preview has to accept that same name
+     * back.
+     *
+     * It did not. `{name}` cannot span a slash, so the URL the client builds
+     * with `Uri.encodeComponent` — `input%2Fframe_001.tif` — was decoded to
+     * two path segments and matched no route at all. A researcher opening a
+     * real BRIN dataset got 404 on every frame in it, and nothing in the
+     * answer said the name was the problem.
+     */
+    public function test_a_frame_inside_a_folder_previews_under_the_name_it_was_listed_by(): void
+    {
+        $job = $this->foldedJob();
+        $token = $this->token($this->owner);
+
+        $listed = $this->apiAs($token)
+            ->getJson("/api/me/training/jobs/{$job->id}/dataset/frames")
+            ->assertOk()
+            ->json('data.0.name');
+
+        $this->assertSame('input/frame_001.tif', $listed);
+
+        // Encoded exactly the way `researcher_training_service.dart` does it.
+        $this->apiAs($token)
+            ->get("/api/me/training/jobs/{$job->id}/dataset/frames/"
+                . rawurlencode($listed) . '/preview')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/png');
+    }
 }

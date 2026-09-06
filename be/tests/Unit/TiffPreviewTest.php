@@ -243,4 +243,170 @@ class TiffPreviewTest extends TestCase
 
         $this->fail('no IDAT chunk in the PNG');
     }
+
+    // -------------------------------------------------------------- memory
+
+    /**
+     * A frame of $w x $h whose pixel data is built without a PHP array.
+     *
+     * The `tiff()` helper above takes an array of pixels, which for four
+     * million of them would cost more memory than the thing under test — the
+     * fixture would fail before the decoder got a chance to. One row is
+     * packed and repeated instead: a horizontal gradient, constant down the
+     * frame, which is enough to exercise windowing and box-averaging both.
+     */
+    private function largeTiff(int $w, int $h): string
+    {
+        $row = '';
+        for ($x = 0; $x < $w; $x++) {
+            $row .= pack('v', (int) ($x * 65535 / max(1, $w - 1)));
+        }
+        $packed = str_repeat($row, $h);
+
+        $s = fn(int $v) => pack('v', $v);
+        $l = fn(int $v) => pack('V', $v);
+
+        $pixelOffset = 8;
+        $ifdOffset = $pixelOffset + strlen($packed);
+
+        $entry = fn(int $tag, int $type, int $count, int $value) =>
+            $s($tag) . $s($type) . $l($count) .
+            ($type === 3 ? $s($value) . $s(0) : $l($value));
+
+        return 'II' . $s(42) . $l($ifdOffset)
+            . $packed
+            . $s(8)
+            . $entry(256, 3, 1, $w)
+            . $entry(257, 3, 1, $h)
+            . $entry(258, 3, 1, 16)
+            . $entry(259, 3, 1, 1)
+            . $entry(262, 3, 1, 1)
+            . $entry(273, 4, 1, $pixelOffset)
+            . $entry(277, 3, 1, 1)
+            . $entry(279, 4, 1, strlen($packed))
+            . $l(0);
+    }
+
+    /**
+     * The reason `MAX_PIXELS` was cut to 2048x2048 in the first place.
+     *
+     * Every pixel became an entry in a PHP array — twice over, while
+     * `unpack`'s result was copied into the accumulator — and an array entry
+     * costs an order of magnitude more than the two bytes the pixel occupies
+     * on disk. On 25 August that overran the queue worker's `memory_limit`
+     * mid-job: the process died, took the run with it, and left "queued" on
+     * screen with nothing to explain it. Lowering the ceiling moved the wall;
+     * it did not remove it.
+     *
+     * Four million pixels is 8 MB of TIFF. Decoding it should cost the same
+     * order as the file itself, not ten times it. The budget below is
+     * deliberately loose — the difference being measured is roughly 85 MB
+     * against roughly 10 MB, so a threshold anywhere between them tells the
+     * two implementations apart without being a benchmark.
+     */
+    public function test_a_full_size_frame_does_not_cost_a_php_array_per_pixel(): void
+    {
+        $tiff = $this->largeTiff(2048, 2048);
+
+        memory_reset_peak_usage();
+        $before = memory_get_usage();
+
+        $png = $this->preview->toPng($tiff, 512);
+
+        $used = memory_get_peak_usage() - $before;
+
+        $header = $this->readPngHeader($png);
+        $this->assertSame(512, $header['width']);
+        $this->assertSame(512, $header['height']);
+
+        $this->assertLessThan(
+            32 * 1024 * 1024,
+            $used,
+            sprintf('decoding 2048x2048 used %.1f MB', $used / 1048576),
+        );
+    }
+
+    /**
+     * The same for [decode()], which `FrameMetrics` calls twice in a row to
+     * compare a held-out frame against the model's answer for it. Two frames
+     * alive at once is the worst case on this path, and it is the one that
+     * runs inside the queue worker.
+     */
+    public function test_two_frames_can_be_compared_without_two_pixel_arrays(): void
+    {
+        $tiff = $this->largeTiff(2048, 2048);
+
+        memory_reset_peak_usage();
+        $before = memory_get_usage();
+
+        $a = $this->preview->decode($tiff);
+        $b = $this->preview->decode($tiff);
+
+        $used = memory_get_peak_usage() - $before;
+
+        $this->assertSame(2048, $a['width']);
+        $this->assertSame(2048, $b['height']);
+
+        $this->assertLessThan(
+            48 * 1024 * 1024,
+            $used,
+            sprintf('decoding two 2048x2048 frames used %.1f MB', $used / 1048576),
+        );
+    }
+
+    /**
+     * A TIFF that *claims* a size but carries almost no pixels.
+     *
+     * The size guard runs before the pixel data is read, so this pins where
+     * the ceiling sits without allocating a frame to prove it — a real
+     * 4096x4096 fixture is 32 MB and two and a half seconds.
+     */
+    private function tiffDeclaring(int $w, int $h): string
+    {
+        $packed = str_repeat("\0", 8);
+
+        $s = fn(int $v) => pack('v', $v);
+        $l = fn(int $v) => pack('V', $v);
+        $entry = fn(int $tag, int $type, int $count, int $value) =>
+            $s($tag) . $s($type) . $l($count) .
+            ($type === 3 ? $s($value) . $s(0) : $l($value));
+
+        return 'II' . $s(42) . $l(8 + strlen($packed))
+            . $packed
+            . $s(8)
+            . $entry(256, 4, 1, $w)
+            . $entry(257, 4, 1, $h)
+            . $entry(258, 3, 1, 16)
+            . $entry(259, 3, 1, 1)
+            . $entry(262, 3, 1, 1)
+            . $entry(273, 4, 1, 8)
+            . $entry(277, 3, 1, 1)
+            . $entry(279, 4, 1, strlen($packed))
+            . $l(0);
+    }
+
+    /**
+     * Where the ceiling sits, from both sides.
+     *
+     * It was cut to 2048x2048 because the decoder could not survive more, and
+     * goes back to 4096x4096 now that a frame costs its own size rather than
+     * a multiple of it. Asserting only the refusal would let the limit drift
+     * downwards unnoticed; asserting only the acceptance would let it drift
+     * up. The accepted frame fails on its missing pixels, which is the proof
+     * it got past the size guard.
+     */
+    public function test_the_ceiling_admits_4096_and_refuses_more(): void
+    {
+        try {
+            $this->preview->toPng($this->tiffDeclaring(4096, 4096));
+            $this->fail('a frame with no pixel data should not decode');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('truncated', $e->getMessage());
+        }
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Frame is too large to preview.');
+
+        $this->preview->toPng($this->tiffDeclaring(4096, 4097));
+    }
 }

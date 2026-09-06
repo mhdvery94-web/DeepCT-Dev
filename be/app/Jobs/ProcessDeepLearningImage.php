@@ -5,12 +5,17 @@ namespace App\Jobs;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
 use App\Models\UserActivity;
+use App\Services\FrameMetrics;
 use App\Services\Notifier;
+use App\Services\WorkerRequest;
 use Exception;
+use Throwable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Jobs\SyncJob;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -37,10 +42,29 @@ class ProcessDeepLearningImage implements ShouldQueue
     public int $timeout = 7200;
 
     /**
-     * Never retry. A retry would redo completed frames and spend GPU time
-     * again; a failed job is better inspected than repeated.
+     * Three, but only one of them for the same reason.
+     *
+     * A model that *answers* and refuses will refuse identically next time, so
+     * that is failed on the spot — retrying would redo completed frames and
+     * spend GPU time to reach the same rejection.
+     *
+     * A worker that does not answer at all is a different thing entirely, and
+     * it is the thing that happens when the GPU lives on a workstation rather
+     * than in a data centre. Workstations sleep. They reboot for updates.
+     * Somebody unplugs one to play a game. Failing a researcher's job because
+     * a machine was asleep for ninety seconds is not a fault report, it is
+     * lost work — so an unreachable worker sends the job back to the queue.
+     *
+     * @see requeueOrFail()
      */
-    public int $tries = 1;
+    public int $tries = 3;
+
+    /**
+     * How long to wait before asking an absent worker again. Long enough for
+     * a wake-from-sleep or a reboot, short enough that a researcher watching
+     * the screen sees it move.
+     */
+    private const RETRY_DELAY_SECONDS = 120;
 
     /** Refuse jobs that would take absurdly long rather than hanging for hours. */
     private const MAX_GENERATED_FRAMES = 200;
@@ -82,24 +106,33 @@ class ProcessDeepLearningImage implements ShouldQueue
             Storage::makeDirectory($this->record->output_folder);
 
             $generated = [];
+            $provenance = [];
             $indices = array_keys($frames);
 
-            // Fill each gap between consecutive uploaded frames.
+            // Fill each gap between consecutive uploaded frames. Generation 0
+            // is what "came off the scanner" means: these are the only frames
+            // in the job that the model had no hand in.
             for ($i = 0; $i < count($indices) - 1; $i++) {
                 $left = $indices[$i];
                 $right = $indices[$i + 1];
 
                 $this->interpolateBetween(
                     $model,
-                    $left,
-                    $frames[$left],
-                    $right,
-                    $frames[$right],
-                    $generated
+                    ['index' => $left, 'path' => $frames[$left], 'generation' => 0],
+                    ['index' => $right, 'path' => $frames[$right], 'generation' => 0],
+                    $generated,
+                    $provenance
                 );
             }
 
             ksort($generated);
+            ksort($provenance);
+
+            // After the results, so a measurement that misbehaves cannot cost
+            // the researcher the frames they actually asked for.
+            $validation = $this->validateOnHeldOutFrame($model, $frames);
+
+
             $elapsed = (int) round(microtime(true) - $startTime);
 
             $this->record->update([
@@ -108,6 +141,8 @@ class ProcessDeepLearningImage implements ShouldQueue
                 'interpolated_frames' => array_values(
                     array_map(fn($p) => basename($p), $generated)
                 ),
+                'frame_provenance' => array_values($provenance),
+                'validation' => $validation,
                 'processing_time_seconds' => $elapsed,
                 'processing_time' => $elapsed . 's',
                 'expires_at' => now()->addHours(24),
@@ -134,13 +169,93 @@ class ProcessDeepLearningImage implements ShouldQueue
             // Notifier swallows its own failures, so a successful prediction is
             // never marked failed because a notification row would not write.
             Notifier::predictionCompleted($this->record, count($generated));
+
+            // The thumbnails that outlive retention, queued rather than
+            // rendered here: six frames is ten to fifteen seconds of a single
+            // core on a Raspberry Pi, spent after the work the researcher
+            // asked for was already done and while the next job waits.
+            CaptureResultEvidence::dispatch($this->record);
         } catch (Exception $e) {
-            $this->fail_($e->getMessage());
+            $this->requeueOrFail($e);
         } finally {
             // Always release the slot, successful or not, or the model's
             // concurrency counter drifts upward and never recovers.
             $model->decrement('current_jobs_count');
         }
+    }
+
+    /**
+     * Send the job back to the queue when the worker was merely absent, and
+     * fail it when the worker had something to say.
+     *
+     * The distinction is the whole point. "The model rejected frame 4" will be
+     * rejected the same way in two minutes; there is nothing to wait for, and
+     * repeating it costs GPU time to reach the same answer. "Connection
+     * refused" is a machine that is asleep, rebooting, or being used for
+     * something else, and in two minutes it may well be back.
+     *
+     * That case did not exist while the worker lived on Kaggle — a hosted
+     * notebook is up or it is gone for the session. It exists now that the GPU
+     * is heading for a workstation on the lab network.
+     */
+    private function requeueOrFail(Exception $e): void
+    {
+        if (!$this->isWorkerUnreachable($e)) {
+            $this->fail_($e->getMessage());
+
+            return;
+        }
+
+        // The wording is the same whether or not a retry is possible.
+        // `cURL error 7: Failed to connect` is a true sentence and a useless
+        // one — it tells a researcher nothing they can act on, and it reads
+        // like their upload was at fault.
+        if (!$this->canBeRequeued()) {
+            $this->fail_(
+                'The model is not responding. It may be asleep or restarting — '
+                . 'check its status and run the job again.'
+            );
+
+            return;
+        }
+
+        // Back to `pending`, which is what the researcher's screen already
+        // knows how to show. Marking it `failed` and then un-failing it would
+        // flicker a red row for no reason.
+        $this->record->update([
+            'status' => 'pending',
+            'error_message' => 'The model is not responding. Waiting and trying again '
+                . '(attempt ' . $this->attempts() . ' of ' . $this->tries . ').',
+        ]);
+
+        $this->release(self::RETRY_DELAY_SECONDS);
+    }
+
+    /**
+     * Whether nothing answered, as opposed to something answering badly.
+     *
+     * Matched on the exception type rather than on words in a message: a
+     * `ConnectionException` is Guzzle saying the request never completed —
+     * refused, timed out, DNS failure, TLS handshake — while every refusal
+     * this job raises itself is a plain `Exception` carrying the worker's own
+     * words.
+     */
+    private function isWorkerUnreachable(Exception $e): bool
+    {
+        return $e instanceof ConnectionException
+            || $e->getPrevious() instanceof ConnectionException;
+    }
+
+    /**
+     * False on the last attempt, and false when there is no queue to go back
+     * to — `sync` runs the job inline, where releasing it would simply lose
+     * it.
+     */
+    private function canBeRequeued(): bool
+    {
+        return $this->attempts() < $this->tries
+            && $this->job !== null
+            && !($this->job instanceof SyncJob);
     }
 
     /**
@@ -230,32 +345,104 @@ class ProcessDeepLearningImage implements ShouldQueue
     }
 
     /**
+     * The closest-together `[a, mid, b]` among the uploaded frames where `mid`
+     * is the exact midpoint of `a` and `b`, or null when there is none.
+     *
+     * Closest-together matters. Any qualifying triple can be measured, but a
+     * wide one measures something harder: drawing the midpoint of frames 51
+     * and 69 spans nine frames of movement, while 51 and 55 span two — and the
+     * two-frame case is what this platform actually asks the model to do.
+     * Reporting the harder number would understate the model on the work it is
+     * really being given.
+     *
+     * @param array<int, int> $indices uploaded frame numbers, ascending
+     * @return array{0:int, 1:int, 2:int}|null
+     */
+    private function tightestHoldOut(array $indices): ?array
+    {
+        $present = array_flip($indices);
+        $best = null;
+
+        foreach ($indices as $left) {
+            foreach ($indices as $right) {
+                // Even spans only: the model interpolates the midpoint, and an
+                // odd span has none.
+                if ($right - $left < 2 || ($right - $left) % 2 !== 0) {
+                    continue;
+                }
+
+                $middle = intdiv($left + $right, 2);
+
+                if (!isset($present[$middle])) {
+                    continue;
+                }
+
+                if ($best === null || ($right - $left) < ($best[2] - $best[0])) {
+                    $best = [$left, $middle, $right];
+                }
+            }
+        }
+
+        return $best;
+    }
+
+    /**
      * Recursively fill the open interval between two frames.
      *
      * Each generated midpoint becomes a boundary for the two halves around it,
      * which is what makes the interpolation recursive rather than linear.
      *
-     * @param array<int, string> $generated collected by reference
+     * **And that is why provenance is recorded here.** A midpoint drawn
+     * between two scanned frames is the model's output. A midpoint drawn
+     * between a scanned frame and one the model produced a moment ago is the
+     * model's output *fed its own output* — whatever error the first frame
+     * carried is now an input. The deeper the recursion, the more times that
+     * has happened, and a reader of the results has no other way to know it.
+     *
+     * `generation` counts exactly that: 1 means both boundaries were scanned,
+     * 2 means at least one boundary was itself generated, and so on.
+     *
+     * @param array{index:int, path:string, generation:int} $left
+     * @param array{index:int, path:string, generation:int} $right
+     * @param array<int, string> $generated  collected by reference
+     * @param array<int, array<string, mixed>> $provenance collected by reference
      */
     private function interpolateBetween(
         Model $model,
-        int $leftIndex,
-        string $leftPath,
-        int $rightIndex,
-        string $rightPath,
-        array &$generated
+        array $left,
+        array $right,
+        array &$generated,
+        array &$provenance
     ): void {
         // Adjacent frames have nothing between them.
-        if ($rightIndex - $leftIndex < 2) {
+        if ($right['index'] - $left['index'] < 2) {
             return;
         }
 
-        $midIndex = intdiv($leftIndex + $rightIndex, 2);
-        $midPath = $this->requestMidpoint($model, $leftPath, $rightPath, $midIndex);
-        $generated[$midIndex] = $midPath;
+        $midIndex = intdiv($left['index'] + $right['index'], 2);
+        $midPath = $this->requestMidpoint($model, $left['path'], $right['path'], $midIndex);
 
-        $this->interpolateBetween($model, $leftIndex, $leftPath, $midIndex, $midPath, $generated);
-        $this->interpolateBetween($model, $midIndex, $midPath, $rightIndex, $rightPath, $generated);
+        $mid = [
+            'index' => $midIndex,
+            'path' => $midPath,
+            'generation' => 1 + max($left['generation'], $right['generation']),
+        ];
+
+        $generated[$midIndex] = $midPath;
+        $provenance[$midIndex] = [
+            'frame' => basename($midPath),
+            'index' => $midIndex,
+            'from' => [$left['index'], $right['index']],
+            'generation' => $mid['generation'],
+            // How many of the two boundaries the model had invented itself.
+            // `generation` already implies it, but a reader scanning a table
+            // should not have to derive it.
+            'synthetic_parents' =>
+                ($left['generation'] > 0 ? 1 : 0) + ($right['generation'] > 0 ? 1 : 0),
+        ];
+
+        $this->interpolateBetween($model, $left, $mid, $generated, $provenance);
+        $this->interpolateBetween($model, $mid, $right, $generated, $provenance);
     }
 
     /**
@@ -267,9 +454,35 @@ class ProcessDeepLearningImage implements ShouldQueue
         string $rightPath,
         int $midIndex
     ): string {
-        $response = Http::timeout(self::REQUEST_TIMEOUT_SECONDS)
-            ->withoutVerifying() // ngrok / Colab certificates
-            ->withHeaders(['ngrok-skip-browser-warning' => 'true'])
+        $body = $this->requestFrame($model, $leftPath, $rightPath, "frame {$midIndex}");
+
+        $outputPath = $this->record->output_folder . '/' .
+            $this->outputFilename($leftPath, $midIndex);
+
+        Storage::put($outputPath, $body);
+
+        return $outputPath;
+    }
+
+    /**
+     * The round-trip itself, returning the TIFF bytes without writing them.
+     *
+     * Split out from [requestMidpoint] because the hold-out check needs a
+     * generated frame it can measure and then throw away — writing it into the
+     * output folder would put a frame the archive already contained into the
+     * researcher's results.
+     *
+     * [$label] only ever appears in error messages, and exists so a failure
+     * during validation does not read as a failure to produce a result frame.
+     */
+    private function requestFrame(
+        Model $model,
+        string $leftPath,
+        string $rightPath,
+        string $label
+    ): string {
+        $response = app(WorkerRequest::class)
+            ->for($model, self::REQUEST_TIMEOUT_SECONDS)
             ->attach(
                 'file_t0',
                 Storage::get($leftPath),
@@ -286,7 +499,7 @@ class ProcessDeepLearningImage implements ShouldQueue
 
         if ($response->failed()) {
             throw new Exception(
-                "Model returned HTTP {$response->status()} while generating frame {$midIndex}: " .
+                "Model returned HTTP {$response->status()} while generating {$label}: " .
                 $this->summarise($response->body())
             );
         }
@@ -298,19 +511,87 @@ class ProcessDeepLearningImage implements ShouldQueue
         if (str_contains($contentType, 'json') || str_starts_with(ltrim($body), '{')) {
             $decoded = json_decode($body, true);
             $message = $decoded['error'] ?? $decoded['message'] ?? $this->summarise($body);
-            throw new Exception("Model rejected frame {$midIndex}: {$message}");
+            throw new Exception("Model rejected {$label}: {$message}");
         }
 
         if ($body === '') {
-            throw new Exception("Model returned an empty body for frame {$midIndex}.");
+            throw new Exception("Model returned an empty body for {$label}.");
         }
 
-        $outputPath = $this->record->output_folder . '/' .
-            $this->outputFilename($leftPath, $midIndex);
+        return $body;
+    }
 
-        Storage::put($outputPath, $body);
+    /**
+     * Regenerate a frame the archive already had, and measure the result
+     * against it.
+     *
+     * This is the only ground truth available. The frames a researcher wants
+     * filled are, by definition, ones nobody has — so the check holds out one
+     * they *do* have: an uploaded frame that sits exactly halfway between two
+     * other uploaded frames is set aside, drawn again from that pair, and
+     * compared with what was really there.
+     *
+     * **The rule used to be narrower, and it was the wrong rule.** It demanded
+     * three *consecutive* frames — 1, 2, 3 — which sounds like the same thing
+     * and is not. A researcher uploads frames *with gaps*; that is the entire
+     * product. The first real archive to reach this code held frames 51, 53,
+     * 55 … 69, every other one, and offered no consecutive triplet anywhere —
+     * so nothing was measured, on an archive where 53 is the exact midpoint of
+     * 51 and 55 and could have been checked immediately.
+     *
+     * Any even span will do, because the model always interpolates the
+     * midpoint: for uploaded frames `a` and `b` where `(a + b)` is even and
+     * `(a + b) / 2` is also uploaded, that middle frame can be held out. The
+     * old consecutive case is simply this one with `b - a = 2`.
+     *
+     * The **narrowest** span available is used. Frames 51 and 55 are two
+     * interpolations apart in the real run; 51 and 69 are nine, and a midpoint
+     * drawn across nine frames of movement measures the model on a problem
+     * harder than the one it was asked to solve.
+     *
+     * Costs one extra round-trip, and returns null when the archive offers no
+     * such triple at all — which is still an ordinary case rather than a
+     * failure. Frames 1, 3 and 7 have no midpoint among them. Every failure
+     * here is swallowed into a note rather than thrown: a measurement that
+     * could not be taken must never cost a researcher the interpolation they
+     * waited for.
+     *
+     * @param array<int, string> $frames uploaded frames, keyed by index
+     * @return array<string, mixed>|null
+     */
+    private function validateOnHeldOutFrame(Model $model, array $frames): ?array
+    {
+        $triple = $this->tightestHoldOut(array_keys($frames));
 
-        return $outputPath;
+        if ($triple !== null) {
+            [$left, $middle, $right] = $triple;
+
+            try {
+                $bytes = $this->requestFrame(
+                    $model,
+                    $frames[$left],
+                    $frames[$right],
+                    "hold-out frame {$middle}"
+                );
+
+                $metrics = app(FrameMetrics::class)->compare(
+                    Storage::get($frames[$middle]),
+                    $bytes
+                );
+
+                return $metrics + [
+                    'held_out_frame' => basename($frames[$middle]),
+                    'index' => $middle,
+                    'from' => [$left, $right],
+                ];
+            } catch (Throwable $e) {
+                // A measurement that could not be taken is worth saying so
+                // about. Losing a completed interpolation over it is not.
+                return ['error' => $this->summarise($e->getMessage())];
+            }
+        }
+
+        return null;
     }
 
     /**

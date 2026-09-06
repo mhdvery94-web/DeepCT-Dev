@@ -39,6 +39,18 @@ class PredictionIntake
     ): AnalysisRecord {
         $this->assertModelUsable($model);
 
+        // The chunked path refuses on the declared size before anything
+        // travels; this one only learns the size when the archive is already
+        // on disk, so it checks here — still before extraction, which is where
+        // the archive stops being one file and becomes many.
+        $refusal = app(StorageGuard::class)->refusalFor(
+            (int) (@filesize($absoluteZipPath) ?: 0)
+        );
+
+        if ($refusal !== null) {
+            throw new IntakeException($refusal, 507);
+        }
+
         $jobId = (string) Str::uuid();
         $inputFolder = "predictions/{$user->id}/{$jobId}/input";
 

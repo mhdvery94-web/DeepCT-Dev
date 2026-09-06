@@ -517,4 +517,73 @@ class TrainingTest extends TestCase
 
         $this->assertSame('cancelled', $job->fresh()->status);
     }
+
+    // -------------------------------------------- the name the weights keep
+
+    /**
+     * A worker posts an `.h5` and gets back a suffix nobody chose.
+     *
+     * `store()` derives the extension from the MIME type, and a trainer
+     * uploading with `application/octet-stream` had its weights land as
+     * **`.bin`** on 17 August and **`.hdf`** on 29 August — 87,8 MB of a run
+     * that had trained perfectly. Keras 3 picks its loader from the suffix and
+     * knows neither, so an administrator downloading those weights could not
+     * load them, and the name that would have worked was recorded nowhere.
+     */
+    public function test_stored_weights_keep_the_extension_the_worker_sent(): void
+    {
+        $job = $this->makeJob();
+
+        $this->asWorker()->postForm(
+            "/api/training/worker/jobs/{$job->id}/checkpoint",
+            ['current_epoch' => 10, 'weights' => $this->weightsFile('epoch-10.h5')],
+        )->assertOk();
+
+        $this->assertStringEndsWith('.h5', $job->fresh()->checkpoint_path);
+
+        $this->asWorker()->postForm(
+            "/api/training/worker/jobs/{$job->id}/complete",
+            ['weights' => $this->weightsFile('generator.weights.h5')],
+        )->assertOk();
+
+        $this->assertStringEndsWith('.h5', $job->fresh()->weights_path);
+    }
+
+    /** Keeping the client's extension must not let the client pick the path. */
+    public function test_a_weights_filename_cannot_choose_where_it_lands(): void
+    {
+        $job = $this->makeJob();
+
+        $this->asWorker()->postForm(
+            "/api/training/worker/jobs/{$job->id}/complete",
+            ['weights' => $this->weightsFile('../../../public/evil.php')],
+        )->assertOk();
+
+        $path = $job->fresh()->weights_path;
+
+        $this->assertStringStartsWith('training/weights/', $path);
+        $this->assertStringNotContainsString('..', $path);
+
+        // Not a suffix any weights file uses, so it falls back to what the
+        // MIME guess produced before — inside the directory, and inert.
+        $this->assertStringEndsWith('.bin', $path);
+    }
+
+    /**
+     * The claim payload is JSON the Python worker parses.
+     *
+     * Fifth outing for this family: PHP has one array type, `json_encode`
+     * writes the empty one as `[]`, and a Pydantic model declaring a dict
+     * rejects a list outright. `TrainerDispatcher` learned this in 1.29.0 and
+     * the claim endpoint beside it never did.
+     */
+    public function test_a_claimed_job_carries_hyperparameters_as_an_object(): void
+    {
+        $this->makeJob();
+
+        $response = $this->asWorker()->postJson('/api/training/worker/claim')->assertOk();
+
+        $this->assertStringContainsString('"hyperparameters":{}', $response->getContent());
+        $this->assertStringNotContainsString('"hyperparameters":[]', $response->getContent());
+    }
 }

@@ -24,11 +24,13 @@ class TrainingDataset extends EloquentModel
         'frame_count',
         'checksum',
         'uploaded_by',
+        'archive_deleted_at',
     ];
 
     protected $casts = [
         'size_bytes' => 'integer',
         'frame_count' => 'integer',
+        'archive_deleted_at' => 'datetime',
     ];
 
     public function uploader(): BelongsTo
@@ -44,5 +46,31 @@ class TrainingDataset extends EloquentModel
     public function isHosted(): bool
     {
         return $this->source_type === 'upload';
+    }
+
+    /** Held an archive once, and no longer does. */
+    public function archiveExpired(): bool
+    {
+        return $this->archive_deleted_at !== null;
+    }
+
+    /**
+     * The last moment this dataset was involved in anything.
+     *
+     * Its own creation, or the newest thing any of its jobs did. The retention
+     * window runs from here rather than from `created_at`, because a dataset
+     * uploaded in January and trained against last week is in daily use.
+     */
+    public function lastActivityAt(): \Illuminate\Support\Carbon
+    {
+        $moments = [$this->created_at];
+
+        foreach ($this->jobs as $job) {
+            $moments[] = $job->created_at;
+            $moments[] = $job->finished_at;
+            $moments[] = $job->heartbeat_at;
+        }
+
+        return collect($moments)->filter()->max();
     }
 }

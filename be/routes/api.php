@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AccessRequestController;
+use App\Http\Controllers\API\AdminQueueController;
 use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\AvatarController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\API\NewsController;
 use App\Http\Controllers\API\TrainingController;
 use App\Http\Controllers\API\TrainingWorkerController;
 use App\Http\Controllers\API\NotificationController;
+use App\Http\Controllers\API\StorageController;
 use App\Http\Controllers\API\PredictionUploadController;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\ModelController;
@@ -112,7 +114,20 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/jobs/{id}/samples', [MeTrainingController::class, 'samples'])->name('api.me.training.samples');
             Route::get('/jobs/{id}/samples/{epoch}', [MeTrainingController::class, 'sampleImage'])->name('api.me.training.samples.show');
             Route::get('/jobs/{id}/dataset/frames', [MeTrainingController::class, 'datasetFrames'])->name('api.me.training.dataset.frames');
-            Route::get('/jobs/{id}/dataset/frames/{name}/preview', [MeTrainingController::class, 'datasetFramePreview'])->name('api.me.training.dataset.preview');
+            // `{name}` has to span slashes. The listing beside it hands out
+            // entry names straight from the archive, and real datasets keep
+            // their frames in a folder — `input/HONDA_Used_0051.tif`. Without
+            // this, the client's `Uri.encodeComponent` produced `%2F`, which
+            // Symfony decodes back to a separator before matching, so the URL
+            // named two segments where the route expected one and matched
+            // nothing at all. Every frame in a foldered dataset answered 404.
+            //
+            // Safe because the controller checks the name against the
+            // archive's own listing rather than sanitising it: a name that is
+            // not an entry is refused whatever it looks like.
+            Route::get('/jobs/{id}/dataset/frames/{name}/preview', [MeTrainingController::class, 'datasetFramePreview'])
+                ->where('name', '.*')
+                ->name('api.me.training.dataset.preview');
         });
     });
 
@@ -195,6 +210,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/activities', [UserActivityController::class, 'index'])->name('api.admin.activities.index');
         Route::get('/activities/types', [UserActivityController::class, 'getTypes'])->name('api.admin.activities.types');
         Route::get('/users/{id}/activities', [UserActivityController::class, 'userActivities'])->name('api.admin.activities.user');
+
+        // Who is on the model right now, and who is waiting behind them. Live
+        // state only — "who has ever used it" is the prediction history and
+        // the audit trail, and is a different question.
+        Route::get('/queue', [AdminQueueController::class, 'index'])->name('api.admin.queue');
+
+        // Free space on the results volume, and how much of what is used the
+        // retention sweep will hand back on its own.
+        Route::get('/storage', [StorageController::class, 'show'])->name('api.admin.storage');
     });
     
     // IT support, as messaging. A researcher has exactly one thread, so none
@@ -230,7 +254,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{id}', [AnalysisController::class, 'destroy'])->name('api.predictions.destroy');
         Route::get('/{id}/frames', [AnalysisController::class, 'frames'])->name('api.predictions.frames');
         Route::post('/{id}/start', [AnalysisController::class, 'start'])->name('api.predictions.start');
+        // The same frames through a different model, so two can be compared.
+        Route::post('/{id}/rerun', [AnalysisController::class, 'rerun'])->name('api.predictions.rerun');
         Route::get('/{id}/frames/{name}/preview', [AnalysisController::class, 'framePreview'])->name('api.predictions.frames.preview');
+        // Kept thumbnails. Outlive the frames, so no expiry check here.
+        Route::get('/{id}/evidence/{name}', [AnalysisController::class, 'evidence'])->name('api.predictions.evidence');
         Route::get('/{id}/download/results', [AnalysisController::class, 'downloadResults'])->name('api.predictions.download.results');
         Route::get('/{id}/download/complete', [AnalysisController::class, 'downloadComplete'])->name('api.predictions.download.complete');
     });

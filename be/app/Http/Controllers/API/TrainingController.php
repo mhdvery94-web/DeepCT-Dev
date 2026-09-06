@@ -348,7 +348,10 @@ class TrainingController extends Controller
             'current_epoch' => $job->current_epoch,
             'total_epochs' => $job->total_epochs,
             'progress' => $job->progress(),
-            'metrics' => $job->metrics,
+            // Object or null, never an empty array — see the note in
+            // MeTrainingController::serialise(). The admin console parses this
+            // the same way the researcher's does.
+            'metrics' => $job->metrics === null ? null : (object) $job->metrics,
             'worker_label' => $job->worker_label,
             'trainer_url' => $job->trainer_url,
             'dispatched_at' => $job->dispatched_at?->toIso8601String(),
@@ -373,7 +376,7 @@ class TrainingController extends Controller
         ];
 
         if ($detailed) {
-            $data['hyperparameters'] = $job->hyperparameters;
+            $data['hyperparameters'] = (object) ($job->hyperparameters ?? []);
             $data['created_by'] = $job->relationLoaded('creator') && $job->creator
                 ? $job->creator->name
                 : null;

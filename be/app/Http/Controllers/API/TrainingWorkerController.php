@@ -7,8 +7,10 @@ use App\Models\TrainingJob;
 use App\Models\TrainingSample;
 use App\Models\TrainingMetric;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * Managed model training — the GPU worker's half.
@@ -80,7 +82,11 @@ class TrainingWorkerController extends Controller
                 // previous worker died mid-run and left a checkpoint.
                 'resume_from_epoch' => $job->current_epoch,
                 'has_checkpoint' => $job->checkpoint_path !== null,
-                'hyperparameters' => $job->hyperparameters ?? [],
+                // An object on the wire. The worker parses this with
+                // Pydantic, which declares a dict and refuses a list
+                // outright — the failure `TrainerDispatcher` already
+                // carries a comment about.
+                'hyperparameters' => (object) ($job->hyperparameters ?? []),
                 'dataset' => [
                     'id' => $job->dataset->id,
                     'name' => $job->dataset->name,
@@ -197,7 +203,7 @@ class TrainingWorkerController extends Controller
         // The previous checkpoint goes only after the new one is safely on
         // disk: losing both to a failed write would cost the whole run.
         $previous = $job->checkpoint_path;
-        $path = $request->file('weights')->store(self::CHECKPOINT_DIR);
+        $path = $this->storeWeights($request->file('weights'), self::CHECKPOINT_DIR);
 
         $job->update([
             'status' => 'running',
@@ -243,7 +249,7 @@ class TrainingWorkerController extends Controller
             ], 409);
         }
 
-        $path = $request->file('weights')->store(self::WEIGHTS_DIR);
+        $path = $this->storeWeights($request->file('weights'), self::WEIGHTS_DIR);
 
         $job->update([
             'status' => 'completed',
@@ -349,5 +355,46 @@ class TrainingWorkerController extends Controller
         ]);
 
         return response()->json(['success' => true, 'message' => 'Failure recorded.']);
+    }
+
+    /**
+     * Suffixes a weights file is allowed to keep.
+     *
+     * Not a formality. `store()` derives the extension from the MIME type,
+     * and a trainer posting an `.h5` as `application/octet-stream` had its
+     * output land as **`.bin`** (17 August) and **`.hdf`** (29 August, job 17,
+     * 87.8 MB) — the same upload, two different answers. Keras 3 chooses its
+     * loader from the suffix and recognises neither, so an administrator who
+     * downloaded those weights could not load them, and the name that would
+     * have worked was written down nowhere.
+     *
+     * The list exists because the name now comes from the client. Anything
+     * outside it falls back to `bin`, which is what the MIME guess produced
+     * anyway, so an odd upload is no worse off than before and no upload can
+     * choose its own extension.
+     */
+    private const WEIGHT_EXTENSIONS = [
+        'h5', 'hdf5', 'keras', 'ckpt', 'pb', 'pt', 'pth',
+        'safetensors', 'npz', 'onnx', 'tflite', 'zip', 'tar', 'gz', 'bin',
+    ];
+
+    /**
+     * Store an upload under a name of our choosing and an extension of the
+     * worker's, which is the half that carries meaning.
+     *
+     * `Str::random(40)` matches what `store()` generates, so nothing about the
+     * path's shape changes except the suffix. The extension is taken from the
+     * client's filename and then checked against the list above — a filename
+     * is client input, and `../../evil.php` must not become part of a path.
+     */
+    private function storeWeights(UploadedFile $file, string $directory): string
+    {
+        $extension = strtolower($file->getClientOriginalExtension());
+
+        if (!in_array($extension, self::WEIGHT_EXTENSIONS, true)) {
+            $extension = 'bin';
+        }
+
+        return $file->storeAs($directory, Str::random(40) . '.' . $extension);
     }
 }

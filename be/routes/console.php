@@ -44,3 +44,24 @@ Schedule::command('predictions:cleanup')->hourly();
 // fifteen minutes, and reclaiming a job the moment it goes quiet would steal
 // work from a GPU that is merely busy with a long epoch.
 Schedule::command('training:reclaim')->everyFiveMinutes()->withoutOverlapping(5);
+
+// Keep the training queue moving.
+//
+// A run used to be dispatched once, when it was created, and never again — so
+// a failed attempt left it at `queued` for ever while the screen showed it a
+// position in a line that could not advance. This sends the oldest waiting run
+// whenever the trainer is free.
+//
+// Every minute, and `withoutOverlapping`: dispatch posts a dataset URL and
+// waits on a tunnel, so a slow trainer must not have a second copy of this
+// stacking up behind it.
+Schedule::command('training:dispatch-queued')
+    ->everyMinute()
+    ->withoutOverlapping(5);
+
+// Free training dataset archives nobody has come back to.
+//
+// Daily, not hourly: the window is measured in weeks, and a sweep that walks
+// every archive is not something to run sixty times a day for a deadline
+// nothing crosses that often. 03:10 keeps it clear of the 03:00 crowd.
+Schedule::command('training:cleanup')->dailyAt('03:10');

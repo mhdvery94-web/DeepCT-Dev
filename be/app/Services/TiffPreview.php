@@ -19,8 +19,42 @@ use RuntimeException;
  */
 class TiffPreview
 {
-    /** Refuse absurd dimensions before allocating anything. */
-    private const MAX_PIXELS = 8192 * 8192;
+    /**
+     * Refuse dimensions this decoder cannot actually handle.
+     *
+     * This was 8192x8192 while every pixel became an entry in a PHP array —
+     * twice over, while `unpack`'s result was copied into the accumulator —
+     * so the guard permitted what the implementation could not survive. The
+     * failure was not a refusal but a fatal `memory_limit` error inside the
+     * queue worker on 25 August: the process died mid-job, took the run with
+     * it, and left "queued" on screen with nothing to explain it. The ceiling
+     * was cut to 2048x2048 to stop that, which moved the wall rather than
+     * removing it.
+     *
+     * Pixels now stay in a binary string and are unpacked a block at a time,
+     * so the cost is the frame's own size rather than a multiple of it.
+     * Measured on this machine, PHP 8.2:
+     *
+     * | Frame       | TIFF   | `toPng` | two frames | `toPng` time |
+     * |-------------|--------|---------|------------|--------------|
+     * | 1024x1024   | 2 MB   | 5.7 MB  | 8 MB       | 0.30 s       |
+     * | 2048x2048   | 8 MB   | 11.7 MB | 20 MB      | 0.69 s       |
+     * | 4096x4096   | 32 MB  | 36.6 MB | 68 MB      | 2.36 s       |
+     * | 8192x8192   | 128 MB | 142.8 MB| 260 MB     | 10.24 s      |
+     *
+     * 2048x2048 cost 196 MB before this, and two of them 262 MB — inside a
+     * worker budgeted at 512 MB at the time.
+     *
+     * So the ceiling goes back up, but to 4096x4096 rather than all the way.
+     * **Memory is no longer what decides it; time is.** A preview endpoint
+     * that answers in 2.4 seconds is slow and defensible; one that takes ten
+     * is neither, and 260 MB for the two-frame comparison would still be most
+     * of a queue worker's budget with a job's other work beside it.
+     *
+     * Only the *preview* is refused past this. The frame itself still
+     * downloads untouched.
+     */
+    private const MAX_PIXELS = 4096 * 4096;
 
     /**
      * @param  string  $tiff     raw TIFF bytes
@@ -33,21 +67,29 @@ class TiffPreview
     {
         $image = $this->decode($tiff);
 
-        [$pixels, $width, $height] = [$image['pixels'], $image['width'], $image['height']];
+        // Downscaled first, so the window is measured on what will actually be
+        // drawn rather than on pixels about to be averaged away.
+        [$samples, $width, $height] = $this->downscale($image, $maxSide);
 
-        [$pixels, $width, $height] = $this->downscale($pixels, $width, $height, $maxSide);
+        [$min, $max] = $this->range($samples);
 
-        $gray = $this->windowTo8Bit($pixels, $image['maxValue']);
-
-        return $this->encodePng($gray, $width, $height);
+        return $this->encodePng(
+            $this->windowTo8Bit($samples, $min, $max),
+            $width,
+            $height,
+        );
     }
 
     // ----------------------------------------------------------------- TIFF
 
     /**
+     * Public because `FrameMetrics` needs the same pixels to compare two
+     * frames against each other, and a second TIFF reader in the codebase
+     * would be a second place for the same bugs to live.
+     *
      * @return array{pixels: array<int>, width: int, height: int, maxValue: int}
      */
-    private function decode(string $tiff): array
+    public function decode(string $tiff): array
     {
         if (strlen($tiff) < 8) {
             throw new RuntimeException('Not a TIFF: file is too short.');
@@ -120,40 +162,108 @@ class TiffPreview
         }
 
         $strips = $this->stripOffsets($tiff, $tags, $little);
-        $expected = $width * $height;
+        $wanted = $width * $height * ($bits === 16 ? 2 : 1);
 
-        $pixels = [];
+        // The strips are concatenated as bytes and nothing is interpreted yet.
+        // This is the line that used to cost an array entry per pixel; it now
+        // costs one copy of the frame, which is what the frame costs.
+        $raw = '';
         foreach ($strips as $offset) {
-            $remaining = $expected - count($pixels);
-            if ($remaining <= 0) break;
+            $need = $wanted - strlen($raw);
+            if ($need <= 0) break;
 
-            $chunk = $bits === 16
-                ? unpack($little ? 'v*' : 'n*', substr($tiff, $offset, $remaining * 2))
-                : unpack('C*', substr($tiff, $offset, $remaining));
-
-            foreach ($chunk as $p) {
-                $pixels[] = $p;
-            }
+            $raw .= substr($tiff, $offset, $need);
         }
 
-        if (count($pixels) < $expected) {
+        if (strlen($raw) < $wanted) {
             throw new RuntimeException('TIFF pixel data is truncated.');
         }
 
-        // WhiteIsZero: invert so the preview is not a photographic negative.
-        if ($photometric === 0) {
-            $max = (1 << $bits) - 1;
-            foreach ($pixels as $i => $p) {
-                $pixels[$i] = $max - $p;
-            }
-        }
-
         return [
-            'pixels' => $pixels,
+            // Always 16-bit little-endian, whatever came in, so that
+            // everything downstream reads one format. WhiteIsZero is inverted
+            // here too — in the same pass, rather than in one of its own.
+            'samples' => $this->toSamples($raw, $bits, $little, $photometric === 0),
             'width' => $width,
             'height' => $height,
             'maxValue' => (1 << $bits) - 1,
         ];
+    }
+
+    /**
+     * How many pixels are turned into a PHP array at a time.
+     *
+     * The point of the rewrite is that pixels live in a binary string, but the
+     * byte-level work still belongs in `unpack`, which is C. So the string is
+     * walked in blocks: `unpack` does the decoding at its own speed, and no
+     * more than one block exists as an array at any moment. Eight thousand
+     * pixels is about a hundred kilobytes — small enough to be invisible next
+     * to the frame itself, large enough that the per-call cost disappears.
+     */
+    public const BLOCK_PIXELS = 8192;
+
+    /**
+     * Normalise raw strip bytes to 16-bit little-endian samples.
+     *
+     * The frames this platform actually handles are already in that form, and
+     * that case returns the string untouched — no decoding, no re-packing, no
+     * second copy. Everything else is converted in blocks.
+     */
+    private function toSamples(string $raw, int $bits, bool $little, bool $invert): string
+    {
+        if ($bits === 16 && $little && !$invert) {
+            return $raw;
+        }
+
+        $ceiling = (1 << $bits) - 1;
+        $step = $bits === 16 ? 2 : 1;
+        $format = $bits === 16 ? ($little ? 'v*' : 'n*') : 'C*';
+        $length = strlen($raw);
+
+        $out = '';
+        for ($at = 0; $at < $length; $at += self::BLOCK_PIXELS * $step) {
+            $values = unpack($format, substr($raw, $at, self::BLOCK_PIXELS * $step));
+
+            if ($invert) {
+                // WhiteIsZero: invert, or the preview is a photographic
+                // negative of the frame.
+                foreach ($values as $i => $v) {
+                    $values[$i] = $ceiling - $v;
+                }
+            }
+
+            $out .= pack('v*', ...$values);
+        }
+
+        return $out;
+    }
+
+    /**
+     * The lowest and highest sample in a frame.
+     *
+     * Public because [FrameMetrics] quotes the reference frame's range beside
+     * its error figures, and a second implementation of "what range is this
+     * frame in" would be a second answer to the question.
+     *
+     * `min()` and `max()` run over a block at C speed; the PHP loop is over
+     * blocks, not pixels.
+     *
+     * @return array{0: int, 1: int}
+     */
+    public function range(string $samples): array
+    {
+        $low = PHP_INT_MAX;
+        $high = 0;
+        $length = strlen($samples);
+
+        for ($at = 0; $at < $length; $at += self::BLOCK_PIXELS * 2) {
+            $values = unpack('v*', substr($samples, $at, self::BLOCK_PIXELS * 2));
+
+            $low = min($low, min($values));
+            $high = max($high, max($values));
+        }
+
+        return [$low === PHP_INT_MAX ? 0 : $low, $high];
     }
 
     /** @return array<int> byte offsets of each strip */
@@ -210,64 +320,92 @@ class TiffPreview
      * Box-average down to [$maxSide]. Averaging rather than nearest-neighbour
      * because dropping pixels makes CT noise look like structure.
      *
-     * @param  array<int>  $pixels
-     * @return array{0: array<int>, 1: int, 2: int}
+     * Only the source rows one output row is built from are unpacked at a
+     * time — `factor` rows, so four of them for a 2048-wide frame going to
+     * 512. The whole frame is never an array, and the result is packed back
+     * into a string as it is produced.
+     *
+     * @param  array{samples: string, width: int, height: int}  $image
+     * @return array{0: string, 1: int, 2: int}
      */
-    private function downscale(array $pixels, int $width, int $height, int $maxSide): array
+    private function downscale(array $image, int $maxSide): array
     {
+        ['samples' => $samples, 'width' => $width, 'height' => $height] = $image;
+
         $longest = max($width, $height);
         if ($longest <= $maxSide) {
-            return [$pixels, $width, $height];
+            return [$samples, $width, $height];
         }
 
         $factor = (int) ceil($longest / $maxSide);
         $outW = (int) max(1, floor($width / $factor));
         $outH = (int) max(1, floor($height / $factor));
 
-        $out = [];
+        $out = '';
         for ($y = 0; $y < $outH; $y++) {
-            $srcYStart = $y * $factor;
+            // The band of source rows this output row averages, unpacked once
+            // and 1-indexed: source pixel ($dy, $sx) is at $dy * $width + $sx + 1.
+            $band = unpack('v*', substr(
+                $samples,
+                $y * $factor * $width * 2,
+                $factor * $width * 2,
+            ));
 
+            $row = '';
             for ($x = 0; $x < $outW; $x++) {
                 $srcXStart = $x * $factor;
                 $sum = 0;
                 $n = 0;
 
                 for ($dy = 0; $dy < $factor; $dy++) {
-                    $row = ($srcYStart + $dy) * $width;
+                    $at = $dy * $width + $srcXStart + 1;
                     for ($dx = 0; $dx < $factor; $dx++) {
-                        $sum += $pixels[$row + $srcXStart + $dx] ?? 0;
+                        // Past the end reads as zero, as it did before: a
+                        // frame whose height is not a multiple of the factor
+                        // leaves the last band short.
+                        $sum += $band[$at + $dx] ?? 0;
                         $n++;
                     }
                 }
 
-                $out[] = $n > 0 ? intdiv($sum, $n) : 0;
+                $row .= pack('v', $n > 0 ? intdiv($sum, $n) : 0);
             }
+
+            $out .= $row;
         }
 
         return [$out, $outW, $outH];
     }
 
     /**
-     * Map to 0-255 across the frame's own range.
+     * Map to 0-255 across the range the caller measured.
      *
-     * @param  array<int>  $pixels
+     * The range arrives as an argument rather than being computed here
+     * because [range()] is the second pass and this is the third; asking for
+     * min and max again would walk the frame one more time for an answer
+     * already in hand.
      */
-    private function windowTo8Bit(array $pixels, int $maxValue): string
+    private function windowTo8Bit(string $samples, int $min, int $max): string
     {
-        $min = min($pixels);
-        $max = max($pixels);
+        $count = intdiv(strlen($samples), 2);
         $span = $max - $min;
 
         // A flat frame carries no information; render it mid-grey rather than
         // dividing by zero.
         if ($span <= 0) {
-            return str_repeat(chr(128), count($pixels));
+            return str_repeat(chr(128), $count);
         }
 
         $out = '';
-        foreach ($pixels as $p) {
-            $out .= chr((int) (($p - $min) * 255 / $span));
+        for ($at = 0; $at < strlen($samples); $at += self::BLOCK_PIXELS * 2) {
+            $values = unpack('v*', substr($samples, $at, self::BLOCK_PIXELS * 2));
+
+            $block = '';
+            foreach ($values as $v) {
+                $block .= chr((int) (($v - $min) * 255 / $span));
+            }
+
+            $out .= $block;
         }
 
         return $out;

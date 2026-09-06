@@ -47,8 +47,23 @@ class QueueHealth
 
         $waited = max(0, time() - $oldest);
 
+        // A reserved job is a worker with its hands full, and that is the
+        // ordinary state of a busy queue rather than a broken one. Without
+        // this check a single worker part-way through a two-minute
+        // interpolation made every job behind it look abandoned, and the
+        // platform told researchers nothing had picked their work up while it
+        // was in fact working through their backlog. Crying wolf here is worse
+        // than saying nothing: the one time the message is true, it has
+        // already been taught to be ignored.
+        //
+        // Not proof of life for ever — a worker killed mid-job leaves its row
+        // reserved, which is what `--timeout` and `queue:retry` exist for. It
+        // is proof that *something claimed work*, which is the question being
+        // asked here.
+        $busy = DB::table('jobs')->whereNotNull('reserved_at')->exists();
+
         return [
-            'stalled' => $waited >= self::STALL_SECONDS,
+            'stalled' => !$busy && $waited >= self::STALL_SECONDS,
             'waiting' => $waiting,
             'oldest_wait_seconds' => $waited,
         ];
@@ -76,5 +91,36 @@ class QueueHealth
         return "Nothing has picked this job up for {$minutes} minute(s). "
             . 'The processing worker is probably not running — an administrator '
             . 'needs to start it with `npm run serve:all` in the backend folder.';
+    }
+
+    /**
+     * The same fact, for someone who cannot act on it.
+     *
+     * [message()] names a command and a folder, which is exactly right for the
+     * administrator who has to type it and exactly wrong on a researcher's
+     * screen: it reads as an error they caused, in a vocabulary they have no
+     * use for, sitting above work they cannot get on with.
+     *
+     * The fact itself still has to be said. Silence here would put a researcher
+     * back where this class exists to rescue them from — watching a clock icon
+     * that is never going to change. So the wait is reported, the cause is
+     * named as something on our side, and the instruction is not.
+     *
+     * @param  array{stalled: bool, waiting: int, oldest_wait_seconds: int}|null  $state
+     */
+    public function researcherMessage(?array $state = null): ?string
+    {
+        $state ??= $this->inspect();
+
+        if (!$state['stalled']) {
+            return null;
+        }
+
+        $minutes = max(1, (int) round($state['oldest_wait_seconds'] / 60));
+
+        return "Processing has not started after {$minutes} minute(s). "
+            . 'This is a problem on the platform rather than with your upload. '
+            . 'Your frames are safe, and the run continues on its own once '
+            . 'processing resumes.';
     }
 }

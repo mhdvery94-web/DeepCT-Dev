@@ -82,4 +82,27 @@ return [
     */
     'max_weights_bytes' => (int) env('TRAINING_MAX_WEIGHTS_BYTES', 400 * 1024 * 1024),
 
+    /*
+    |---------------------------------------------------------------------------
+    | Dataset retention
+    |---------------------------------------------------------------------------
+    |
+    | Days a hosted dataset archive is kept, measured from the last time the
+    | dataset was involved in anything — not from when it was uploaded.
+    |
+    | That distinction is the whole design. A dataset is uploaded to this
+    | platform rather than fetched per-run precisely so it can be reused, so a
+    | clock starting at upload would delete the archive somebody trains against
+    | every week. A dataset with a job still queued or running is never swept
+    | at all, however old.
+    |
+    | Thirty days because a research project's rhythm is weeks, not hours. The
+    | prediction window is 24 hours and would be plainly wrong here: those are
+    | results someone downloads once, these are inputs someone comes back to.
+    |
+    | Zero disables the sweep.
+    |
+    */
+    'dataset_retention_days' => (int) env('TRAINING_DATASET_RETENTION_DAYS', 30),
+
 ];

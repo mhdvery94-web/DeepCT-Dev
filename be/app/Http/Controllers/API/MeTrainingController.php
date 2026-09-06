@@ -48,9 +48,15 @@ class MeTrainingController extends Controller
             ->orderByDesc('id')
             ->paginate($perPage);
 
+        $queue = $this->queuePositions();
+
         return response()->json([
             'success' => true,
-            'data' => collect($jobs->items())->map(fn ($j) => $this->serialise($j))->all(),
+            'data' => collect($jobs->items())
+                ->map(fn ($j) => $this->serialise($j) + [
+                    'queue_position' => $queue['positions'][$j->id] ?? null,
+                ])
+                ->all(),
             'pagination' => [
                 'total' => $jobs->total(),
                 'per_page' => $jobs->perPage(),
@@ -61,8 +67,46 @@ class MeTrainingController extends Controller
             // never move should say so rather than sit at `queued` in silence.
             'meta' => [
                 'trainer_available' => app(TrainerDispatcher::class)->pickTrainer() !== null,
+                'queued_total' => $queue['queued'],
+                'running_total' => $queue['running'],
             ],
         ]);
+    }
+
+    /**
+     * Where each queued run sits in line, and how busy the line is.
+     *
+     * Everyone's runs, not one account's: a position counted within your own
+     * uploads would say "1" while five other people were ahead of you. Same
+     * rule as the prediction queue, for the same reason.
+     *
+     * **No wait estimate.** The prediction board can offer one because every
+     * run is the same shape of work; a training run is however many epochs the
+     * researcher asked for, so the job ahead of you might take four minutes or
+     * four hours. A number with that much spread is worse than no number —
+     * people plan around it and then it is wrong. The position is real, and it
+     * is what was actually asked for.
+     *
+     * @return array{positions: array<int, int>, queued: int, running: int}
+     */
+    private function queuePositions(): array
+    {
+        $positions = [];
+        $place = 0;
+
+        foreach (
+            TrainingJob::where('status', 'queued')
+                ->orderBy('created_at')
+                ->pluck('id') as $id
+        ) {
+            $positions[$id] = ++$place;
+        }
+
+        return [
+            'positions' => $positions,
+            'queued' => $place,
+            'running' => TrainingJob::where('status', 'running')->count(),
+        ];
     }
 
     /**
@@ -158,12 +202,15 @@ class MeTrainingController extends Controller
         return response()->json([
             'success' => true,
             'data' => $this->serialise($job) + [
-                'hyperparameters' => $job->hyperparameters ?? [],
+                // Object, not array — the same reason as [serialise()]'s
+                // `metrics`, one line of which this was the twin all along.
+                'hyperparameters' => (object) ($job->hyperparameters ?? []),
                 'error_message' => $job->error_message,
                 'worker_label' => $job->worker_label,
                 'history' => $history->map(fn ($m) => [
                     'epoch' => $m->epoch,
-                    'metrics' => $m->metrics,
+                    // Object, not array — see the note in [serialise()].
+                    'metrics' => (object) ($m->metrics ?? []),
                     'recorded_at' => $m->recorded_at?->toIso8601String(),
                 ])->all(),
             ],
@@ -252,9 +299,19 @@ class MeTrainingController extends Controller
     {
         $job = $this->ownedJob($request, $id);
 
+        $dataset = TrainingDataset::find($job->training_dataset_id);
+
         return response()->json([
             'success' => true,
             'data' => $this->archiveFrames($job)->values(),
+            // An archive swept by `training:cleanup` leaves `archiveFrames()`
+            // returning an empty collection, which reads exactly like an
+            // archive that never held any frames. Say which it is: the run's
+            // numbers are still here, the frames behind them are not.
+            'meta' => [
+                'archive_deleted' => (bool) $dataset?->archiveExpired(),
+                'archive_deleted_at' => $dataset?->archive_deleted_at?->toIso8601String(),
+            ],
         ]);
     }
 
@@ -381,7 +438,14 @@ class MeTrainingController extends Controller
             'progress_percent' => $job->total_epochs > 0
                 ? round($job->current_epoch / $job->total_epochs * 100, 1)
                 : 0,
-            'metrics' => $job->metrics ?? [],
+            // An object, never an array — the third time this exact edge has
+            // bitten. PHP has one array type and `json_encode` renders the
+            // empty one as `[]`, so a run that has reported nothing yet reached
+            // the client as a JSON list where a map was declared. Dart's
+            // `as Map?` on a List **throws** rather than yielding null, and the
+            // screen's catch only covered `ApiException` — so MY RUNS span for
+            // ever, on web and on the phone, with nothing anywhere saying why.
+            'metrics' => (object) ($job->metrics ?? []),
             'dataset' => $job->dataset ? [
                 'id' => $job->dataset->id,
                 'name' => $job->dataset->name,

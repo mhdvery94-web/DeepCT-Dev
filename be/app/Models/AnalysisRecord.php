@@ -19,6 +19,7 @@ class AnalysisRecord extends EloquentModel
         'job_id',
         'user_id',
         'model_id',
+        'rerun_of_id',
         'file_name',
         'input_folder',
         'output_folder',
@@ -27,6 +28,8 @@ class AnalysisRecord extends EloquentModel
         't2_image_path',
         't1_result_path',
         'interpolated_frames',
+        'frame_provenance',
+        'validation',
         'error_message',
         'input_files_count',
         'output_files_count',
@@ -44,6 +47,8 @@ class AnalysisRecord extends EloquentModel
      */
     protected $casts = [
         'interpolated_frames' => 'array',
+        'frame_provenance' => 'array',
+        'validation' => 'array',
         'time_scalar' => 'decimal:3',
         'input_files_count' => 'integer',
         'output_files_count' => 'integer',

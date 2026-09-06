@@ -11,6 +11,8 @@ use App\Models\TrainingJob;
 use App\Models\UserActivity;
 use App\Services\IntakeException;
 use App\Services\PredictionIntake;
+use App\Services\QueueBoard;
+use App\Services\StorageGuard;
 use App\Services\TrainerDispatcher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -117,6 +119,18 @@ class PredictionUploadController extends Controller
                     503
                 );
             }
+        }
+
+        // Before a single byte travels. The declared size is known here, and
+        // refusing now costs a round trip; refusing after fifty megabytes have
+        // arrived costs the upload, and refusing *never* costs the machine.
+        $refusal = app(StorageGuard::class)->refusalFor((int) $validated['total_size']);
+
+        if ($refusal !== null) {
+            // 507, not 400: nothing is wrong with the request. The server has
+            // nowhere to put it, and a client should not retry with a smaller
+            // file and expect a different answer.
+            return $this->error($refusal, 507);
         }
 
         $uploadId = (string) Str::uuid();
@@ -524,11 +538,14 @@ class PredictionUploadController extends Controller
         ], 201);
     }
 
-    private function queuePosition(AnalysisRecord $record): int
+    /**
+     * Third copy of this, now deleted. [QueueBoard] owns the ordering, and a
+     * finalised upload that is still `uploaded` gets null rather than a place
+     * in a line it has not joined.
+     */
+    private function queuePosition(AnalysisRecord $record): ?int
     {
-        return AnalysisRecord::where('status', 'pending')
-            ->where('created_at', '<', $record->created_at)
-            ->count() + 1;
+        return app(QueueBoard::class)->positionOf($record);
     }
 
     private function error(string $message, int $status)

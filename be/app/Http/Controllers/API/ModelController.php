@@ -63,6 +63,10 @@ class ModelController extends Controller
             'endpoint_url' => 'required|url|max:500',
             'description' => 'nullable|string',
             'file_path' => 'nullable|string|max:255',
+            // Sent to the worker as `Authorization: Bearer`. Write-only: it
+            // goes in here and is never returned by any endpoint.
+            'auth_token' => 'nullable|string|max:500',
+            'verify_tls' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -77,6 +81,12 @@ class ModelController extends Controller
             'version' => $request->version,
             'kind' => $request->input('kind', 'inference'),
             'endpoint_url' => $request->endpoint_url,
+            'auth_token' => $request->input('auth_token') ?: null,
+            // Defaults false to match every worker registered before this
+            // existed; the admin form offers it checked when creating, so a
+            // new endpoint gets the secure answer without an old one changing
+            // behaviour underneath it.
+            'verify_tls' => $request->boolean('verify_tls'),
             'description' => $request->description,
             // Models are deployed remotely (Kaggle/Colab) and reached via
             // endpoint_url, so there is no local weights file to reference.
@@ -137,6 +147,12 @@ class ModelController extends Controller
             'version' => 'sometimes|required|string|max:50',
             'endpoint_url' => 'sometimes|required|url|max:500',
             'description' => 'nullable|string',
+            // Omitted leaves the stored secret alone; an empty string clears
+            // it. Those are different intentions and a form that cannot tell
+            // them apart would wipe the credential every time somebody fixed
+            // a typo in the description.
+            'auth_token' => 'sometimes|nullable|string|max:500',
+            'verify_tls' => 'sometimes|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -148,6 +164,16 @@ class ModelController extends Controller
 
         $oldData = $model->only(['name', 'version', 'endpoint_url']);
         $model->update($request->only(['name', 'version', 'endpoint_url', 'description']));
+
+        // Handled apart from the mass update so "not sent" and "sent empty"
+        // stay distinguishable. `only()` would collapse both to absent.
+        if ($request->has('auth_token')) {
+            $model->update(['auth_token' => $request->input('auth_token') ?: null]);
+        }
+
+        if ($request->has('verify_tls')) {
+            $model->update(['verify_tls' => $request->boolean('verify_tls')]);
+        }
 
         // Log activity
         UserActivity::create([
@@ -321,9 +347,8 @@ class ModelController extends Controller
             // JSON here returns 422, so we upload two small generated frames.
             $sampleTif = $this->makeSampleTif();
 
-            $response = Http::timeout(120)
-                ->withoutVerifying()  // ngrok/Colab certificates
-                ->withHeaders(['ngrok-skip-browser-warning' => 'true'])
+            $response = app(WorkerRequest::class)
+                ->for($model, 120)
                 ->attach('file_t0', $sampleTif, 'test_t0.tif', ['Content-Type' => 'image/tiff'])
                 ->attach('file_t2', $sampleTif, 'test_t2.tif', ['Content-Type' => 'image/tiff'])
                 ->post($model->endpoint_url, [

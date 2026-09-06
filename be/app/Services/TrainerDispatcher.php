@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Model;
 use App\Models\TrainingJob;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -44,6 +45,8 @@ class TrainerDispatcher
             );
         }
 
+        $trainerUrl = $this->trainEndpoint($trainerUrl);
+
         $token = config('training.worker_token');
 
         if (empty($token)) {
@@ -73,15 +76,36 @@ class TrainerDispatcher
         $dataset = $job->dataset;
 
         try {
-            $response = Http::timeout((int) config('training.dispatch_timeout', 30))
-                ->withoutVerifying() // tunnel certificates
-                ->withHeaders(['ngrok-skip-browser-warning' => 'true'])
+            // `$trainer` is null when the address came from config or from the
+            // job rather than from the registry; there is no secret to send in
+            // that case. See WorkerRequest.
+            $response = app(WorkerRequest::class)
+                ->for($trainer, (int) config('training.dispatch_timeout', 30))
                 ->post($trainerUrl, [
                     'job_id' => $job->id,
                     'name' => $job->name,
                     'total_epochs' => $job->total_epochs,
-                    'resume_from_epoch' => $job->current_epoch,
-                    'hyperparameters' => $job->hyperparameters ?? [],
+                    // Cast, because a freshly created job does not carry this
+                    // attribute at all. `current_epoch` is NOT NULL DEFAULT 0
+                    // in the database, but MySQL applies that on insert and
+                    // never tells Eloquent: the model `create()` returns holds
+                    // only what was passed to it, so reading the column back
+                    // gives null until something calls `fresh()`.
+                    //
+                    // `resume_from_epoch: int = 0` on the trainer is not
+                    // Optional, so that null was a 422 on **every** run a
+                    // researcher started, while a job that had been
+                    // round-tripped through the database went through — which
+                    // is exactly why it survived being tested by hand. The
+                    // same trap took `verify_tls` a day earlier.
+                    'resume_from_epoch' => (int) ($job->current_epoch ?? 0),
+                    // An object, never an array. PHP has one array type and
+                    // json_encode renders the empty one as `[]`, which Pydantic
+                    // refuses for a `dict` field — so a run left at its default
+                    // hyperparameters was rejected 422 while a run with even one
+                    // of them set went through. Casting settles it at the edge,
+                    // where the JSON is made.
+                    'hyperparameters' => (object) ($job->hyperparameters ?? []),
                     'dataset' => [
                         'id' => $dataset?->id,
                         'name' => $dataset?->name,
@@ -106,7 +130,11 @@ class TrainerDispatcher
         }
 
         if (!$response->successful()) {
-            return $this->fail("The trainer refused the job (HTTP {$response->status()}).", 502);
+            return $this->fail(
+                "The trainer refused the job (HTTP {$response->status()})."
+                    . $this->whyRefused($response),
+                502
+            );
         }
 
         // Deliberately still `queued`, not `running`. The trainer says it
@@ -148,6 +176,87 @@ class TrainerDispatcher
     private function fail(string $message, int $status): array
     {
         return ['ok' => false, 'status' => $status, 'message' => $message];
+    }
+
+    /**
+     * The trainer's own account of why it said no.
+     *
+     * "The trainer refused the job (HTTP 422)" names a number and throws away
+     * the only part that could be acted on. FastAPI answers a validation
+     * failure with `{"detail":[{"loc":["body","hyperparameters"],"msg":"Input
+     * should be a valid dictionary"}]}` — which says exactly which field and
+     * exactly what was wrong with it, and we were discarding it and then
+     * guessing. Twice.
+     *
+     * Kept short and appended rather than replacing the status: the number
+     * still separates "refused" from "unreachable", and the sentence says what
+     * to change.
+     */
+    private function whyRefused(Response $response): string
+    {
+        $detail = $response->json('detail');
+
+        if (is_string($detail) && $detail !== '') {
+            return ' ' . $this->trim($detail);
+        }
+
+        // The validation-error shape: a list of {loc, msg}.
+        if (is_array($detail)) {
+            $parts = [];
+
+            foreach ($detail as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+
+                $where = is_array($item['loc'] ?? null)
+                    // `["body", "hyperparameters"]` reads better as
+                    // `body.hyperparameters` than as a printed array.
+                    ? implode('.', array_map('strval', $item['loc']))
+                    : null;
+
+                $message = $item['msg'] ?? null;
+
+                if ($message === null) {
+                    continue;
+                }
+
+                $parts[] = $where === null ? $message : "{$where}: {$message}";
+            }
+
+            if ($parts !== []) {
+                return ' ' . $this->trim(implode('; ', $parts));
+            }
+        }
+
+        // Not a FastAPI validation error — an ngrok error page, a plain string,
+        // an empty body. Whatever it is, the first line of it beats nothing.
+        $body = trim((string) $response->body());
+
+        return $body === '' ? '' : ' ' . $this->trim($body);
+    }
+
+    /**
+     * The address a job is actually POSTed to.
+     *
+     * The trainer notebook prints its tunnel root and says "register this as
+     * the trainer URL", so that is what an administrator pastes. But the route
+     * is `POST /train`, and a POST to the root is answered **405** by FastAPI —
+     * a refusal that reads like the trainer rejecting the job rather than the
+     * platform knocking on the wrong door. Every run sat at `queued`.
+     *
+     * An inference endpoint is registered with its path (`…/predict`) because
+     * that is what the prediction notebook prints, so both conventions are in
+     * the registry at once and neither is wrong. Append the path only when
+     * none was given, and a URL that already names one is left alone.
+     */
+    public function trainEndpoint(string $url): string
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+
+        return in_array(trim((string) $path), ['', '/'], true)
+            ? rtrim($url, '/') . '/train'
+            : $url;
     }
 
     private function isUnreachableFromOutside(string $callback): bool

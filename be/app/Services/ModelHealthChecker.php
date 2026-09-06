@@ -72,9 +72,8 @@ class ModelHealthChecker
         try {
             $startTime = microtime(true);
 
-            $response = Http::timeout(self::TIMEOUT_SECONDS)
-                ->withoutVerifying() // ngrok/Colab certificates
-                ->withHeaders(['ngrok-skip-browser-warning' => 'true'])
+            $response = app(WorkerRequest::class)
+                ->for($model, self::TIMEOUT_SECONDS)
                 ->get($this->probeUrl($model->endpoint_url));
 
             return $this->interpret(
@@ -130,11 +129,14 @@ class ModelHealthChecker
 
         $startTime = microtime(true);
 
+        // A pool hands out its own builder, so the per-model settings are
+        // applied to that rather than built from the facade — but they are the
+        // same settings, from the same place, as every other worker call.
+        $worker = app(WorkerRequest::class);
+
         $responses = Http::pool(fn (Pool $pool) => array_map(
-            fn (Model $model) => $pool
-                ->timeout(self::TIMEOUT_SECONDS)
-                ->withoutVerifying()
-                ->withHeaders(['ngrok-skip-browser-warning' => 'true'])
+            fn (Model $model) => $worker
+                ->configure($pool->timeout(self::TIMEOUT_SECONDS), $model)
                 ->get($this->probeUrl($model->endpoint_url)),
             $probeable
         ));

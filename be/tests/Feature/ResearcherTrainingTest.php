@@ -111,6 +111,133 @@ class ResearcherTrainingTest extends TestCase
         $response->assertJsonPath('data.trainer.name', 'Kaggle trainer');
     }
 
+    /**
+     * The notebook prints its tunnel root and says "register this as the
+     * trainer URL", so that is what gets pasted — but the route is
+     * `POST /train`, and FastAPI answers a POST to the root with **405**.
+     * Every researcher-started run failed that way and stayed at `queued`,
+     * with a message that read as the trainer refusing the job rather than
+     * the platform knocking on the wrong door.
+     */
+    public function test_a_bare_trainer_url_is_sent_to_the_train_route(): void
+    {
+        Http::fake(['*' => Http::response(['accepted' => true], 200)]);
+
+        Model::create([
+            'name' => 'Kaggle trainer',
+            'version' => 'v1',
+            'kind' => 'trainer',
+            // As the notebook prints it: no path.
+            'endpoint_url' => 'https://trainer.example',
+            'status' => 'online',
+            'is_active' => true,
+        ]);
+
+        $this->apiAs($this->token($this->researcher))
+            ->post('/api/me/training/jobs', [
+                'name' => 'Bare root',
+                'total_epochs' => 2,
+                'archive' => $this->archive(),
+            ], ['Accept' => 'application/json'])
+            ->assertStatus(201);
+
+        Http::assertSent(
+            fn ($request) => $request->url() === 'https://trainer.example/train'
+        );
+    }
+
+    /** A URL that already names a path is nobody's business to rewrite. */
+    public function test_a_trainer_url_with_a_path_is_left_alone(): void
+    {
+        Http::fake(['*' => Http::response(['accepted' => true], 200)]);
+        $this->registerTrainer();
+
+        $this->apiAs($this->token($this->researcher))
+            ->post('/api/me/training/jobs', [
+                'name' => 'Explicit path',
+                'total_epochs' => 2,
+                'archive' => $this->archive(),
+            ], ['Accept' => 'application/json'])
+            ->assertStatus(201);
+
+        Http::assertSent(
+            fn ($request) => $request->url() === 'https://trainer.example/train'
+        );
+    }
+
+    /**
+     * PHP has one array type, and `json_encode` renders the empty one as `[]`.
+     * The trainer declares `hyperparameters: dict`, so Pydantic rejected every
+     * run left at its defaults with a 422, while a run with one setting filled
+     * in went through — a failure that turned on a field nobody had touched.
+     */
+    /**
+     * `current_epoch` is `NOT NULL DEFAULT 0` in the database, and MySQL
+     * applies that on insert without telling Eloquent — the model `create()`
+     * hands back holds only the attributes it was given, so reading the column
+     * off it gives **null** until something calls `fresh()`.
+     *
+     * The trainer declares `resume_from_epoch: int = 0`, which is not
+     * Optional. So every run a researcher started was refused 422, while the
+     * same job dispatched again later — by then round-tripped through the
+     * database — went through. That asymmetry is why it survived being tested
+     * by hand and had to be caught here instead.
+     */
+    public function test_the_starting_epoch_is_a_number_on_a_brand_new_run(): void
+    {
+        Http::fake(['*' => Http::response(['accepted' => true], 200)]);
+        $this->registerTrainer();
+
+        $this->apiAs($this->token($this->researcher))
+            ->post('/api/me/training/jobs', [
+                'name' => 'Fresh run',
+                'total_epochs' => 4,
+                'archive' => $this->archive(),
+            ], ['Accept' => 'application/json'])
+            ->assertStatus(201);
+
+        Http::assertSent(function ($request) {
+            // On the wire, not in the decoded array: null and 0 both come back
+            // as falsy in PHP, and it is the JSON the trainer parses.
+            $this->assertStringContainsString(
+                '"resume_from_epoch":0', $request->body()
+            );
+            $this->assertStringNotContainsString(
+                '"resume_from_epoch":null', $request->body()
+            );
+
+            return true;
+        });
+    }
+
+    public function test_default_hyperparameters_are_sent_as_an_object(): void
+    {
+        Http::fake(['*' => Http::response(['accepted' => true], 200)]);
+        $this->registerTrainer();
+
+        $this->apiAs($this->token($this->researcher))
+            ->post('/api/me/training/jobs', [
+                'name' => 'No hyperparameters',
+                'total_epochs' => 2,
+                'archive' => $this->archive(),
+            ], ['Accept' => 'application/json'])
+            ->assertStatus(201);
+
+        Http::assertSent(function ($request) {
+            // Asserting on the decoded body would hide the difference: both
+            // shapes come back as an empty PHP array. The wire format is the
+            // whole point.
+            $this->assertStringContainsString(
+                '"hyperparameters":{}', $request->body()
+            );
+            $this->assertStringNotContainsString(
+                '"hyperparameters":[]', $request->body()
+            );
+
+            return true;
+        });
+    }
+
     /** No trainer registered is not a failed request — the run is recorded. */
     public function test_a_run_is_queued_even_with_no_trainer_available(): void
     {
@@ -275,5 +402,35 @@ class ResearcherTrainingTest extends TestCase
 
         $response->assertJsonCount(1, 'data');
         $response->assertJsonPath('data.0.name', 'deepCT');
+    }
+
+    /**
+     * The detail endpoint, not the dispatcher.
+     *
+     * `TrainerDispatcher` was taught to cast in 1.29.0 and the line beside
+     * this one never was, so a run started without hyperparameters reached the
+     * client as `"hyperparameters":[]` where a map is declared. Dart's `as
+     * Map?` on a List throws rather than yielding null; `_map()` in
+     * `models/training.dart` happens to tolerate any shape, so nothing hangs
+     * today — the wire is wrong, and the next reader will not be so forgiving.
+     */
+    public function test_hyperparameters_reach_the_client_as_an_object(): void
+    {
+        $job = TrainingJob::create([
+            'name' => 'No hyperparameters',
+            'training_dataset_id' => $this->makeDataset($this->researcher),
+            'total_epochs' => 3,
+            'status' => 'queued',
+            'created_by' => $this->researcher->id,
+        ]);
+
+        $response = $this->apiAs($this->token($this->researcher))
+            ->getJson("/api/me/training/jobs/{$job->id}")
+            ->assertOk();
+
+        // On the wire: both shapes decode to the same empty PHP array, so an
+        // assertion on the decoded body would pass either way.
+        $this->assertStringContainsString('"hyperparameters":{}', $response->getContent());
+        $this->assertStringNotContainsString('"hyperparameters":[]', $response->getContent());
     }
 }
