@@ -21,7 +21,11 @@ import 'frame_gallery_screen.dart';
 /// everything has settled — there is no push channel, and a job takes ~20s per
 /// generated frame.
 class PredictionHistoryScreen extends StatefulWidget {
-  const PredictionHistoryScreen({super.key});
+  /// Injectable so a widget test can drive the screen without a network
+  /// client. Production builds pass nothing and get the real service.
+  final PredictionService? service;
+
+  const PredictionHistoryScreen({super.key, this.service});
 
   @override
   State<PredictionHistoryScreen> createState() =>
@@ -29,7 +33,7 @@ class PredictionHistoryScreen extends StatefulWidget {
 }
 
 class _PredictionHistoryScreenState extends State<PredictionHistoryScreen> {
-  final PredictionService _service = PredictionService();
+  late final PredictionService _service = widget.service ?? PredictionService();
 
   static const Duration _pollInterval = Duration(seconds: 10);
 
@@ -188,6 +192,25 @@ class _PredictionHistoryScreenState extends State<PredictionHistoryScreen> {
     }
   }
 
+  /// Queue an upload that was never started.
+  ///
+  /// The server answers 409 if something already started it — two tabs open on
+  /// the same record, or a double tap — and 410 once the files have expired.
+  /// Both are worth showing verbatim: they say why nothing happened.
+  Future<void> _start(Prediction prediction) async {
+    try {
+      await _service.start(prediction.id);
+      await _load(showSpinner: false);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppTheme.error),
+      );
+      // Whatever the reason, the record is no longer what this screen drew.
+      await _load(showSpinner: false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isNarrow = MediaQuery.of(context).size.width < 600;
@@ -274,6 +297,7 @@ class _PredictionHistoryScreenState extends State<PredictionHistoryScreen> {
                 onDownloadResults: () => _download(prediction, 'results'),
                 onDownloadComplete: () => _download(prediction, 'complete'),
                 onDelete: () => _confirmDelete(prediction),
+                onStart: () => _start(prediction),
               );
             },
           ),
@@ -301,6 +325,7 @@ class _PredictionCard extends StatelessWidget {
   final VoidCallback onDownloadResults;
   final VoidCallback onDownloadComplete;
   final VoidCallback onDelete;
+  final VoidCallback onStart;
 
   const _PredictionCard({
     required this.prediction,
@@ -310,6 +335,7 @@ class _PredictionCard extends StatelessWidget {
     required this.onDownloadResults,
     required this.onDownloadComplete,
     required this.onDelete,
+    required this.onStart,
   });
 
   (Color, IconData, String) get _statusStyle {
@@ -321,6 +347,11 @@ class _PredictionCard extends StatelessWidget {
     }
     if (prediction.isProcessing) {
       return (AppTheme.accent, Icons.autorenew, 'PROCESSING');
+    }
+    // An upload nobody started is not queued, and calling it queued sends the
+    // researcher away to wait for a worker that will never come for it.
+    if (prediction.isUploaded) {
+      return (AppTheme.warning, Icons.pause_circle_outline, 'NOT STARTED');
     }
     return (AppTheme.warning, Icons.schedule, 'QUEUED');
   }
@@ -479,14 +510,28 @@ class _PredictionCard extends StatelessWidget {
             ),
           ] else if (!prediction.isActive && !downloading) ...[
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: onDelete,
-                icon: const Icon(Icons.delete_outline, size: 16),
-                label: const Text('DELETE'),
-                style: TextButton.styleFrom(foregroundColor: AppTheme.error),
-              ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                // An upload the researcher never started. `PredictionIntake`
+                // files it as `uploaded` and no worker will ever claim it, so
+                // without this the record sits here describing itself as
+                // waiting and waits forever.
+                if (prediction.isUploaded)
+                  ElevatedButton.icon(
+                    key: Key('prediction-start-${prediction.id}'),
+                    onPressed: onStart,
+                    icon: const Icon(Icons.play_arrow, size: 16),
+                    label: const Text('START ANALYSIS'),
+                  ),
+                TextButton.icon(
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  label: const Text('DELETE'),
+                  style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+                ),
+              ],
             ),
           ],
         ],

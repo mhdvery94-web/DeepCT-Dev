@@ -33,6 +33,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.40.0] - 2026-09-07
+
+### Unggahan yang tidak pernah dimulai, dan label yang membohonginya
+
+Seorang peneliti mengunggah arsip, lalu berpindah tab sebelum menekan tombol
+mulai. Berkasnya menggantung. Di layar hasil ia tampil dengan label **QUEUED**,
+sehingga peneliti menunggu pekerja yang tidak akan pernah datang menjemputnya.
+
+Penyebabnya dua hal yang berdiri sendiri.
+
+**Pertama, tidak ada cara memulainya dari layar hasil.** `PredictionIntake`
+mencatat unggahan dengan status `uploaded`, dan `POST /predictions/{id}/start`
+sudah ada sejak lama beserta pasangannya di sisi klien,
+`PredictionService.start()`. Yang memanggilnya hanya layar unggah. Begitu
+peneliti meninggalkan layar itu, satu-satunya jalan menuju tombol tersebut ikut
+hilang, padahal catatannya tetap terlihat di daftar hasil.
+
+Layar hasil sekarang menawarkan **START ANALYSIS** pada catatan berstatus
+`uploaded`. Endpoint-nya menjawab 409 bila sesuatu sudah memulainya — dua tab
+pada catatan yang sama, atau ketukan ganda di telepon — dan 410 setelah
+berkasnya kedaluwarsa. Keduanya ditampilkan apa adanya, sebab keduanya
+menjelaskan mengapa tidak terjadi apa-apa.
+
+**Kedua, lencananya menyebut keadaan yang salah.** Pemetaan status jatuh ke
+`QUEUED` untuk apa pun yang bukan selesai, gagal, atau sedang berjalan. Sebuah
+unggahan yang belum dimulai memenuhi syarat itu, sehingga ia mengaku antre
+padahal tidak ada antrean yang memuatnya. Sekarang ia berbunyi **NOT STARTED**,
+dan catatan yang benar-benar antre tetap berbunyi `QUEUED` — ada uji yang
+menjaga kedua sisi pembedaan itu.
+
+`PredictionHistoryScreen` menerima `PredictionService` lewat konstruktor agar
+layarnya dapat diuji tanpa jaringan. Uji Flutter naik dari 269 menjadi **274**.
+
+---
+
 ## [1.39.0] - 2026-09-04
 
 ### UTF-8 yang termakan tool, di delapan berkas
