@@ -145,7 +145,7 @@ the status code alone never confirms success.
 ```bash
 cd be && php artisan test        # 368 tests, 1,452 assertions
 cd fe && flutter analyze         # must be clean
-cd fe && flutter test            # 269 tests across 32 files
+cd fe && flutter test            # 274 tests across 33 files
 ```
 
 The backend suite runs against MySQL rather than SQLite: several migrations use

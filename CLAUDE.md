@@ -304,7 +304,7 @@ The PHP guard extends PHPUnit's `TestCase`, not Laravel's, so it uses
 ```bash
 cd be && php artisan test          # 368 tests, needs the db_aict_test database
 cd fe && flutter analyze           # must be clean
-cd fe && flutter test              # 269 tests
+cd fe && flutter test              # 274 tests
 cd fe && flutter build apk --release
 ```
 

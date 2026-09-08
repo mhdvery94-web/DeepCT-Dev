@@ -593,7 +593,7 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — passing (269 tests as of 4 September 2026)
+- ✅ `flutter test` — passing (274 tests as of 8 September 2026)
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
@@ -616,7 +616,7 @@ flutter build appbundle --release
   never sits in the heap
 
 ### Testing
-The suite is **269 tests across 32 files**, and `flutter analyze` is clean.
+The suite is **274 tests across 33 files**, and `flutter analyze` is clean.
 Both were last run on 4 September 2026.
 
 The file was Flutter's counter-app scaffold until 15 August 2026, and it
@@ -706,4 +706,4 @@ server-side previews, and both upload and download report progress.
 
 **Last Updated:** 4 September 2026  
 **Flutter Version:** 3.44+  
-**Status:** Active development. `flutter analyze` clean, 269 tests passing.
+**Status:** Active development. `flutter analyze` clean, 274 tests passing.

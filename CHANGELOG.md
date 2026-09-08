@@ -33,6 +33,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.41.0] - 2026-09-08
+
+### Angka di dokumen diperiksa ulang terhadap kenyataannya
+
+Tujuh klaim numerik di lima berkas tidak lagi sesuai keadaan, dan sebagiannya
+saling bertentangan di dalam satu berkas yang sama.
+
+`ARCHITECTURE.md` menyebut **13 tabel** pada diagramnya dan **18 tabel** pada
+uraian skemanya. Hitungan sebenarnya, diambil dari `Schema::create` di seluruh
+migrasi, adalah **23 tabel unik** — 15 milik aplikasi dan 8 bawaan kerangka.
+`API.md` menyebut 103 endpoint sementara `route:list --path=api` melaporkan
+**104**. `CLAUDE.md`, `README.md`, dan `fe/README.md` masih menyebut 269 uji di
+32 berkas, padahal versi 1.40.0 menaikkannya menjadi **274 di 33 berkas**.
+
+Naskah skripsi ikut membawa angka yang keliru: BAB IV menyatakan 41 migrasi
+membentuk "22 tabel di luar tabel bawaan kerangka", dua kali. Yang benar 23
+tabel dengan 15 di antaranya milik aplikasi.
+
+### `handoff.md` ditulis ulang
+
+Berkas itu masih dibuka dengan kalimat **"Belum ada satu commit pun"** dan
+menyebut 124 berkas menunggu. Sejak 8 September seluruhnya sudah di-commit dan
+di-push — 60 commit ke `deepCT-AI`, dan `main` sinkron dengan `origin/main`.
+
+Isinya sekarang menyatakan tempat sistem ini benar-benar berjalan, yang tidak
+sama dengan rancangan sasaran pada naskah proposal: orkestrasi di **VPS**,
+inferensi dan pelatihan di **Kaggle**, klien web di **Vercel**, bangun dan
+sebar oleh **GitHub Actions**. Penyiapan di BRIN belum dilakukan dan volume NAS
+belum pernah ada, sehingga `StorageGuard` belum teruji terhadap perangkat yang
+sebenarnya.
+
+### Landing page kosong: sasarannya benar, datanya yang tidak ada
+
+Klien di Vercel dikompilasi menunjuk VPS, dan itu memang sasaran yang benar.
+Bundelnya pun mutakhir, tertanggal dua jam sesudah push. Yang kosong adalah
+basis data VPS-nya: `/api/health` menjawab dengan benar sementara `/api/news`
+mengembalikan nol baris, sehingga halaman itu menampilkan apa adanya.
+
+Alamat API tidak berasal dari dasbor Vercel melainkan dari variabel repositori
+GitHub, dengan urutan `NGROK_BE_VPS` → `NGROK_BE` → `API_BASE_URL` → bawaan,
+dan ia dikompilasi ke dalam bundel sehingga mengubah variabelnya tidak
+berpengaruh sampai ada build baru.
+
+---
+
 ## [1.40.0] - 2026-09-07
 
 ### Unggahan yang tidak pernah dimulai, dan label yang membohonginya

@@ -28,7 +28,7 @@ Semua yang tertulis di sini mencerminkan kode yang berjalan per 15 Agustus 2026.
        │              │ multipart POST
 ┌──────▼──────┐  ┌────▼──────────────────┐
 │  MySQL 8    │  │  FastAPI @ Kaggle     │  bobot .h5, GPU
-│  13 tabel   │  │  di balik ngrok       │  ~18–21 s / frame
+│  23 tabel   │  │  di balik ngrok       │  ~18–21 s / frame
 └─────────────┘  └───────────────────────┘
 
 storage/app/private/predictions/{user_id}/{job_id}/{input,output}/
@@ -111,7 +111,7 @@ sungguhan hanya untuk mengecek denyut.
 
 ## 3. Skema database
 
-18 tabel di `db_aict`. Yang relevan:
+23 tabel di `db_aict` — 15 milik aplikasi, 8 bawaan kerangka. Yang relevan:
 
 ### `users`
 `name`, `email`, `phone`, `password`, `role` (enum admin/user), `is_active`,

@@ -1,6 +1,6 @@
 # Referensi API
 
-103 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
+104 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
 `php artisan route:list --path=api` per 25 Agustus 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 

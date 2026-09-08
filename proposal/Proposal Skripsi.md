@@ -2598,8 +2598,7 @@ sekitar tujuh belas menit untuk satu pekerjaan.
 
 ### 4.2.1 Implementasi Basis Data
 
-Basis data terdiri atas 41 berkas migrasi yang membentuk 22 tabel di luar tabel
-bawaan kerangka kerja. Tabel-tabel yang menopang alur utama disajikan berikut.
+Basis data terdiri atas 41 berkas migrasi yang membentuk 23 tabel, 15 di antaranya milik aplikasi dan 8 sisanya bawaan kerangka kerja. Tabel-tabel yang menopang alur utama disajikan berikut.
 
 **Tabel 4. 3 Tabel Basis Data pada Alur Utama**
 
@@ -2918,7 +2917,7 @@ dan pengujian yang telah dilakukan, diperoleh kesimpulan berikut.
 Pertama, sistem yang dibangun berhasil menjalankan pengisian celah secara
 otomatis sekaligus menjaga arsip penelitian tetap berada di dalam institusi.
 Wujudnya berupa 104 rute antarmuka pemrograman aplikasi pada 17 kelas
-pengendali, 22 tabel basis data, antrean pekerjaan dengan dua kelas pekerjaan
+pengendali, 15 tabel basis data milik aplikasi, antrean pekerjaan dengan dua kelas pekerjaan
 latar dan enam perintah terjadwal, serta 23 layar aplikasi klien yang
 dikompilasi dari satu basis kode menjadi aplikasi peramban dan aplikasi
 Android. Seluruh berkas penelitian menetap pada perangkat lokal dan volume NAS,
