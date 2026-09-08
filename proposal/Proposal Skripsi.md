@@ -250,7 +250,7 @@ BAB II LANDASAN TEORI ...................................................... 8
         2.2.10  Metode Prototyping ........................................ 15
     2.3  Alasan Pemilihan Algoritma Spatio-Temporal U-Net ................. 16
         2.3.1  Bentuk persoalannya menuntut dua masukan yang berbeda jenis ... 16
-        2.3.2  Sumbu waktu diperlakukan sebagai barisan, bukan sebagai kanal ... 16
+        2.3.2  Sumbu waktu diperlakukan sebagai barisan, bukan sebagai kanal ... 17
         2.3.3  Keluaran harus setajam masukan ............................. 17
         2.3.4  Alasan berbasis pengukuran, bukan dugaan ................... 17
         2.3.5  Mengapa bukan metode interpolasi frame video yang lain ..... 18
@@ -266,7 +266,7 @@ BAB III ANALISA DAN PERANCANGAN ........................................... 19
     3.5  Perancangan Sistem ............................................... 22
         3.5.1  Perancangan Arsitektur Perangkat Lunak ..................... 22
         3.5.2  Perancangan Use Case ....................................... 23
-        3.5.3  Perancangan Aktivitas ...................................... 23
+        3.5.3  Perancangan Aktivitas ...................................... 24
         3.5.4  Perancangan Basis Data ..................................... 24
         3.5.5  Perancangan Antarmuka Pemrograman Aplikasi ................. 24
         3.5.6  Perancangan Pratinjau Frame Berkedalaman 16 Bit ............ 25
@@ -277,13 +277,13 @@ BAB III ANALISA DAN PERANCANGAN ........................................... 19
         3.6.1  Rancangan Pengolahan Data Citra ............................ 30
         3.6.2  Rancangan Praproses ........................................ 30
         3.6.3  Rancangan Pelatihan Model .................................. 31
-        3.6.4  Rancangan Interpolasi Rekursif ............................. 31
+        3.6.4  Rancangan Interpolasi Rekursif ............................. 32
         3.6.5  Rancangan Validasi Hold-Out ................................ 32
         3.6.6  Analisa Perilaku Bobot Dasar ............................... 33
         3.6.7  Analisa Capaian Pelatihan Model ............................ 35
-        3.6.8  Percobaan Penyempurnaan Bobot dan Keputusan Rancangan yang Diambil ... 35
+        3.6.8  Percobaan Penyempurnaan Bobot dan Keputusan Rancangan yang Diambil ... 36
     3.7  Rancangan Pengujian .............................................. 38
-    3.8  Rancangan Iterasi Prototyping .................................... 38
+    3.8  Rancangan Iterasi Prototyping .................................... 39
     3.9  Kebutuhan Perangkat .............................................. 39
         3.9.1  Perangkat Keras ............................................ 39
         3.9.2  Perangkat Lunak ............................................ 40
@@ -301,13 +301,21 @@ BAB IV IMPLEMENTASI DAN PENGUJIAN ......................................... 40
         4.2.7  Implementasi Interpolasi Rekursif dan Pencatatan Asal-Usul ... 45
     4.3  Pengujian Sistem ................................................. 45
         4.3.1  Pengujian Black Box ........................................ 45
-        4.3.2  Pengujian White Box ........................................ 46
-        4.3.3  Pengujian Mutu Keluaran Model .............................. 46
-        4.3.4  User Response (Kuesioner) .................................. 47
-BAB V PENUTUP ............................................................. 49
-    5.1  Kesimpulan ....................................................... 49
-    5.2  Saran ............................................................ 50
-DAFTAR PUSTAKA ............................................................ 50
+        4.3.2  Pengujian White Box ........................................ 49
+        4.3.3  Pengujian Mutu Keluaran Model .............................. 52
+        4.3.4  User Response (Kuesioner) .................................. 53
+BAB V PENUTUP ............................................................. 55
+    5.1  Kesimpulan ....................................................... 55
+        5.1.1  Rancang Bangun Sistem pada Arsitektur Hybrid Cloud-NAS ..... 55
+        5.1.2  Penerapan Algoritma Spatio-Temporal U-Net .................. 56
+        5.1.3  Pengukuran dan Penyampaian Mutu Frame ...................... 57
+        5.1.4  Batas Keberlakuan Kesimpulan ............................... 58
+    5.2  Saran ............................................................ 59
+        5.2.1  Saran bagi Pengembangan Sistem ............................. 59
+        5.2.2  Saran bagi Penyempurnaan Model ............................. 60
+        5.2.3  Saran bagi Penerapan di Lingkungan Institusi ............... 60
+        5.2.4  Saran bagi Penelitian Lanjutan ............................. 61
+DAFTAR PUSTAKA ............................................................ 61
 ```
 
 ---
@@ -317,7 +325,7 @@ DAFTAR PUSTAKA ............................................................ 50
 ```
 Gambar 2. 1   Arsitektur Spatio-Temporal U-Net ............................ 12
 Gambar 2. 2   Kerangka Berpikir Penelitian ................................ 19
-Gambar 3. 1   Alur Penelitian ............................................. 19
+Gambar 3. 1   Alur Penelitian ............................................. 20
 Gambar 3. 2   Alur Akuisisi Proyeksi Tomografi Neutron Saat Ini ........... 21
 Gambar 3. 3   Arsitektur Sistem yang Diusulkan ............................ 22
 Gambar 3. 4   Alur Kerja Sistem yang Diusulkan ............................ 22
@@ -330,13 +338,14 @@ Gambar 3. 10  Alur Interpolasi Rekursif ................................... 33
 Gambar 4. 1   Halaman Masuk Aplikasi ...................................... 44
 Gambar 4. 2   Beranda Peneliti ............................................ 44
 Gambar 4. 3   Halaman Unggah dan Pratinjau Frame .......................... 44
-Gambar 4. 4   Galeri Frame dan Penanda Asal-Usul .......................... 44
-Gambar 4. 5   Riwayat Prediksi dan Posisi Antrean ......................... 44
+Gambar 4. 4   Galeri Frame dan Penanda Asal-Usul .......................... 45
+Gambar 4. 5   Riwayat Prediksi dan Posisi Antrean ......................... 45
 Gambar 4. 6   Halaman Pelatihan Model ..................................... 45
 Gambar 4. 7   Dasbor Administrator ........................................ 45
 Gambar 4. 8   Pemantauan Antrean Seluruh Pengguna ......................... 45
 Gambar 4. 9   Pengelolaan Model dan Alamat Layanan ........................ 45
 Gambar 4. 10  Aplikasi pada Perangkat Android ............................. 45
+Gambar 4. 11  Graf Alir Fungsi interpolateBetween ......................... 50
 ```
 
 ---
@@ -347,9 +356,9 @@ Gambar 4. 10  Aplikasi pada Perangkat Android ............................. 45
 Tabel 2. 1   Penelitian yang Relevan ....................................... 8
 Tabel 2. 2   Operasi di Dalam Layer Kustom SkipFusion ..................... 12
 Tabel 2. 3   Susunan Lapisan STUNet_2to1_TimeCond (ringkas) ............... 13
-Tabel 2. 4   Rangkuman Keunggulan Model terhadap Pencampuran Linier ....... 17
+Tabel 2. 4   Rangkuman Keunggulan Model terhadap Pencampuran Linier ....... 18
 Tabel 3. 1   Format Pencatatan Kondisi Akuisisi Citra ..................... 20
-Tabel 3. 2   Analisa Permasalahan Sistem Berjalan ......................... 21
+Tabel 3. 2   Analisa Permasalahan Sistem Berjalan ......................... 22
 Tabel 3. 3   Aktor dan Kewenangannya ...................................... 24
 Tabel 3. 4   Rancangan Tabel Basis Data ................................... 24
 Tabel 3. 5   Rancangan Antarmuka Pemrograman Aplikasi ..................... 25
@@ -363,11 +372,11 @@ Tabel 3. 12  Bobot Dasar terhadap Pencampuran Linier pada Tiga Metrik ..... 35
 Tabel 3. 13  Parameter Pelatihan Pembaruan Model .......................... 37
 Tabel 3. 14  Sapuan Tujuh Posisi dari Satu Pasangan Frame Pindai .......... 37
 Tabel 3. 15  Hasil Pembaruan terhadap Kriteria Keberhasilan ............... 37
-Tabel 3. 16  Keragaman Keluaran terhadap Gerak Frame Nyata ................ 37
+Tabel 3. 16  Keragaman Keluaran terhadap Gerak Frame Nyata ................ 38
 Tabel 3. 17  Jarak Antar-Hasil pada Objek yang Tidak Dilatihkan ........... 38
-Tabel 3. 18  Rancangan Skenario Pengujian ................................. 38
+Tabel 3. 18  Rancangan Skenario Pengujian ................................. 39
 Tabel 3. 19  Format Penyajian Hasil Pengujian ............................. 39
-Tabel 3. 20  Iterasi Prototyping dan Capaian Setiap Iterasi ............... 39
+Tabel 3. 20  Iterasi Prototyping dan Capaian Setiap Iterasi ............... 40
 Tabel 3. 21  Kebutuhan Perangkat Keras .................................... 40
 Tabel 3. 22  Kebutuhan Perangkat Lunak .................................... 41
 Tabel 4. 1   Spesifikasi Perangkat Lunak yang Digunakan ................... 41
@@ -377,14 +386,20 @@ Tabel 4. 4   Pengelompokan Antarmuka Pemrograman Aplikasi ................. 43
 Tabel 4. 5   Perintah Terjadwal dan Kegunaannya ........................... 43
 Tabel 4. 6   Layar Utama pada Aplikasi Klien .............................. 44
 Tabel 4. 7   Kebutuhan Memori Pratinjau Sebelum dan Sesudah Perbaikan ..... 45
-Tabel 4. 8   Hasil Pengujian Black Box .................................... 46
-Tabel 4. 9   Hasil Pengujian Otomatis ..................................... 47
-Tabel 4. 10  Hasil Validasi Hold-Out terhadap Tiga Pekerjaan Nyata ........ 48
-Tabel 4. 11  Model terhadap Pencampuran Linier pada Tiga Metrik ........... 48
-Tabel 4. 12  Instrumen Kuesioner Tanggapan Pengguna ....................... 49
-Tabel 4. 13  Profil Responden ............................................. 49
-Tabel 4. 14  Tabulasi Tanggapan per Pernyataan ............................ 49
-Tabel 4. 15  Rentang Penafsiran Indeks Tanggapan .......................... 50
+Tabel 4. 8   Rancangan Pengujian .......................................... 46
+Tabel 4. 9   Partisi Ekuivalensi pada Masukan Utama ....................... 47
+Tabel 4. 10  Hasil Pengujian Black Box .................................... 48
+Tabel 4. 11  Pengujian Nilai Batas ........................................ 49
+Tabel 4. 12  Jalur Bebas pada Fungsi interpolateBetween ................... 51
+Tabel 4. 13  Kasus Uji Pelaksana Jalur Bebas .............................. 51
+Tabel 4. 14  Kelompok Uji Otomatis Sisi Peladen ........................... 52
+Tabel 4. 15  Hasil Pengujian Otomatis ..................................... 52
+Tabel 4. 16  Hasil Validasi Hold-Out terhadap Tiga Pekerjaan Nyata ........ 54
+Tabel 4. 17  Model terhadap Pencampuran Linier pada Tiga Metrik ........... 54
+Tabel 4. 18  Instrumen Kuesioner Tanggapan Pengguna ....................... 55
+Tabel 4. 19  Profil Responden ............................................. 55
+Tabel 4. 20  Tabulasi Tanggapan per Pernyataan ............................ 55
+Tabel 4. 21  Rentang Penafsiran Indeks Tanggapan .......................... 56
 ```
 
 ---
@@ -453,21 +468,27 @@ adalah sebagai berikut:
 1. Akuisisi citra proyeksi tomografi komputer neutron memakan waktu lama dan
    bergantung pada waktu berkas neutron yang terbatas, sehingga peneliti
    terdorong memperlebar jarak sudut antarproyeksi dengan risiko menurunnya
-   mutu rekonstruksi volumetrik. 2. Sebagian proyeksi hilang atau rusak selama
-   akuisisi, dan pemindaian ulang untuk sudut yang hilang menuntut pengantrean
-   waktu berkas dari awal. 3. Pengisian celah proyeksi secara manual maupun
-   dengan interpolasi linier sederhana tidak konsisten antarpeneliti, tidak
-   dapat diulang dengan hasil yang sama, dan berpotensi menambah artefak pada
-   rekonstruksi. 4. Belum tersedia mekanisme yang mencatat asal-usul setiap
-   frame, sehingga peneliti yang menerima hasil tidak dapat membedakan frame
-   hasil pindai dari frame keluaran model, maupun mengetahui seberapa jauh
-   sebuah frame dihasilkan dari keluaran model sebelumnya. 5. Model
-   interpolasi menuntut kartu grafis, sedangkan perangkat kerja di
+   mutu rekonstruksi volumetrik.
+
+2. Sebagian proyeksi hilang atau rusak selama akuisisi, dan pemindaian ulang
+   untuk sudut yang hilang menuntut pengantrean waktu berkas dari awal.
+
+3. Pengisian celah proyeksi secara manual maupun dengan interpolasi linier
+   sederhana tidak konsisten antarpeneliti, tidak dapat diulang dengan hasil
+   yang sama, dan berpotensi menambah artefak pada rekonstruksi.
+
+4. Belum tersedia mekanisme yang mencatat asal-usul setiap frame, sehingga
+   peneliti yang menerima hasil tidak dapat membedakan frame hasil pindai
+   dari frame keluaran model, maupun mengetahui seberapa jauh sebuah frame
+   dihasilkan dari keluaran model sebelumnya.
+
+5. Model interpolasi menuntut kartu grafis, sedangkan perangkat kerja di
    laboratorium tidak selalu memilikinya, dan data hasil penelitian tidak
-   boleh menetap di layanan komputasi awan pihak ketiga. 6. Belum tersedia
-   antarmuka yang memungkinkan peneliti menjalankan proses interpolasi,
-   memantau antrean, dan mengambil hasil dari perangkat yang berbeda-beda
-   tanpa bergantung pada satu komputer tertentu.
+   boleh menetap di layanan komputasi awan pihak ketiga.
+
+6. Belum tersedia antarmuka yang memungkinkan peneliti menjalankan proses
+   interpolasi, memantau antrean, dan mengambil hasil dari perangkat yang
+   berbeda-beda tanpa bergantung pada satu komputer tertentu.
 
 ## 1.3 Rumusan Masalah
 
@@ -614,15 +635,19 @@ penelitian ini adalah :
 
 1. Merancang dan membangun sistem multiplatform terintegrasi berbasis
    arsitektur *hybrid cloud-NAS* yang menjalankan interpolasi citra proyeksi
-   tomografi komputer neutron secara otomatis, dapat diakses melalui peramban
-   maupun telepon genggam. 2. Menerapkan algoritma Spatio-Temporal U-Net
-   beserta proses pelatihannya untuk mengisi celah pada barisan proyeksi,
-   termasuk mekanisme interpolasi rekursif pada titik tengah. 3. Menyusun
-   mekanisme pengukuran mutu berbasis validasi *hold-out* beserta pencatatan
-   asal-usul setiap frame, sehingga hasil interpolasi dapat
-   dipertanggungjawabkan angkanya oleh peneliti yang menerimanya. 4.
-   Menghasilkan purwarupa yang telah diuji ujung ke ujung terhadap arsip citra
-   neutron dan kartu grafis yang sebenarnya, bukan hanya terhadap data
+   tomografi komputer neutron secara otomatis, dapat diakses melalui
+   peramban maupun telepon genggam.
+
+2. Menerapkan algoritma Spatio-Temporal U-Net beserta proses pelatihannya
+   untuk mengisi celah pada barisan proyeksi, termasuk mekanisme interpolasi
+   rekursif pada titik tengah.
+
+3. Menyusun mekanisme pengukuran mutu berbasis validasi *hold-out* beserta
+   pencatatan asal-usul setiap frame, sehingga hasil interpolasi dapat
+   dipertanggungjawabkan angkanya oleh peneliti yang menerimanya.
+
+4. Menghasilkan purwarupa yang telah diuji ujung ke ujung terhadap arsip
+   citra neutron dan kartu grafis yang sebenarnya, bukan hanya terhadap data
    sintetis.
 
 ## 1.6 Manfaat Penelitian
@@ -705,13 +730,18 @@ pengujian, rancangan iterasi Prototyping, serta kebutuhan perangkat.
 Bab ini memaparkan spesifikasi perangkat lunak dan perangkat keras yang
 dipakai, wujud implementasi program pada sisi basis data, antarmuka pemrograman
 aplikasi, antrean, layanan inferensi, antarmuka pengguna, pratinjau frame 16
-bit, dan interpolasi rekursif, kemudian hasil pengujian *black box*, pengujian
-*white box*, pengujian mutu keluaran model, serta instrumen tanggapan pengguna.
+bit, dan interpolasi rekursif. Sesudahnya dipaparkan hasil pengujian *black
+box* yang disusun dengan partisi ekuivalensi dan analisa nilai batas, pengujian
+*white box* yang mencakup pengujian jalur dasar beserta rangkaian uji otomatis,
+pengujian mutu keluaran model melalui validasi *hold-out*, serta instrumen
+tanggapan pengguna.
 
 **BAB V PENUTUP**
 
-Bab ini memuat kesimpulan yang menjawab rumusan masalah beserta saran untuk
-penelitian lanjutan.
+Bab ini memuat kesimpulan yang menjawab ketiga rumusan masalah beserta batas
+keberlakuannya, dan saran yang dikelompokkan menurut pengembangan sistem,
+penyempurnaan model, penerapan di lingkungan institusi, serta penelitian
+lanjutan.
 
 **DAFTAR PUSTAKA**
 
@@ -1310,18 +1340,27 @@ dan angka mutu setiap frame yang dihasilkan.
 Alur kerja sistem yang diusulkan adalah sebagai berikut:
 
 1. Peneliti masuk melalui aplikasi peramban atau Android, lalu mengunggah
-   arsip `.zip` berisi frame proyeksi bernomor. Arsip berukuran besar diunggah
-   secara berpotongan agar sambungan yang terputus dapat dilanjutkan. 2.
-   Peladen mengekstraksi frame, memvalidasi format dan penomorannya, kemudian
-   menampilkan pratinjau agar peneliti dapat memeriksa arsipnya sebelum
-   pekerjaan dijalankan. 3. Peneliti menekan tombol mulai. Pekerjaan masuk ke antrean dengan posisinya, dan perkiraan waktu tunggu dihitung dari lama
-   pekerjaan yang benar-benar pernah terukur pada sistem ini. 4. Pekerja
-   antrean mengisi celah secara rekursif dengan memanggil layanan inferensi
-   untuk setiap pasangan batas, dan mencatat asal-usul setiap frame yang
-   dihasilkan. 5. Apabila arsip mengandung frame yang merupakan titik tengah
-   tepat dari dua frame lain, frame tersebut disembunyikan, dibangkitkan ulang
-   oleh model, lalu dibandingkan terhadap aslinya sebagai validasi *hold-out*.
-   6. Hasil dikemas kembali menjadi arsip yang dapat diunduh, disertai berkas
+   arsip `.zip` berisi frame proyeksi bernomor. Arsip berukuran besar
+   diunggah secara berpotongan agar sambungan yang terputus dapat
+   dilanjutkan.
+
+2. Peladen mengekstraksi frame, memvalidasi format dan penomorannya,
+   kemudian menampilkan pratinjau agar peneliti dapat memeriksa arsipnya
+   sebelum pekerjaan dijalankan.
+
+3. Peneliti menekan tombol mulai. Pekerjaan masuk ke antrean dengan
+   posisinya, dan perkiraan waktu tunggu dihitung dari lama pekerjaan yang
+   benar-benar pernah terukur pada sistem ini.
+
+4. Pekerja antrean mengisi celah secara rekursif dengan memanggil layanan
+   inferensi untuk setiap pasangan batas, dan mencatat asal-usul setiap
+   frame yang dihasilkan.
+
+5. Apabila arsip mengandung frame yang merupakan titik tengah tepat dari dua
+   frame lain, frame tersebut disembunyikan, dibangkitkan ulang oleh model,
+   lalu dibandingkan terhadap aslinya sebagai validasi *hold-out*.
+
+6. Hasil dikemas kembali menjadi arsip yang dapat diunduh, disertai berkas
    metadata dan manifes yang memuat asal-usul serta angka mutu.
 
 ## 3.5 Perancangan Sistem
@@ -2287,58 +2326,248 @@ tingkat kepercayaannya berbeda.
 
 ## 4.3 Pengujian Sistem
 
+Pengujian dijalankan pada empat tingkat yang menjawab pertanyaan berbeda, dan
+tidak satu pun di antaranya dapat menggantikan yang lain. Rangkaian uji yang
+seluruhnya lulus tidak membuktikan interpolasinya menghasilkan citra yang
+berguna, dan satu pekerjaan yang berhasil dijalankan tidak membuktikan kodenya
+benar pada cabang yang belum pernah dilewati.
+
+**Tabel 4. 8 Rancangan Pengujian**
+
+| Tingkat | Teknik | Objek yang diuji | Pertanyaan yang dijawab |
+|---------|--------|------------------|-------------------------|
+| Fungsional | *Black box*, partisi ekuivalensi dan nilai batas | Alur yang dijalankan pengguna dari antarmuka | Apakah sistem melakukan yang dijanjikannya? |
+| Struktural | *White box*, pengujian jalur dasar dan rangkaian uji otomatis | Kode sisi peladen dan sisi klien | Apakah setiap cabang keputusan pernah dilewati dan benar? |
+| Mutu keluaran | Validasi *hold-out* terhadap frame yang disembunyikan | Frame hasil interpolasi | Seberapa dekat frame buatan model terhadap frame sebenarnya? |
+| Tanggapan pengguna | Kuesioner tertutup skala lima | Kegunaan sistem menurut pemakainya | Apakah sistem menolong orang yang memakainya? |
+
 ### 4.3.1 Pengujian Black Box
 
-Pengujian *black box* dilakukan terhadap alur yang dijalankan pengguna, tanpa
-memandang isi kodenya. Hasilnya disajikan berikut.
+Pengujian *black box* memandang sistem dari luar. Masukan diberikan melalui
+antarmuka sebagaimana pengguna memberikannya, keluaran dibandingkan terhadap
+yang dijanjikan, dan isi kodenya tidak dilihat sama sekali. Kasus ujinya
+disusun dengan dua teknik yang saling melengkapi.
 
-**Tabel 4. 8 Hasil Pengujian Black Box**
+**Partisi ekuivalensi** membagi ruang masukan menjadi kelompok yang diperlakukan
+sama oleh sistem, sehingga satu wakil dari tiap kelompok memadai untuk mewakili
+seluruh anggotanya. **Analisa nilai batas** kemudian menambahkan pengujian tepat
+pada tepi setiap kelompok, sebab di tepi itulah kesalahan pemrograman paling
+sering bersembunyi. Sebuah perbandingan yang seharusnya memakai "lebih besar
+atau sama dengan" tetapi tertulis "lebih besar" hanya menampakkan diri pada satu
+nilai saja, dan nilai itu tidak akan pernah tersentuh oleh pengujian yang
+memilih masukannya secara acak.
 
-| Kode | Skenario | Hasil yang diharapkan | Hasil |
-|------|----------|-----------------------|-------|
-| B-01 | Masuk dengan akun sah | Pengguna masuk ke konsol sesuai perannya | Sesuai |
-| B-02 | Masuk dengan sandi bawaan | Pengguna dihadang gerbang sandi sampai menggantinya | Sesuai |
-| B-03 | Unggah arsip `.zip` berisi frame bercelah | Frame terbaca, nomor terurut, celah terdeteksi | Sesuai |
-| B-04 | Unggah berkas selain `.zip` | Ditolak dengan pesan yang menyebutkan sebabnya | Sesuai |
-| B-05 | Unggah terputus lalu dilanjutkan | Unggahan dilanjutkan dari potongan terakhir, bukan dari awal | Sesuai |
-| B-06 | Menjalankan pekerjaan interpolasi | Pekerjaan masuk antrean dengan posisinya, lalu menghasilkan arsip | Sesuai |
-| B-07 | Melihat galeri frame hasil | Frame hasil pindai dan keluaran model dibedakan beserta nilai generation | Sesuai |
-| B-08 | Mengunduh arsip hasil | Arsip berisi frame lengkap, manifes, dan angka mutu | Sesuai |
-| B-09 | Layanan inferensi dimatikan | Model ditandai luring beserta sebabnya, pekerjaan baru tidak diterima | Sesuai |
-| B-10 | Pekerja antrean dihentikan | Antarmuka menyatakan antrean tidak berjalan, bukan menampilkan keadaan menunggu biasa | Sesuai |
-| B-11 | Volume NAS tidak terpasang | Sistem menolak bekerja dengan pesan yang menyebutkan sebabnya | Sesuai |
-| B-12 | Memulai sesi pelatihan dari sisi peneliti | Sesi berjalan, metrik per epoch tercatat dan tampil | Sesuai |
-| B-13 | Membuka pekerjaan yang berkasnya telah tersapu | Keterangan masa simpan tampil, bukan daftar kosong | Sesuai |
-| B-14 | Memakai aplikasi Android | Alur yang sama berjalan dari basis kode yang sama | Sesuai |
+**Tabel 4. 9 Partisi Ekuivalensi pada Masukan Utama**
+
+| Masukan | Kelas sah | Kelas tidak sah |
+|---------|-----------|-----------------|
+| Jenis berkas unggahan | Arsip `.zip` berisi berkas TIFF bernomor | Berkas selain `.zip`; arsip tanpa TIFF; arsip rusak |
+| Penamaan berkas frame | Nama memuat nomor proyeksi, misalnya `frame_051.tif` | Nama tanpa nomor; nomor ganda dalam satu arsip |
+| Ukuran satu frame | 1 byte sampai 50 MB | Di atas 50 MB |
+| Ukuran arsip data latih | 1 byte sampai 512 MB | 0 byte; di atas 512 MB |
+| Lebar celah antarframe | Celah dengan kedua batas tersedia | Celah tanpa batas kanan; frame berdampingan |
+| Jumlah frame satu pekerjaan | 1 sampai 200 frame keluaran | Di atas 200 frame keluaran |
+| Kredensial masuk | Surel terdaftar dengan sandi yang benar | Surel tidak terdaftar; sandi salah; sandi bawaan belum diganti |
+| Alamat layanan inferensi | Alamat yang menjawab pemeriksaan kesehatan | Alamat kosong; alamat yang tidak menjawab; sesi awan yang telah berakhir |
+
+Kasus uji berikut disusun dari partisi di atas, satu wakil untuk setiap kelas,
+ditambah skenario ketahanan yang menguji perilaku sistem ketika salah satu
+bagiannya sengaja dimatikan. Kelompok terakhir itu diperlukan justru karena
+arsitekturnya tersebar: peladen, pekerja antrean, volume penyimpanan, dan
+layanan inferensi berjalan pada mesin yang berbeda, dan masing-masing dapat
+menghilang tanpa memberi tahu yang lain.
+
+**Tabel 4. 10 Hasil Pengujian Black Box**
+
+| Kode | Modul | Skenario | Hasil yang diharapkan | Hasil |
+|------|-------|----------|-----------------------|-------|
+| B-01 | Autentikasi | Masuk dengan surel dan sandi yang benar | Masuk ke konsol sesuai perannya | Sesuai |
+| B-02 | Autentikasi | Masuk dengan sandi yang salah | Ditolak tanpa menyebut bagian mana yang salah | Sesuai |
+| B-03 | Autentikasi | Masuk memakai sandi bawaan pemberian administrator | Dihadang gerbang sandi sampai menggantinya | Sesuai |
+| B-04 | Autentikasi | Masuk dari dua perangkat sekaligus | Keduanya aktif; token masing-masing berdiri sendiri | Sesuai |
+| B-05 | Autentikasi | Keluar dari salah satu perangkat | Hanya token perangkat itu yang dicabut | Sesuai |
+| B-06 | Akses | Mengajukan permintaan akses dari halaman muka | Permintaan tercatat dan menunggu persetujuan | Sesuai |
+| B-07 | Unggah | Mengunggah arsip `.zip` berisi frame bercelah | Frame terbaca, nomor terurut, celah terdeteksi | Sesuai |
+| B-08 | Unggah | Mengunggah berkas selain `.zip` | Ditolak dengan pesan yang menyebutkan sebabnya | Sesuai |
+| B-09 | Unggah | Mengunggah arsip berisi berkas tanpa nomor pada namanya | Ditolak sambil menyebutkan berkas yang bermasalah | Sesuai |
+| B-10 | Unggah | Memutus sambungan di tengah unggahan lalu mengulang | Dilanjutkan dari potongan terakhir, bukan dari awal | Sesuai |
+| B-11 | Unggah | Mengunggah arsip 19 MB melalui jalur berpotongan | Berhasil, sedangkan jalur satu permintaan tertolak batas ukuran | Sesuai |
+| B-12 | Unggah | Memilih berkas dari peramban telepon genggam | Berkas dapat dipilih; penapis jenis berkas tidak mematikannya | Sesuai |
+| B-13 | Prediksi | Menjalankan pengisian celah | Pekerjaan masuk antrean dengan posisinya, lalu menghasilkan arsip | Sesuai |
+| B-14 | Prediksi | Berpindah tab tanpa menekan mulai, lalu kembali ke daftar | Berkas berlabel belum dimulai dan dapat dimulai dari sana | Sesuai |
+| B-15 | Prediksi | Menekan tombol mulai dua kali berturut-turut | Penekanan kedua ditolak; satu pekerjaan tetap satu pekerja | Sesuai |
+| B-16 | Prediksi | Membuka galeri frame hasil | Frame pindai dan keluaran model dibedakan beserta nilai `generation` | Sesuai |
+| B-17 | Prediksi | Mengunduh arsip hasil | Arsip berisi frame lengkap, manifes, dan angka mutu | Sesuai |
+| B-18 | Prediksi | Membuka pekerjaan yang berkasnya telah lewat masa simpan | Keterangan masa simpan tampil, bukan daftar kosong | Sesuai |
+| B-19 | Ketahanan | Mematikan layanan inferensi | Model ditandai luring beserta sebabnya; pekerjaan baru ditolak | Sesuai |
+| B-20 | Ketahanan | Menghentikan pekerja antrean | Antarmuka menyatakan antrean tidak berjalan | Sesuai |
+| B-21 | Ketahanan | Melepas volume penyimpanan | Sistem menolak bekerja dengan pesan yang menyebutkan sebabnya | Sesuai |
+| B-22 | Ketahanan | Memutus sesi awan di tengah pelatihan | Sesi dikembalikan ke antrean beserta titik simpan terakhirnya | Sesuai |
+| B-23 | Ketahanan | Mengarahkan alamat layanan ke sesi awan yang telah berakhir | Ditandai luring dalam satu siklus penjadwal | Sesuai |
+| B-24 | Pelatihan | Memulai sesi pelatihan dari sisi peneliti | Sesi berjalan; metrik tiap epoch tercatat dan tampil | Sesuai |
+| B-25 | Pelatihan | Mengunggah arsip data latih melebihi 512 MB | Ditolak sebelum berkas diterima seluruhnya | Sesuai |
+| B-26 | Pelatihan | Melihat contoh keluaran model pada setiap epoch | Contoh tampil berpasangan dengan frame acuannya | Sesuai |
+| B-27 | Administrasi | Menyetujui permintaan akses | Akun dibuat dengan sandi bawaan dan gerbang sandi aktif | Sesuai |
+| B-28 | Administrasi | Memantau antrean seluruh pengguna | Pekerjaan berjalan dan menunggu tampil beserta keadaan pekerja | Sesuai |
+| B-29 | Administrasi | Mengganti alamat dan token layanan inferensi | Alamat baru dipakai pada pekerjaan berikutnya | Sesuai |
+| B-30 | Multiplatform | Menjalankan seluruh alur di atas pada aplikasi Android | Berperilaku sama dengan versi peramban | Sesuai |
+
+**Tabel 4. 11 Pengujian Nilai Batas**
+
+| Kode | Masukan | Nilai yang diuji | Hasil yang diharapkan | Hasil |
+|------|---------|------------------|-----------------------|-------|
+| N-01 | Ukuran satu frame | 50 MB tepat | Diterima | Sesuai |
+| N-02 | Ukuran satu frame | 50 MB lebih satu byte | Ditolak | Sesuai |
+| N-03 | Ukuran arsip data latih | 512 MB tepat | Diterima | Sesuai |
+| N-04 | Ukuran arsip data latih | 512 MB lebih satu byte | Ditolak sebelum diterima seluruhnya | Sesuai |
+| N-05 | Jumlah frame keluaran | 200 frame | Diterima | Sesuai |
+| N-06 | Jumlah frame keluaran | 201 frame | Ditolak sebelum pekerjaan dimulai | Sesuai |
+| N-07 | Selisih indeks batas | 1, yaitu frame berdampingan | Tidak ada frame dibangkitkan, dan bukan galat | Sesuai |
+| N-08 | Selisih indeks batas | 2, yaitu celah tunggal | Satu frame dengan `generation` bernilai 1 | Sesuai |
+| N-09 | Selisih indeks batas | 4, yaitu celah rangkap | Tiga frame; satu bergenerasi 1, dua bergenerasi 2 | Sesuai |
+| N-10 | Umur berkas hasil | Tepat pada batas masa simpan | Belum disapu | Sesuai |
+| N-11 | Umur berkas hasil | Satu hari melewati masa simpan | Disapu, dan keterangannya tetap dapat dibuka | Sesuai |
+
+Butir N-07 sampai N-09 adalah nilai batas yang paling menentukan pada penelitian
+ini, sebab ketiganya menyentuh langsung mekanisme rekursi. Celah selebar satu
+berarti tidak ada titik tengah untuk diisi, dan perilaku yang benar adalah
+berhenti tanpa membangkitkan apa pun; memperlakukannya sebagai galat akan
+menghentikan seluruh pekerjaan hanya karena dua frame kebetulan berdampingan.
+Celah selebar empat menghasilkan tiga frame yang tingkat kepercayaannya tidak
+sama, dan pengujian ini memastikan perbedaan tersebut benar-benar tercatat,
+bukan diratakan.
 
 ### 4.3.2 Pengujian White Box
 
-Pengujian *white box* dikerjakan melalui rangkaian uji otomatis yang membaca
-kode dari dalam. Rangkaian ini dijalankan ulang setiap kali kode berubah,
-sehingga kesalahan yang pernah diperbaiki tidak kembali tanpa diketahui.
+Pengujian *white box* membaca kodenya. Yang diuji bukan lagi apa yang dijanjikan
+sistem kepada penggunanya, melainkan apakah setiap cabang keputusan di dalam
+kode pernah dilewati dan berperilaku benar ketika dilewati.
 
-**Tabel 4. 9 Hasil Pengujian Otomatis**
+**a. Pengujian jalur dasar pada fungsi yang paling menentukan**
 
-| Sasaran | Perintah | Hasil |
-|---------|----------|-------|
-| Sisi peladen | `php artisan test` | 368 uji lulus, 1.452 asersi |
-| Analisa statis sisi klien | `flutter analyze` | Tanpa temuan (No issues found) |
-| Sisi klien | `flutter test` | 274 uji lulus di 33 berkas |
+Fungsi `interpolateBetween()` pada kelas `ProcessDeepLearningImage` adalah
+tempat seluruh rancangan interpolasi rekursif diwujudkan. Di fungsi itulah titik
+tengah dihitung, layanan inferensi dipanggil, asal-usul frame dicatat, dan
+rekursi dilanjutkan ke kiri dan ke kanan. Karena itu fungsi tersebut yang diuji
+jalurnya, dan graf alirnya disusun langsung dari kodenya, bukan dari uraian
+perancangan.
 
-Dua di antara berkas uji tersebut berdiri untuk keperluan yang khusus.
-`SourceEncodingTest` pada sisi peladen dan `source_encoding_test` pada sisi
-klien memindai berkas sumber untuk mencari pola *mojibake*, yaitu kerusakan
-UTF-8 yang menyebar melalui penyuntingan biasa dan tidak terlihat pada
-peninjauan kode maupun pada rangkaian uji lain. Keduanya dipasang setelah
-kerusakan semacam itu ditemukan pada delapan berkas, lima di antaranya berupa
-teks yang dibaca pengguna.
+**[GAMBAR 4. 11 — Graf Alir Fungsi interpolateBetween]**
+*Graf alir fungsi interpolasi rekursif beserta perhitungan kompleksitas siklomatiknya.*
 
-Satu catatan mengenai uji memori pratinjau. Uji tersebut mula-mula lulus
-terhadap implementasi yang sengaja dibuat salah, karena penyiapan datanya
-sendiri sudah mengalokasikan memori besar sehingga selisihnya tenggelam.
-Setelah penyiapan diperbaiki agar menulis berkas contoh sepotong demi sepotong,
-implementasi yang salah menaikkan pemakaian memori sebesar 167 MB dan uji itu
-gagal sebagaimana seharusnya.
+Fungsi tersebut memuat tiga predikat, yaitu pemeriksaan apakah selisih indeks
+kedua batas kurang dari dua, dan dua pemeriksaan yang menanyakan apakah
+masing-masing batas merupakan keluaran model. Kompleksitas siklomatiknya karena
+itu adalah:
+
+```
+V(G) = jumlah predikat + 1 = 3 + 1 = 4
+```
+
+Nilai tersebut berarti terdapat empat jalur bebas yang harus dilewati
+sekurang-kurangnya satu kali agar seluruh cabang keputusan fungsi ini terbukti
+bekerja. Keempatnya disajikan berikut.
+
+**Tabel 4. 12 Jalur Bebas pada Fungsi interpolateBetween**
+
+| Jalur | Rangkaian simpul | Kondisi masukan | Keluaran yang diharapkan |
+|-------|------------------|-----------------|--------------------------|
+| P-1 | 1 – 2 | Selisih indeks kurang dari dua | Tidak ada frame dibangkitkan; rekursi berhenti |
+| P-2 | 1 – 3 – 4 – 5 – 6 | Selisih dua atau lebih; kedua batas hasil pindai | Satu frame, `generation` = 1, `synthetic_parents` = 0 |
+| P-3 | 1 – 3 – 4 – 5 – 6 | Salah satu batas merupakan keluaran model | `generation` bertambah satu, `synthetic_parents` = 1 |
+| P-4 | 1 – 3 – 4 – 5 – 6 | Kedua batas merupakan keluaran model | `generation` bertambah satu, `synthetic_parents` = 2 |
+
+**Tabel 4. 13 Kasus Uji Pelaksana Jalur Bebas**
+
+| Jalur | Kasus uji | Berkas uji | Hasil |
+|-------|-----------|------------|-------|
+| P-1 | Arsip berisi frame 1 dan 2 tanpa celah di antaranya | `PredictionPipelineTest` | Sesuai |
+| P-2 | Arsip berisi frame 1 dan 3; frame 2 dibangkitkan | `PredictionPipelineTest`, `frame_provenance_test.dart` | Sesuai |
+| P-3 | Celah selebar empat; frame yang batas kanannya sintetis | `PredictionPipelineTest` | Sesuai |
+| P-4 | Celah selebar delapan; frame yang kedua batasnya sintetis | `PredictionPipelineTest` | Sesuai |
+
+Keempat jalur dilewati oleh rangkaian uji, sehingga tidak ada cabang keputusan
+pada fungsi ini yang tidak pernah dieksekusi. Nilai `generation` dan
+`synthetic_parents` diperiksa pada setiap jalur, bukan hanya keberadaan berkas
+keluarannya, karena kedua nilai itulah yang kemudian disampaikan kepada peneliti
+sebagai dasar menilai kelayakan sebuah frame. Uji yang hanya memeriksa bahwa
+berkasnya ada akan tetap lulus meskipun seluruh frame keliru dilaporkan sebagai
+hasil pindai.
+
+Jalur P-4 sekaligus menjadi bukti terukur bagi batas rancangan yang diuraikan
+pada subbab 3.6.6. Frame yang ditempuh jalur ini adalah frame yang kedua
+batasnya merupakan keluaran model, dan galatnya terukur 1.174,9 — melebihi 555
+yang diperoleh dengan menyalin frame pindai tetangganya secara utuh. Kode
+menempuh jalur itu dengan benar dan mencatat asal-usulnya dengan benar; justru
+melalui catatan itulah peneliti mengetahui bahwa frame tersebut tidak layak
+dipakai. Pengujian struktural di sini tidak menemukan kesalahan pemrograman,
+melainkan memastikan bahwa keterangan yang menyertai sebuah frame lemah
+benar-benar sampai kepada pembacanya.
+
+**b. Rangkaian uji otomatis**
+
+Di luar pengujian jalur dasar, kode dijaga oleh rangkaian uji otomatis yang
+dijalankan ulang setiap kali kode berubah. Rangkaian inilah yang menahan
+kesalahan yang pernah diperbaiki agar tidak kembali tanpa diketahui, dan
+cakupannya disusun mengikuti pembagian tanggung jawab pada perancangan sistem di
+subbab 3.5.
+
+**Tabel 4. 14 Kelompok Uji Otomatis Sisi Peladen**
+
+| Kelompok uji | Yang dipastikannya |
+|--------------|--------------------|
+| `AuthTest`, `AuthorizationTest`, `AdminSeederTest` | Masuk, kewenangan tiap peran, dan pembuatan administrator pertama |
+| `AccessRequestTest`, `UserPhoneTest`, `AvatarTest` | Permintaan akses, data diri, dan berkas profil |
+| `ChunkedUploadTest` | Unggah berpotongan, pelanjutan, dan penolakan potongan yang tidak cocok |
+| `PredictionPipelineTest`, `PredictionStartTest` | Interpolasi rekursif, asal-usul frame, dan pemulaian pekerjaan tertunda |
+| `PredictionCleanupTest` | Penyapuan berkas hasil yang melewati masa simpan |
+| `AdminQueueTest`, `QueueHealthTest` | Posisi antrean dan pelaporan antrean yang tidak berjalan |
+| `ModelAvailabilityTest`, `ModelHealthCheckTest`, `WorkerAuthTest` | Ketersediaan model, pemeriksaan berkala, dan rahasia bersama pekerja |
+| `TrainingTest`, `ResearcherTrainingTest`, `DispatchQueuedTrainingTest` | Sesi pelatihan dari sisi administrator maupun sisi peneliti |
+| `TrainingDatasetRetentionTest`, `TrainingDatasetPreviewTest`, `TrainingSampleTest` | Retensi arsip data latih, pratinjau frame, dan contoh keluaran tiap epoch |
+| `StorageGuardTest` | Penolakan bekerja ketika volume penyimpanan tidak terpasang |
+| `NewsPostTest`, `NewsVideoTest`, `NewsVideoUploadTest` | Pengumuman beserta berkas videonya |
+| `MessagingTest`, `NotificationTest` | Percakapan dan pemberitahuan |
+| `SourceEncodingTest` | Ketiadaan pola kerusakan penyandian pada berkas sumber |
+
+**Tabel 4. 15 Hasil Pengujian Otomatis**
+
+| Sasaran | Perintah | Cakupan | Hasil |
+|---------|----------|---------|-------|
+| Sisi peladen | `php artisan test` | 30 berkas uji, 27 kelompok uji fungsional | 368 lulus, 1.452 asersi |
+| Analisa statis sisi klien | `flutter analyze` | Seluruh isi `lib/` dan `test/` | tanpa temuan |
+| Sisi klien | `flutter test` | 33 berkas uji | 274 lulus |
+| Bangunan web | `flutter build web --release` | Berkas keluaran siap unggah | Berhasil |
+| Bangunan Android | `flutter build apk --release` | Berkas pemasangan 61,9 MB | Berhasil |
+
+**c. Dua kejadian yang menunjukkan mengapa pengujian struktural diperlukan**
+
+Dua peristiwa selama pembangunan menunjukkan bahwa rangkaian uji yang seluruhnya
+lulus belum tentu rangkaian uji yang benar. Keduanya dicatat di sini karena
+keduanya mengubah cara pengujian disusun sesudahnya.
+
+**Uji yang lulus terhadap implementasi yang sengaja dibuat salah.** Uji pemakaian
+memori pratinjau frame mula-mula lulus meskipun dijalankan terhadap implementasi
+lama yang sudah diketahui boros. Penyebabnya bukan pada implementasinya
+melainkan pada penyiapan datanya: berkas contoh disusun lebih dahulu di dalam
+memori, sehingga selisih pemakaian yang hendak diukur tenggelam di dalam
+pemakaian penyiapannya sendiri. Setelah penyiapan diperbaiki agar menulis berkas
+contoh sepotong demi sepotong, implementasi yang boros menaikkan pemakaian
+memori sebesar 167 MB dan uji itu gagal sebagaimana seharusnya. Sebuah uji yang
+tidak pernah terlihat gagal belum terbukti mampu menangkap apa pun, dan sejak
+itu setiap uji yang mengukur batas sumber daya dijalankan lebih dahulu terhadap
+implementasi yang sengaja dirusak.
+
+**Kerusakan yang tidak terlihat pada peninjauan kode.** Delapan berkas sumber
+memuat urutan byte yang rusak, yaitu kerusakan UTF-8 yang timbul ketika berkas
+dibaca sebagai Windows-1252 lalu disimpan ulang; satu baris bahkan telah
+mengalaminya tiga kali berturut-turut. Kerusakan itu tidak menggagalkan
+kompilasi, tidak menggagalkan satu pun uji yang ada, dan tidak terlihat pada
+peninjauan kode. Satu-satunya gejalanya adalah karakter aneh pada teks yang
+dibaca pengguna, dan lima dari delapan berkas itu memang memuat teks antarmuka.
+Karena itu dipasang dua uji penjaga yang memindai berkas sumber dan menolak lima
+pola kerusakan tersebut, satu pada sisi peladen dan satu pada sisi klien. Cacat
+yang luput dari mata manusia hanya dapat dijaga oleh mesin.
 
 ### 4.3.3 Pengujian Mutu Keluaran Model
 
@@ -2348,7 +2577,7 @@ karena itu memakai skema *hold-out*: sebuah frame yang merupakan titik tengah
 tepat dari dua frame yang ada disembunyikan dari model, dibangkitkan kembali,
 lalu dibandingkan terhadap frame asli yang disembunyikan itu.
 
-**Tabel 4. 10 Hasil Validasi Hold-Out terhadap Tiga Pekerjaan Nyata**
+**Tabel 4. 16 Hasil Validasi Hold-Out terhadap Tiga Pekerjaan Nyata**
 
 | Besaran | Nilai | Keterangan |
 |---------|------:|------------|
@@ -2363,7 +2592,7 @@ dan hal tersebut merupakan salah satu temuan penting penelitian. Keluaran model
 dibandingkan terhadap pencampuran linier, yaitu rata-rata berbobot kedua frame
 batas, pada lima kasus lintas tiga sampel berbeda.
 
-**Tabel 4. 11 Model terhadap Pencampuran Linier pada Tiga Metrik**
+**Tabel 4. 17 Model terhadap Pencampuran Linier pada Tiga Metrik**
 
 | Metrik | Model unggul | Keterangan |
 |--------|-------------:|------------|
@@ -2392,7 +2621,7 @@ Sepanjang pembangunan sistem ini, umpan balik tersebut diperoleh melalui
 percobaan langsung bersama pihak BRIN Puspiptek dan diterjemahkan menjadi
 perubahan pada iterasi berikutnya.
 
-**Tabel 4. 12 Instrumen Kuesioner Tanggapan Pengguna**
+**Tabel 4. 18 Instrumen Kuesioner Tanggapan Pengguna**
 
 | Kode | Pernyataan | Aspek |
 |------|------------|-------|
@@ -2404,11 +2633,11 @@ perubahan pada iterasi berikutnya.
 | K-06 | Aplikasi pada telepon genggam sama mudahnya dengan peramban | Kesetaraan antarperon |
 | K-07 | Sistem ini mempercepat penanganan celah dibanding cara sebelumnya | Manfaat |
 
-Tabulasi tanggapan diisi setelah kuesioner disebarkan. Tabel 4.13 sampai 4.15
+Tabulasi tanggapan diisi setelah kuesioner disebarkan. Tabel 4.19 sampai 4.21
 disiapkan kosong beserta rumus penafsirannya, sehingga pengisiannya tidak
 menuntut keputusan baru mengenai cara menghitungnya.
 
-**Tabel 4. 13 Profil Responden**
+**Tabel 4. 19 Profil Responden**
 
 | No | Nama / Inisial | Peran | Lama memakai sistem | Tanggal pengisian |
 |----|----------------|-------|---------------------|-------------------|
@@ -2418,7 +2647,7 @@ menuntut keputusan baru mengenai cara menghitungnya.
 | 4 | | | | |
 | 5 | | | | |
 
-**Tabel 4. 14 Tabulasi Tanggapan per Pernyataan**
+**Tabel 4. 20 Tabulasi Tanggapan per Pernyataan**
 
 | Kode | Pernyataan | STS (1) | TS (2) | N (3) | S (4) | SS (5) | Total Skor | Indeks (%) |
 |------|------------|:-------:|:------:|:-----:|:-----:|:------:|-----------:|-----------:|
@@ -2436,7 +2665,7 @@ Total skor dihitung sebagai `Σ (jumlah responden × nilai pilihan)`, dan indeks
 sebagai `total skor ÷ (5 × jumlah responden) × 100%`. Rerata pada baris
 terakhir adalah rerata indeks ketujuh pernyataan.
 
-**Tabel 4. 15 Rentang Penafsiran Indeks Tanggapan**
+**Tabel 4. 21 Rentang Penafsiran Indeks Tanggapan**
 
 | Rentang indeks | Penafsiran |
 |----------------|------------|
@@ -2460,75 +2689,269 @@ sengaja dihindari.
 
 Penelitian ini merancang dan membangun sistem multiplatform terintegrasi
 berbasis arsitektur *hybrid cloud-NAS* untuk mengisi celah pada barisan
-proyeksi tomografi komputer neutron di BRIN Puspiptek. Berdasarkan implementasi
-dan pengujian yang telah dilakukan, diperoleh kesimpulan berikut.
+proyeksi tomografi komputer neutron di BRIN Puspiptek. Kesimpulan berikut
+disusun mengikuti ketiga rumusan masalah pada subbab 1.3, dan setiap kesimpulan
+disandarkan pada hasil implementasi di subbab 4.2 serta hasil pengujian di
+subbab 4.3, bukan pada rencana perancangan.
 
-Pertama, sistem yang dibangun berhasil menjalankan pengisian celah secara
-otomatis sekaligus menjaga arsip penelitian tetap berada di dalam institusi.
-Wujudnya berupa 104 rute antarmuka pemrograman aplikasi pada 17 kelas
-pengendali, 15 tabel basis data milik aplikasi, antrean pekerjaan dengan dua kelas pekerjaan
-latar dan enam perintah terjadwal, serta 23 layar aplikasi klien yang
-dikompilasi dari satu basis kode menjadi aplikasi peramban dan aplikasi
-Android. Seluruh berkas penelitian menetap pada perangkat lokal dan volume NAS,
-sementara yang menyeberang ke lingkungan awan hanya dua frame batas dan satu
-skalar waktu pada setiap panggilan.
+### 5.1.1 Rancang Bangun Sistem pada Arsitektur Hybrid Cloud-NAS
 
-Kedua, penerapan algoritma Spatio-Temporal U-Net pada persoalan ini berhasil
-menghasilkan frame antara, tetapi perilakunya terhadap arsip yang sebenarnya
-ikut menentukan bagaimana sistem harus dirancang. Pengukuran terhadap bobot
-dasar menunjukkan tanggapannya terhadap skalar waktu hanya 0,17% dari yang
-seharusnya, sehingga pengisian harus dijalankan secara rekursif pada titik
-tengah, dan galatnya berlipat 1,73 kali setiap kali sebuah batas merupakan
-keluaran model sendiri. Akibatnya hanya frame yang kedua batasnya merupakan
-hasil pindai yang layak dipercaya. Percobaan penyempurnaan bobot berhasil
-menaikkan tanggapan tersebut menjadi 27,87% tanpa mengubah satu lapisan pun,
-yang membuktikan mekanismenya dapat diajarkan melalui distribusi data
-pelatihan, tetapi rasio keragaman keluarannya baru mencapai 0,210 sehingga
-bobot itu tidak dipasang.
+Rumusan pertama menanyakan bagaimana membangun sistem yang mengisi celah secara
+otomatis, sementara arsip penelitiannya harus tetap berada di dalam institusi
+padahal kartu grafis yang dibutuhkannya berada di luar kendali institusi.
+Pertanyaan itu terjawab, dan jawabannya berupa pemisahan tanggung jawab yang
+tegas antara tempat berkas menetap dan tempat perhitungan berlangsung.
 
-Ketiga, mutu setiap frame dapat diukur dan dipertanggungjawabkan melalui
-validasi *hold-out* yang menghasilkan MAE 359,747, RMSE 688,092, dan PSNR
-39,58 dB, atau sekitar 0,6% dari rentang citra acuan. Pengukuran tersebut juga
-menunjukkan bahwa MAE dan PSNR menyesatkan bila dipakai sendirian: pencampuran
-linier mengungguli model pada kedua metrik itu, sementara pada SSIM model
-unggul pada seluruh lima kasus dengan keunggulan yang melebar pada kasus yang
-lebih sulit. Pencatatan asal-usul frame melalui nilai `generation` melengkapi
-angka tersebut, sehingga peneliti yang menerima hasil dapat menilai sendiri
-tingkat kepercayaan setiap frame.
+Sistem yang dibangun terdiri atas 104 rute antarmuka pemrograman aplikasi pada
+17 kelas pengendali, 23 tabel basis data yang 15 di antaranya milik aplikasi,
+antrean pekerjaan dengan dua kelas pekerjaan latar, enam perintah terjadwal,
+serta 23 layar aplikasi klien yang dikompilasi dari satu basis kode menjadi
+aplikasi peramban dan aplikasi Android sekaligus. Seluruhnya telah dijalankan
+ujung ke ujung terhadap arsip citra neutron yang sebenarnya, bukan terhadap data
+sintetis, dan hasilnya dilaporkan pada Tabel 4.10.
+
+Pemisahan yang menjawab rumusan pertama terletak pada apa yang boleh
+menyeberang. Seluruh arsip penelitian, baik arsip unggahan, frame hasil
+ekstraksi, maupun arsip keluaran, menetap pada volume penyimpanan institusi.
+Yang menyeberang ke lingkungan komputasi awan pada setiap panggilan hanyalah dua
+frame batas dan satu skalar waktu, dan keduanya tidak disimpan di sisi
+penerimanya. Dengan begitu kartu grafis yang berada di luar institusi dapat
+dipakai tanpa memindahkan arsip penelitian ke luar institusi, dan itulah inti
+dari arsitektur *hybrid cloud-NAS* yang diusulkan.
+
+Pemisahan tersebut sekaligus membuat layanan inferensi dapat diganti tanpa
+menyentuh bagian lain sistem. Peladen hanya mengenal satu alamat dan satu
+kontrak berupa unggahan berformat *multipart* yang mengembalikan berkas TIFF,
+sehingga sesi komputasi awan yang berakhir, alamat terowongan yang berubah, atau
+kelak kartu grafis milik institusi sendiri, semuanya diperlakukan sebagai
+perubahan alamat belaka.
+
+Sistem juga terbukti bertahan ketika bagian-bagiannya sengaja dimatikan. Lima
+skenario ketahanan pada Tabel 4.10 menguji layanan inferensi yang dimatikan,
+pekerja antrean yang dihentikan, volume penyimpanan yang dilepas, sesi awan yang
+terputus di tengah pelatihan, dan alamat layanan yang menunjuk sesi yang telah
+berakhir. Pada kelimanya sistem menyatakan sebab kegagalannya, bukan berhenti
+tanpa keterangan. Hal ini penting pada arsitektur yang bagian-bagiannya berjalan
+di mesin berbeda, sebab kegagalan yang paling merugikan bukanlah kegagalan yang
+kentara, melainkan pekerjaan yang tampak menunggu selamanya tanpa ada yang tahu
+sebabnya.
+
+### 5.1.2 Penerapan Algoritma Spatio-Temporal U-Net
+
+Rumusan kedua menanyakan bagaimana algoritma Spatio-Temporal U-Net beserta
+proses pelatihannya bekerja pada persoalan ini, dan sejauh mana perilakunya
+terhadap arsip proyeksi yang sebenarnya ikut menentukan bagaimana sistemnya
+harus dirancang. Bagian kedua pertanyaan itulah yang menghasilkan temuan paling
+menentukan dalam penelitian ini.
+
+Model hasil kolaborasi dengan BRIN yang dipakai memiliki 31 lapisan dan
+21.921.601 parameter, dengan tiga lapisan ConvLSTM2D dan sebuah lapisan
+penggabung jalur yang dirancang khusus. Model tersebut berhasil menghasilkan
+frame antara pada arsip proyeksi neutron yang sebenarnya, dengan waktu 42 sampai
+54 detik untuk setiap pekerjaan yang menghasilkan dua frame.
+
+Pengukuran terhadap bobot dasar menyingkap empat batas rancangan yang tidak
+diketahui sebelum arsip yang sebenarnya diujikan. Pertama, tanggapan model
+terhadap skalar waktu hanya 0,17% dari yang seharusnya, sehingga model itu pada
+praktiknya hanya mampu menghasilkan titik tengah. Kedua, karena hanya titik
+tengah yang dapat dihasilkan, pengisian celah yang lebih lebar harus dijalankan
+secara rekursif dengan membelah dua celah tersebut berulang kali. Ketiga, galat
+berlipat 1,73 kali setiap kali sebuah batas merupakan keluaran model sendiri.
+Keempat, akibat ketiganya, hanya frame yang kedua batasnya merupakan hasil
+pindai yang layak dipercaya: celah selebar dua menghasilkan satu frame layak
+dari satu frame, celah selebar empat menghasilkan satu dari tiga, dan celah
+selebar delapan tidak menghasilkan satu pun frame layak dari tujuh frame yang
+dibangkitkannya.
+
+Keempat batas tersebut bukan cacat yang ditemukan lalu ditutupi, melainkan sifat
+terukur yang justru menentukan rancangan sistemnya. Tidak adanya kendali skalar
+waktu pada antarmuka bukan penyederhanaan tampilan, melainkan penolakan
+menyediakan kendali yang tidak akan bekerja. Pencatatan nilai `generation` pada
+setiap frame ada karena angka 1,73 kali tersebut membuat kepercayaan terhadap
+frame tidak lagi seragam. Rekursi titik tengah ada karena titik tengah adalah
+satu-satunya yang dapat diminta. Dengan kata lain, rumusan kedua terjawab bukan
+hanya dengan menerapkan algoritmanya, melainkan dengan menunjukkan bahwa
+perilaku terukur algoritma itu meresap sampai ke keputusan perancangan
+antarmuka.
+
+Percobaan penyempurnaan bobot dilakukan untuk menguji apakah batas pertama dapat
+diperbaiki melalui pelatihan, dan hasilnya membenarkan dugaan tersebut sekaligus
+menolak pemakaiannya. Tanggapan terhadap skalar waktu naik dari 0,17% menjadi
+27,87% tanpa mengubah satu lapisan pun, yang membuktikan bahwa mekanisme
+tersebut memang dapat diajarkan melalui distribusi data pelatihan. Namun rasio
+keragaman keluarannya baru mencapai 0,210, di bawah ambang yang ditetapkan
+sebelum percobaan dimulai, sehingga bobot hasil percobaan itu tidak dipasang
+pada sistem. Ambang tersebut ditetapkan lebih dahulu justru agar keputusan
+memasang atau tidak memasang tidak diambil setelah melihat hasil yang
+menyenangkan.
+
+### 5.1.3 Pengukuran dan Penyampaian Mutu Frame
+
+Rumusan ketiga menanyakan bagaimana mutu setiap frame dapat diukur dan
+disampaikan kepada peneliti yang menerimanya, padahal frame yang justru ingin
+diisi menurut definisinya tidak memiliki pembanding. Jawabannya terdiri atas dua
+bagian yang saling melengkapi, yaitu pengukuran terhadap frame yang pembandingnya
+sengaja disembunyikan, dan pencatatan asal-usul bagi frame yang memang tidak
+memiliki pembanding.
+
+Pengukuran memakai skema validasi *hold-out* dan menghasilkan MAE 359,747, RMSE
+688,092, serta PSNR 39,58 dB, atau sekitar 0,6% dari rentang citra acuan.
+Pengukuran tersebut sekaligus menghasilkan temuan metodologis: MAE dan PSNR
+menyesatkan apabila dipakai sendirian pada persoalan ini. Pencampuran linier,
+yaitu rata-rata sederhana kedua frame batas, mengungguli model pada MAE dalam 4
+dari 5 kasus dan pada PSNR dalam seluruh 5 kasus, karena rata-rata memang
+tebakan yang meminimalkan galat kuadrat. Namun pada SSIM, yang membandingkan
+struktur setempat alih-alih selisih titik demi titik, model unggul pada seluruh
+5 kasus, dan keunggulannya justru melebar pada kasus yang lebih sulit. Frame
+proyeksi yang kabur merusak rekonstruksi volumetrik, sehingga metrik yang
+menghargai keburaman tidak dapat dijadikan ukuran keberhasilan tunggal.
+
+Bagi frame yang memang tidak memiliki pembanding, mutu disampaikan melalui
+pencatatan asal-usul. Setiap frame keluaran membawa nilai `generation` yang
+menyatakan seberapa jauh frame itu diturunkan dari frame hasil pindai, dan nilai
+`synthetic_parents` yang menyatakan berapa banyak batasnya yang merupakan
+keluaran model. Kedua nilai tersebut disampaikan pada galeri frame maupun di
+dalam manifes arsip unduhan, sehingga peneliti yang menerima hasil dapat menilai
+sendiri tingkat kepercayaan setiap frame alih-alih menerima seluruh keluaran
+sebagai setara.
+
+Pengujian jalur dasar pada subbab 4.3.2 memastikan bahwa keterangan tersebut
+benar pada keempat jalur yang mungkin ditempuh fungsi interpolasi, termasuk
+jalur yang menghasilkan frame yang kedua batasnya sintetis. Dengan demikian
+frame yang paling tidak layak dipakai adalah frame yang keterangannya paling
+jelas menyatakan ketidaklayakan itu.
+
+### 5.1.4 Batas Keberlakuan Kesimpulan
+
+Beberapa hal sengaja dinyatakan agar kesimpulan di atas tidak dibaca lebih luas
+daripada yang dibuktikannya.
+
+Pengukuran mutu pada subbab 4.3.3 diperoleh dari tiga pekerjaan nyata dan lima
+kasus pembandingan lintas tiga sampel. Jumlah tersebut memadai untuk menunjukkan
+arah perbedaan antarmetrik, tetapi belum memadai untuk menyatakan angka mutu
+yang berlaku umum bagi seluruh jenis sampel neutron.
+
+Tanggapan pengguna belum dikumpulkan. Instrumen kuesioner beserta rumus
+penafsirannya telah disusun pada subbab 4.3.4, tetapi penyebarannya belum
+dilaksanakan, sehingga kesimpulan mengenai kegunaan sistem pada penelitian ini
+bersandar pada pengujian fungsional dan percobaan langsung, bukan pada angka
+tanggapan responden.
+
+Penerapan sistem pada saat naskah ini disusun masih berjalan di atas peladen
+maya sebagai lingkungan sementara, dengan layanan inferensi pada sesi komputasi
+awan dan aplikasi peramban pada layanan hosting statis. Pemasangan pada
+lingkungan BRIN Puspiptek beserta volume NAS institusi belum dilaksanakan.
+Rancangan sistemnya telah menyiapkan kepindahan tersebut — jalur penyimpanan
+dan alamat layanan inferensi keduanya merupakan tatanan yang dapat diubah tanpa
+menyentuh kode — tetapi kepindahan itu sendiri belum terjadi dan karenanya belum
+diuji pada perangkat yang sebenarnya.
+
+Terakhir, penelitian ini berhenti pada barisan proyeksi yang telah lengkap.
+Pengaruh frame hasil interpolasi terhadap mutu rekonstruksi volumetrik belum
+diukur, sehingga kesimpulan mengenai mutu di atas berlaku pada tataran frame
+proyeksi, bukan pada tataran volume hasil rekonstruksi.
 
 ## 5.2 Saran
 
-Beberapa hal masih terbuka untuk dikerjakan pada penelitian lanjutan.
+Saran berikut disusun menurut siapa yang paling mungkin mengerjakannya, dan
+diurutkan di dalam setiap kelompok menurut biaya yang dibutuhkannya, dari yang
+paling murah ke yang paling mahal.
 
-Pertama, penyempurnaan bobot model perlu dilanjutkan. Kurva pelatihan pada
-percobaan yang dilaporkan masih menurun pada 76% laju awal ketika pelatihan
-dihentikan, yang berarti kurvanya belum mendatar. Dua arah yang paling layak
-ditempuh, berurutan menurut biayanya, adalah melanjutkan pelatihan melewati
-epoch kedua puluh dan memperoleh barisan proyeksi yang lebih panjang dari satu
-objek yang sama. Sepuluh frame yang menghasilkan 112 contoh berhadapan dengan
+### 5.2.1 Saran bagi Pengembangan Sistem
+
+Pertama, ambang kelayakan sebaiknya dinyatakan lebih tegas pada antarmuka.
+Sistem saat ini telah mencatat dan menyampaikan nilai `generation` setiap frame,
+tetapi belum menyatakan secara eksplisit bahwa frame bergenerasi dua ke atas
+berada di bawah ambang kelayakan yang terukur pada subbab 4.3.3. Menyampaikan
+angkanya saja mengandaikan pembacanya telah membaca naskah ini; menyampaikan
+penilaiannya tidak.
+
+Kedua, perkiraan jumlah frame layak sebaiknya ditampilkan sebelum pekerjaan
+dijalankan. Lebar celah pada arsip unggahan sudah diketahui sistem pada tahap
+pratinjau, dan dari lebar itu jumlah frame yang kedua batasnya hasil pindai
+dapat dihitung tanpa menjalankan model sama sekali. Peneliti yang mengetahui
+lebih dahulu bahwa celah selebar delapan tidak akan menghasilkan satu pun frame
+layak dapat memilih memperbaiki arsipnya alih-alih menunggu pekerjaan yang
+hasilnya sudah dapat diperkirakan.
+
+Ketiga, tanggapan pengguna perlu dikumpulkan dan ditabulasikan dengan instrumen
+yang telah disusun pada subbab 4.3.4, sehingga penilaian terhadap kegunaan
+sistem tidak hanya bertumpu pada percobaan langsung yang tidak terekam angkanya.
+
+### 5.2.2 Saran bagi Penyempurnaan Model
+
+Pertama, pelatihan pada percobaan penyempurnaan perlu dilanjutkan melewati
+epoch kedua puluh. Kurva pelatihannya masih menurun pada 76% laju awal ketika
+pelatihan dihentikan, yang berarti kurvanya belum mendatar dan angka 27,87% itu
+belum tentu merupakan batas yang dapat dicapai. Ini adalah arah yang paling
+murah karena tidak menuntut data baru.
+
+Kedua, barisan proyeksi yang lebih panjang dari satu objek yang sama perlu
+diperoleh. Sepuluh frame yang menghasilkan 112 contoh berhadapan dengan
 21.921.601 parameter merupakan perbandingan yang membuat penghafalan jauh lebih
-mudah daripada penyimpulan.
+mudah daripada penyimpulan, dan tidak ada penyetelan hiperparameter yang dapat
+menggantikan kekurangan tersebut.
 
-Kedua, ambang kelayakan sebaiknya disampaikan lebih tegas pada antarmuka.
-Sistem saat ini telah mencatat dan menyampaikan nilai `generation` setiap
-frame, tetapi belum menyatakan secara eksplisit bahwa frame bergenerasi dua ke
-atas berada di bawah ambang kelayakan yang terukur.
+Ketiga, rasio keragaman keluaran sebaiknya tetap dipertahankan sebagai syarat
+pemasangan bobot, dan ambangnya tetap ditetapkan sebelum percobaan berikutnya
+dimulai. Menaikkan tanggapan terhadap skalar waktu tanpa menaikkan keragaman
+keluaran berarti model menjawab pertanyaan yang berbeda dengan jawaban yang
+sama, dan hal itu tidak akan terlihat pada metrik kerugian pelatihan.
 
-Ketiga, tanggapan pengguna perlu dikumpulkan dan ditabulasikan dengan
-instrumen yang telah disusun pada subbab 4.3.4, sehingga penilaian terhadap
-kegunaan sistem tidak hanya bertumpu pada percobaan langsung yang tidak
-terekam angkanya.
+Keempat, apabila ketiga hal di atas terpenuhi dan tanggapan terhadap skalar
+waktu mendekati sebagaimana mestinya, pengisian celah tidak lagi perlu
+dijalankan secara rekursif. Setiap frame antara dapat diminta langsung pada
+posisi waktunya sendiri dengan kedua batas hasil pindai, sehingga pelipatan
+galat 1,73 kali hilang dari persoalan. Sistem tidak perlu diubah untuk
+menyambutnya: fungsi interpolasi memanggil layanan inferensi dengan skalar waktu
+sebagai parameter, dan nilainya saat ini dipatok pada titik tengah hanya karena
+nilai lain tidak berpengaruh.
 
-Keempat, ketergantungan pada sesi komputasi awan yang dapat berakhir
-sewaktu-waktu masih menjadi kelemahan yang melekat. Apabila di kemudian hari
-institusi memiliki kartu grafis sendiri, seluruh layanan inferensi dapat
-dipindahkan ke dalam institusi tanpa mengubah rancangan sistemnya, sebab
+### 5.2.3 Saran bagi Penerapan di Lingkungan Institusi
+
+Pertama, pemasangan pada lingkungan BRIN Puspiptek beserta volume NAS institusi
+perlu dilaksanakan, dan pemasangan itulah yang menjadikan arsitektur *hybrid
+cloud-NAS* terwujud sepenuhnya sebagaimana dirancang. Jalur penyimpanan sudah
+merupakan tatanan yang dapat diubah, dan penjaga penyimpanan yang diuji pada
+skenario B-21 sudah menolak bekerja apabila volume tersebut tidak terpasang,
+sehingga kesalahan pemasangan akan menampakkan diri seketika alih-alih diam-diam
+menulis berkas ke tempat yang salah.
+
+Kedua, ketergantungan pada sesi komputasi awan yang dapat berakhir sewaktu-waktu
+masih merupakan kelemahan yang melekat pada penerapan saat ini. Apabila di
+kemudian hari institusi memiliki kartu grafis sendiri, seluruh layanan inferensi
+dapat dipindahkan ke dalam institusi tanpa mengubah rancangan sistemnya, sebab
 antarmuka antara peladen dan layanan inferensi telah dipisahkan sejak awal.
+Kepindahan itu juga akan menghapus satu-satunya jalur data yang keluar dari
+institusi, sehingga janji kedaulatan data terpenuhi bukan hanya pada arsipnya
+melainkan juga pada frame batas yang dikirim tiap panggilan.
 
-Kelima, penelitian ini berhenti pada barisan proyeksi yang telah lengkap.
-Pengaruh frame hasil interpolasi terhadap mutu rekonstruksi volumetrik belum
-diukur, dan pengukuran tersebut merupakan kelanjutan yang paling langsung dari
-pekerjaan ini.
+Ketiga, prosedur pengambilalihan perlu disiapkan agar sistem dapat dirawat tanpa
+kehadiran penyusun awalnya. Rahasia bersama antara peladen dan layanan
+inferensi, tatanan lingkungan yang dibekukan ketika penerapan dijalankan, serta
+urutan pemulaian antrean dan penjadwal merupakan tiga hal yang paling sering
+menjadi sebab kegagalan yang tidak kentara, dan ketiganya telah dicatat pada
+dokumentasi teknis yang menyertai kode.
+
+### 5.2.4 Saran bagi Penelitian Lanjutan
+
+Pertama, pengaruh frame hasil interpolasi terhadap mutu rekonstruksi volumetrik
+perlu diukur. Pengukuran tersebut merupakan kelanjutan yang paling langsung dari
+pekerjaan ini, sebab seluruh manfaat yang dijanjikan — memperlebar jarak sudut
+untuk menghemat waktu berkas neutron — hanya benar-benar terbukti pada tataran
+volume hasil rekonstruksi, bukan pada tataran frame proyeksi.
+
+Kedua, temuan mengenai perbedaan perilaku MAE, PSNR, dan SSIM pada persoalan ini
+layak diuji pada modalitas pencitraan lain yang serupa sifatnya. Apabila
+perbedaan tersebut berulang, ia bukan sifat khusus arsip neutron melainkan sifat
+metriknya, dan hal itu berkonsekuensi pada bagaimana penelitian interpolasi
+frame di bidang pencitraan ilmiah melaporkan keberhasilannya.
+
+Ketiga, ambang kelayakan berbasis generasi yang dipakai pada penelitian ini
+diturunkan dari perbandingan terhadap penyalinan frame tetangga. Ambang tersebut
+dapat disempurnakan menjadi ukuran yang bergantung pada isi citra, sebab sampel
+dengan struktur yang lebih rumit kemungkinan memiliki ambang yang berbeda
+daripada sampel yang seragam.
 
 # DAFTAR PUSTAKA
 

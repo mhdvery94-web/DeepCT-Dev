@@ -234,21 +234,27 @@ adalah sebagai berikut:
 1. Akuisisi citra proyeksi tomografi komputer neutron memakan waktu lama dan
    bergantung pada waktu berkas neutron yang terbatas, sehingga peneliti
    terdorong memperlebar jarak sudut antarproyeksi dengan risiko menurunnya
-   mutu rekonstruksi volumetrik. 2. Sebagian proyeksi hilang atau rusak selama
-   akuisisi, dan pemindaian ulang untuk sudut yang hilang menuntut pengantrean
-   waktu berkas dari awal. 3. Pengisian celah proyeksi secara manual maupun
-   dengan interpolasi linier sederhana tidak konsisten antarpeneliti, tidak
-   dapat diulang dengan hasil yang sama, dan berpotensi menambah artefak pada
-   rekonstruksi. 4. Belum tersedia mekanisme yang mencatat asal-usul setiap
-   frame, sehingga peneliti yang menerima hasil tidak dapat membedakan frame
-   hasil pindai dari frame keluaran model, maupun mengetahui seberapa jauh
-   sebuah frame dihasilkan dari keluaran model sebelumnya. 5. Model
-   interpolasi menuntut kartu grafis, sedangkan perangkat kerja di
+   mutu rekonstruksi volumetrik.
+
+2. Sebagian proyeksi hilang atau rusak selama akuisisi, dan pemindaian ulang
+   untuk sudut yang hilang menuntut pengantrean waktu berkas dari awal.
+
+3. Pengisian celah proyeksi secara manual maupun dengan interpolasi linier
+   sederhana tidak konsisten antarpeneliti, tidak dapat diulang dengan hasil
+   yang sama, dan berpotensi menambah artefak pada rekonstruksi.
+
+4. Belum tersedia mekanisme yang mencatat asal-usul setiap frame, sehingga
+   peneliti yang menerima hasil tidak dapat membedakan frame hasil pindai
+   dari frame keluaran model, maupun mengetahui seberapa jauh sebuah frame
+   dihasilkan dari keluaran model sebelumnya.
+
+5. Model interpolasi menuntut kartu grafis, sedangkan perangkat kerja di
    laboratorium tidak selalu memilikinya, dan data hasil penelitian tidak
-   boleh menetap di layanan komputasi awan pihak ketiga. 6. Belum tersedia
-   antarmuka yang memungkinkan peneliti menjalankan proses interpolasi,
-   memantau antrean, dan mengambil hasil dari perangkat yang berbeda-beda
-   tanpa bergantung pada satu komputer tertentu.
+   boleh menetap di layanan komputasi awan pihak ketiga.
+
+6. Belum tersedia antarmuka yang memungkinkan peneliti menjalankan proses
+   interpolasi, memantau antrean, dan mengambil hasil dari perangkat yang
+   berbeda-beda tanpa bergantung pada satu komputer tertentu.
 
 ## 1.3 Rumusan Masalah
 
@@ -395,15 +401,19 @@ penelitian ini adalah :
 
 1. Merancang dan membangun sistem multiplatform terintegrasi berbasis
    arsitektur *hybrid cloud-NAS* yang menjalankan interpolasi citra proyeksi
-   tomografi komputer neutron secara otomatis, dapat diakses melalui peramban
-   maupun telepon genggam. 2. Menerapkan algoritma Spatio-Temporal U-Net
-   beserta proses pelatihannya untuk mengisi celah pada barisan proyeksi,
-   termasuk mekanisme interpolasi rekursif pada titik tengah. 3. Menyusun
-   mekanisme pengukuran mutu berbasis validasi *hold-out* beserta pencatatan
-   asal-usul setiap frame, sehingga hasil interpolasi dapat
-   dipertanggungjawabkan angkanya oleh peneliti yang menerimanya. 4.
-   Menghasilkan purwarupa yang telah diuji ujung ke ujung terhadap arsip citra
-   neutron dan kartu grafis yang sebenarnya, bukan hanya terhadap data
+   tomografi komputer neutron secara otomatis, dapat diakses melalui
+   peramban maupun telepon genggam.
+
+2. Menerapkan algoritma Spatio-Temporal U-Net beserta proses pelatihannya
+   untuk mengisi celah pada barisan proyeksi, termasuk mekanisme interpolasi
+   rekursif pada titik tengah.
+
+3. Menyusun mekanisme pengukuran mutu berbasis validasi *hold-out* beserta
+   pencatatan asal-usul setiap frame, sehingga hasil interpolasi dapat
+   dipertanggungjawabkan angkanya oleh peneliti yang menerimanya.
+
+4. Menghasilkan purwarupa yang telah diuji ujung ke ujung terhadap arsip
+   citra neutron dan kartu grafis yang sebenarnya, bukan hanya terhadap data
    sintetis.
 
 ## 1.6 Manfaat Penelitian
@@ -1070,18 +1080,27 @@ dan angka mutu setiap frame yang dihasilkan.
 Alur kerja sistem yang diusulkan adalah sebagai berikut:
 
 1. Peneliti masuk melalui aplikasi peramban atau Android, lalu mengunggah
-   arsip `.zip` berisi frame proyeksi bernomor. Arsip berukuran besar diunggah
-   secara berpotongan agar sambungan yang terputus dapat dilanjutkan. 2.
-   Peladen mengekstraksi frame, memvalidasi format dan penomorannya, kemudian
-   menampilkan pratinjau agar peneliti dapat memeriksa arsipnya sebelum
-   pekerjaan dijalankan. 3. Peneliti menekan tombol mulai. Pekerjaan masuk ke antrean dengan posisinya, dan perkiraan waktu tunggu dihitung dari lama
-   pekerjaan yang benar-benar pernah terukur pada sistem ini. 4. Pekerja
-   antrean mengisi celah secara rekursif dengan memanggil layanan inferensi
-   untuk setiap pasangan batas, dan mencatat asal-usul setiap frame yang
-   dihasilkan. 5. Apabila arsip mengandung frame yang merupakan titik tengah
-   tepat dari dua frame lain, frame tersebut disembunyikan, dibangkitkan ulang
-   oleh model, lalu dibandingkan terhadap aslinya sebagai validasi *hold-out*.
-   6. Hasil dikemas kembali menjadi arsip yang dapat diunduh, disertai berkas
+   arsip `.zip` berisi frame proyeksi bernomor. Arsip berukuran besar
+   diunggah secara berpotongan agar sambungan yang terputus dapat
+   dilanjutkan.
+
+2. Peladen mengekstraksi frame, memvalidasi format dan penomorannya,
+   kemudian menampilkan pratinjau agar peneliti dapat memeriksa arsipnya
+   sebelum pekerjaan dijalankan.
+
+3. Peneliti menekan tombol mulai. Pekerjaan masuk ke antrean dengan
+   posisinya, dan perkiraan waktu tunggu dihitung dari lama pekerjaan yang
+   benar-benar pernah terukur pada sistem ini.
+
+4. Pekerja antrean mengisi celah secara rekursif dengan memanggil layanan
+   inferensi untuk setiap pasangan batas, dan mencatat asal-usul setiap
+   frame yang dihasilkan.
+
+5. Apabila arsip mengandung frame yang merupakan titik tengah tepat dari dua
+   frame lain, frame tersebut disembunyikan, dibangkitkan ulang oleh model,
+   lalu dibandingkan terhadap aslinya sebagai validasi *hold-out*.
+
+6. Hasil dikemas kembali menjadi arsip yang dapat diunduh, disertai berkas
    metadata dan manifes yang memuat asal-usul serta angka mutu.
 
 ## 3.5 Perancangan Sistem

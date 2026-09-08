@@ -33,6 +33,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.0] - 2026-09-08
+
+### BAB IV dan BAB V naskah skripsi diperdalam
+
+Naskah skripsi lima bab sebelumnya memperlakukan pengujian sebagai satu tabel
+hasil dan satu tabel perintah. Itu memadai untuk seminar proposal, tetapi
+menyembunyikan cara kasus ujinya dipilih dan tidak menunjukkan satu pun cabang
+keputusan yang benar-benar diperiksa.
+
+**Pengujian black box** kini menyatakan tekniknya. Partisi ekuivalensi memetakan
+delapan masukan utama menjadi kelas sah dan tidak sah, kasus ujinya diambil satu
+wakil per kelas sehingga tumbuh dari 14 menjadi 30 skenario, dan analisa nilai
+batas menambah 11 pengujian tepat pada tepi setiap kelas. Tiga di antaranya
+menyentuh mekanisme rekursi: celah selebar satu harus berhenti tanpa
+membangkitkan apa pun dan bukan menjadi galat, celah selebar dua menghasilkan
+satu frame bergenerasi 1, dan celah selebar empat menghasilkan tiga frame yang
+tingkat kepercayaannya tidak sama.
+
+**Pengujian white box** kini benar-benar membaca kodenya. `interpolateBetween()`
+pada `ProcessDeepLearningImage` memuat tiga predikat, jadi V(G) = 4, dan keempat
+jalur bebasnya dipetakan ke kasus uji yang melewatinya. Graf alirnya digambar
+dari kode itu sendiri, bukan dari uraian perancangan (`Gambar 4.11`). Jalur P-4
+adalah jalur yang menghasilkan frame yang kedua batasnya sintetis, yang galatnya
+1.174,9 — melebihi 555 yang diperoleh dengan menyalin frame tetangga. Kode
+menempuhnya dengan benar; yang dibuktikan pengujian ini bukan ketiadaan
+kesalahan, melainkan bahwa keterangan asal-usulnya sampai ke pembacanya.
+
+Dua kejadian selama pembangunan ikut dicatat karena keduanya mengubah cara
+pengujian disusun: uji memori yang lulus terhadap implementasi yang sengaja
+dibuat salah, dan delapan berkas sumber yang rusak penyandiannya tanpa
+menggagalkan satu pun uji yang ada.
+
+**BAB V** disusun ulang mengikuti ketiga rumusan masalah, masing-masing dengan
+buktinya, ditambah subbab batas keberlakuan yang menyatakan apa yang belum
+dibuktikan — jumlah sampel pengukuran mutu, kuesioner yang belum disebar,
+pemasangan pada NAS institusi yang belum dilaksanakan, dan rekonstruksi
+volumetrik yang belum diukur. Sarannya dipecah menjadi empat kelompok menurut
+siapa yang mengerjakannya.
+
+Naskah skripsi tumbuh dari 81 menjadi **95 halaman**, 47 tabel dan 23 gambar,
+diukur dengan `Repaginate()` lewat Word, bukan diperkirakan. Seminar proposal
+tetap 64 halaman sebagaimana diminta.
+
+### Logo kampus dipasang pada kedua dokumen
+
+Halaman sampul kedua naskah kini memuat logo Universitas Pamulang, dipotong dan
+diperbesar ke 900 x 900 piksel agar tidak pecah pada cetakan. Pratinjau HTML
+sempat tidak menampilkannya karena penanda `[GAMBAR ...]` pada halaman sampul
+tertangkap lebih dahulu oleh cabang gambar bernomor; penjaga `mode_cover`
+memisahkan keduanya.
+
+### Tiga daftar bernomor yang terlipat dipulihkan
+
+Identifikasi masalah, tujuan penelitian, dan alur sistem yang diusulkan
+masing-masing kehilangan batas antarbutirnya: keenam butir identifikasi masalah
+terbaca sebagai satu butir sepanjang tujuh belas baris, dengan "2." sampai "6."
+terjepit di tengah kalimat. Penyebabnya adalah pembungkusan ulang baris ketika
+naskah dipadatkan. `perbaiki_daftar.py` memecahnya kembali dan membungkusnya
+ulang pada 76 kolom.
+
+Pratinjau skripsi juga tidak lagi menyebut dirinya seminar proposal pada kepala
+halaman.
+
+---
+
 ## [1.41.0] - 2026-09-08
 
 ### Angka di dokumen diperiksa ulang terhadap kenyataannya
