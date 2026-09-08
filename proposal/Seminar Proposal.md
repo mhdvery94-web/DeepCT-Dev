@@ -77,9 +77,6 @@ asal-usul setiap frame kepada peneliti yang menerimanya.
 **Kata Kunci :** Interpolasi Frame, Tomografi Komputer Neutron, U-Net, Hybrid
 Cloud, Prototyping
 
-Proposal ini setebal ____ halaman, memuat 29 tabel dan 11 gambar tanpa
-lampiran, serta menggunakan 20 acuan terbitan tahun 2001 sampai 2026.
-
 ---
 
 # DAFTAR ISI
@@ -123,28 +120,18 @@ DAFTAR PUSTAKA ............................................................ 62
 # DAFTAR GAMBAR
 
 ```
-Gambar 2. 1  Arsitektur Spatio-Temporal U-Net ................................
-16
-Gambar 2. 2  Kerangka Berpikir Penelitian ....................................
-22
-Gambar 3. 1  Alur Penelitian .................................................
-23
-Gambar 3. 2  Alur Akuisisi Proyeksi Tomografi Neutron Saat Ini ...............
-26
-Gambar 3. 3  Arsitektur Sistem yang Diusulkan ................................
-27
-Gambar 3. 4  Diagram Use Case Sistem .........................................
-29
-Gambar 3. 5  Diagram Aktivitas Pengisian Celah Proyeksi ......................
-30
-Gambar 3. 6  Diagram Relasi Antar-Entitas ....................................
-31
-Gambar 3. 7  Rancangan Antarmuka Unggah dan Pratinjau Frame ..................
-36
-Gambar 3. 8  Rancangan Antarmuka Pemantauan Pelatihan Model ..................
-36
-Gambar 3. 9  Alur Interpolasi Rekursif .......................................
-40
+Gambar 2. 1   Arsitektur Spatio-Temporal U-Net ........................... 14
+Gambar 2. 2   Kerangka Berpikir Penelitian ............................... 21
+Gambar 3. 1   Alur Penelitian ............................................ 23
+Gambar 3. 2   Alur Akuisisi Proyeksi Tomografi Neutron Saat Ini .......... 26
+Gambar 3. 3   Arsitektur Sistem yang Diusulkan ........................... 28
+Gambar 3. 4   Alur Kerja Sistem yang Diusulkan ........................... 29
+Gambar 3. 5   Diagram Use Case Sistem .................................... 31
+Gambar 3. 6   Diagram Aktivitas Pengisian Celah Proyeksi ................. 33
+Gambar 3. 7   Diagram Relasi Antar-Entitas ............................... 34
+Gambar 3. 8   Rancangan Antarmuka Unggah dan Pratinjau Frame ............. 38
+Gambar 3. 9   Rancangan Antarmuka Pemantauan Pelatihan Model ............. 39
+Gambar 3. 10  Alur Interpolasi Rekursif .................................. 45
 ```
 
 ---
@@ -152,35 +139,33 @@ Gambar 3. 9  Alur Interpolasi Rekursif .......................................
 # DAFTAR TABEL
 
 ```
-Tabel 2. 1  Penelitian yang Relevan ...................................... 11
-Tabel 2. 2  Operasi di Dalam Layer Kustom SkipFusion ..................... 16
-Tabel 2. 3  Susunan Lapisan STUNet_2to1_TimeCond ......................... 17
-Tabel 2. 4  Rangkuman Keunggulan Model terhadap Pencampuran Linier ....... 21
-Tabel 3. 1  Format Pencatatan Kondisi Akuisisi Citra ..................... 27
-Tabel 3. 2  Analisa Permasalahan Sistem Berjalan ......................... 28
-Tabel 3. 3  Aktor dan Kewenangannya ...................................... 31
-Tabel 3. 4  Rancangan Tabel Basis Data ................................... 33
-Tabel 3. 5  Rancangan Antarmuka Pemrograman Aplikasi ..................... 34
-Tabel 3. 6  Mekanisme Ketahanan Sistem ................................... 36
-Tabel 3. 7  Waktu Satu Inferensi pada Lingkungan Lokal dan Awan .......... 37
-Tabel 3. 8  Pembagian Data Citra ......................................... 39
-Tabel 3. 9  Tahapan Praproses Citra ...................................... 40
-Tabel 3. 10 Hiperparameter Pelatihan Model ............................... 41
-Tabel 3. 11 Tanggapan Bobot Dasar terhadap Perubahan Skalar Waktu ........ 44
-Tabel 3. 12 Bobot Dasar terhadap Pencampuran Linier pada Tiga Metrik ..... 45
-Tabel 3. 13 Metrik Pelatihan per Epoch pada Sesi Penyempurnaan Awal ...... 47
-Tabel 3. 14 Parameter Pelatihan Pembaruan Model .......................... 49
-Tabel 3. 15 Metrik Pelatihan Pembaruan Model per Epoch ................... 51
-Tabel 3. 16 Sapuan Tujuh Posisi dari Satu Pasangan Frame Pindai .......... 53
-Tabel 3. 17 Hasil Pembaruan terhadap Kriteria Keberhasilan ............... 54
-Tabel 3. 18 Keragaman Keluaran terhadap Gerak Frame Nyata ................ 54
-Tabel 3. 19 Jarak Antar-Hasil pada Objek yang Tidak Dilatihkan ........... 55
-Tabel 3. 20 Rancangan Skenario Pengujian ................................. 56
-Tabel 3. 21 Format Penyajian Hasil Pengujian ............................. 57
-Tabel 3. 22 Iterasi Prototyping dan Capaian Setiap Iterasi ............... 57
-Tabel 3. 23 Kebutuhan Perangkat Keras .................................... 58
-Tabel 3. 24 Kebutuhan Perangkat Lunak .................................... 59
-Tabel 3. 25 Jadwal Penyusunan Skripsi .................................... 60
+Tabel 2. 1   Penelitian yang Relevan ..................................... 11
+Tabel 2. 2   Operasi di Dalam Layer Kustom SkipFusion .................... 12
+Tabel 2. 3   Susunan Lapisan STUNet_2to1_TimeCond (ringkas) .............. 13
+Tabel 2. 4   Rangkuman Keunggulan Model terhadap Pencampuran Linier ...... 14
+Tabel 3. 1   Format Pencatatan Kondisi Akuisisi Citra .................... 15
+Tabel 3. 2   Analisa Permasalahan Sistem Berjalan ........................ 16
+Tabel 3. 3   Aktor dan Kewenangannya ..................................... 17
+Tabel 3. 4   Rancangan Tabel Basis Data .................................. 18
+Tabel 3. 5   Rancangan Antarmuka Pemrograman Aplikasi .................... 19
+Tabel 3. 6   Mekanisme Ketahanan Sistem .................................. 20
+Tabel 3. 7   Waktu Satu Inferensi pada Lingkungan Lokal dan Awan ......... 21
+Tabel 3. 8   Pembagian Data Citra ........................................ 22
+Tabel 3. 9   Tahapan Praproses Citra ..................................... 23
+Tabel 3. 10  Hiperparameter Pelatihan Model .............................. 24
+Tabel 3. 11  Tanggapan Bobot Dasar terhadap Perubahan Skalar Waktu ....... 25
+Tabel 3. 12  Bobot Dasar terhadap Pencampuran Linier pada Tiga Metrik .... 26
+Tabel 3. 13  Parameter Pelatihan Pembaruan Model ......................... 27
+Tabel 3. 14  Sapuan Tujuh Posisi dari Satu Pasangan Frame Pindai ......... 28
+Tabel 3. 15  Hasil Pembaruan terhadap Kriteria Keberhasilan .............. 29
+Tabel 3. 16  Keragaman Keluaran terhadap Gerak Frame Nyata ............... 30
+Tabel 3. 17  Jarak Antar-Hasil pada Objek yang Tidak Dilatihkan .......... 31
+Tabel 3. 18  Rancangan Skenario Pengujian ................................ 32
+Tabel 3. 19  Format Penyajian Hasil Pengujian ............................ 33
+Tabel 3. 20  Iterasi Prototyping dan Capaian Setiap Iterasi .............. 34
+Tabel 3. 21  Kebutuhan Perangkat Keras ................................... 35
+Tabel 3. 22  Kebutuhan Perangkat Lunak ................................... 36
+Tabel 3. 23  Jadwal Penyusunan Skripsi ................................... 37
 ```
 
 ---
@@ -313,26 +298,21 @@ percobaan dimulai, sehingga bobot tersebut tidak dipasang.
 Model tersebut dirancang untuk menyisipkan satu frame pada titik tengah di
 antara dua frame hasil pindai, dan hanya dilatih pada posisi itu. Rancangan
 tersebut membawa serta empat batas perilaku yang diperlakukan sebagai batasan
-penelitian, bukan sebagai sasaran perbaikan. Semuanya diukur pada subbab 3.6.6
+penelitian, bukan sasaran perbaikan, dan seluruhnya diukur pada subbab 3.6.6
 terhadap arsip proyeksi BRIN. Pertama, masukan skalar waktunya praktis tidak
-berpengaruh di luar titik tengah: mengubah nilai `t` di sepanjang rentang yang
-sah hanya menggeser keluaran sebesar 0,17% dari perubahan yang seharusnya,
-sehingga beberapa posisi waktu yang diminta dari sepasang frame yang sama
-menghasilkan citra yang praktis serupa. Kedua, karena hal tersebut
-pengisian harus dijalankan secara rekursif pada titik tengah, dan galatnya
-berlipat setiap kali sebuah batas ternyata merupakan keluaran model sendiri,
-yaitu 1,73 kali untuk satu batas dan 3,27 kali untuk dua. Ketiga, galat
-meningkat tajam seiring melebarnya rentang yang diinterpolasi, yaitu dari
-359,7 pada rentang dua langkah menjadi 1.039,3 pada rentang delapan langkah.
-Keempat, celah dengan jumlah frame ganjil tidak memiliki titik tengah bilangan
-bulat, sehingga frame yang dihasilkan bergeser setengah posisi.
+berpengaruh di luar titik tengah, yaitu hanya 0,17% dari perubahan yang
+seharusnya. Kedua, pengisian karena itu harus rekursif dan galatnya berlipat
+1,73 kali untuk satu batas sintetis serta 3,27 kali untuk dua. Ketiga, galat
+meningkat dari 359,7 pada rentang dua langkah menjadi 1.039,3 pada rentang
+delapan langkah. Keempat, celah berjumlah frame ganjil tidak memiliki titik
+tengah bilangan bulat sehingga frame yang dihasilkan bergeser setengah posisi.
 
-Akibatnya, sistem hanya menyatakan layak frame yang kedua batasnya merupakan
-hasil pindai. Celah yang lebih lebar tetap diisi, sebab menolak mengisinya
-tidak menolong siapa pun. Hanya saja asal-usul dan kedalaman rekursi setiap
-frame disampaikan kepada peneliti agar dapat dinilai sendiri. Interpolasi pada
-tahap inferensi karena itu selalu dilakukan pada titik tengah, dan sistem
-tidak menyediakan masukan skalar waktu manual bagi penggunanya.
+Akibatnya sistem hanya menyatakan layak frame yang kedua batasnya merupakan
+hasil pindai. Celah yang lebih lebar tetap diisi, tetapi asal-usul dan
+kedalaman rekursi setiap frame disampaikan melalui nilai `generation` agar
+dapat dinilai sendiri. Interpolasi pada tahap inferensi karena itu selalu
+dilakukan pada titik tengah, dan sistem tidak menyediakan masukan skalar waktu
+manual.
 
 ### 1.4.2 Data Penelitian
 
@@ -511,18 +491,18 @@ rekonstruksi tomografi bersudut jarang, dan rancang bangun sistem multiplatform 
 
 **Tabel 2. 1 Penelitian yang Relevan**
 
-| No | Peneliti & Tahun | Judul dan Metode | Temuan dan Perbedaan dengan Penelitian Ini |
-|----|------------------|------------------|-------------------------------------------|
-| 1 | Ronneberger, Fischer, & Brox (2015) | U-Net: Convolutional Networks for Biomedical Image Segmentation. *Metode:* Jaringan konvolusi berbentuk encoder-decoder dengan sambungan lompat | *Temuan:* Memenangi tantangan segmentasi ISBI dengan data latih yang sangat terbatas; sambungan lompat terbukti mempertahankan detail spasial. *Perbedaan:* Penelitian ini memakai U-Net untuk memetakan pasangan frame menjadi frame antara, bukan untuk segmentasi, dan menambahkan pengondisian waktu pada arsitekturnya |
-| 2 | Niklaus, Mai, & Liu (2017) | Video Frame Interpolation via Adaptive Convolution. *Metode:* Interpolasi frame dengan kernel konvolusi adaptif per piksel | *Temuan:* Menghasilkan frame antara yang lebih tajam dibanding pendekatan berbasis aliran optik. *Perbedaan:* Objek penelitian ini adalah barisan proyeksi tomografi neutron 16-bit yang perubahannya bersifat geometris, bukan video RGB dengan gerak objek |
-| 3 | Jiang dkk. (2018) | Super SloMo: High Quality Estimation of Multiple Intermediate Frames for Video Interpolation. *Metode:* Estimasi aliran optik dua arah untuk membangkitkan banyak frame antara sekaligus | *Temuan:* Mampu membangkitkan sejumlah frame antara pada posisi waktu sembarang dalam satu kali proses. *Perbedaan:* Penelitian ini membangkitkan frame antara secara rekursif pada titik tengah, dan mencatat kedalaman rekursi sebagai penanda asal-usul frame |
-| 4 | Isola dkk. (2017) | Image-to-Image Translation with Conditional Adversarial Networks. *Metode:* Generator berbasis U-Net dengan pelatihan adversarial berkondisi | *Temuan:* Menunjukkan U-Net sebagai generator yang efektif pada tugas pemetaan citra ke citra secara umum. *Perbedaan:* Penelitian ini menggunakan generator berbasis U-Net tanpa komponen adversarial pada tahap penyempurnaan, dengan fungsi kerugian L1 sebagai satu-satunya sinyal |
-| 5 | Huang dkk. (2022) | Real-Time Intermediate Flow Estimation for Video Frame Interpolation. *Metode:* Estimasi aliran antara secara langsung untuk interpolasi waktu nyata | *Temuan:* Mencapai kecepatan waktu nyata dengan mutu yang bersaing. *Perbedaan:* Penelitian ini tidak menuntut waktu nyata; prioritasnya adalah kesetiaan numerik pada citra 16-bit dan kejelasan asal-usul frame |
-| 6 | Tang dkk. (2024) | A Machine Learning Decision Criterion for Reducing Scan Time for Hyperspectral Neutron Computed Tomography Systems. *Metode:* Kriteria keputusan berbasis pembelajaran mesin untuk menghentikan akuisisi lebih awal | *Temuan:* Waktu pindai dapat dipangkas tanpa mengorbankan mutu rekonstruksi secara berarti. *Perbedaan:* Penelitian ini tidak memangkas akuisisi, melainkan mengisi proyeksi yang telanjur hilang, dan mengemasnya sebagai sistem yang dapat dipakai peneliti sehari-hari |
-| 7 | Wu dkk. (2025) | Dual-Domain Deep Prior Guided Sparse-View CT Reconstruction with Multi-Scale Fusion Attention. *Metode:* Rekonstruksi dua ranah dengan penuntun prior dan perhatian gabungan lintas skala | *Temuan:* Artefak akibat sudut proyeksi yang jarang berkurang dibanding rekonstruksi konvensional. *Perbedaan:* Penelitian ini bekerja pada ranah proyeksi, bukan ranah rekonstruksi; keluarannya barisan proyeksi lengkap, bukan volume |
-| 8 | Zhang dkk. (2025) | Synchrotron Based Sparse-View CT Artifact Correction with STC-UNet. *Metode:* Koreksi artefak sudut jarang menggunakan varian U-Net bergabung Transformer | *Temuan:* Varian U-Net efektif menekan artefak pada data sudut jarang berintensitas tinggi. *Perbedaan:* Penelitian ini memakai U-Net berpengondisian waktu untuk membangkitkan proyeksi yang hilang, bukan memperbaiki artefak pada hasil rekonstruksi |
-| 9 | Rozi dkk. (2025) | Rancang Bangun Sistem Manajemen Akademik Mahasiswa Berbasis Mobile Multiplatform Menggunakan Flutter. *Metode:* Rancang bangun sistem multiplatform satu basis kode dengan Flutter | *Temuan:* Satu basis kode terbukti melayani sasaran peramban dan Android sekaligus dengan konsistensi tampilan dan alur. *Perbedaan:* Penelitian ini memakai pendekatan multiplatform yang sama, tetapi sistemnya harus mengorkestrasi komputasi GPU jarak jauh dan menjaga berkas penelitian tetap di penyimpanan lokal |
-| 10 | Maharani & Kurniawan (2025) | Pengembangan Sistem Informasi Pengelolaan Sampah Sekolah Adiwiyata Menggunakan Metode Prototype. *Metode:* Pengembangan sistem informasi dengan metode prototype beserta evaluasi pengguna | *Temuan:* Metode prototype terbukti menyingkap kebutuhan yang tidak terungkap pada tahap analisis awal. *Perbedaan:* Penelitian ini memakai metode prototype pada sistem yang salah satu komponennya adalah model pembelajaran mendalam, sehingga setiap iterasi harus diuji terhadap perangkat GPU yang sesungguhnya |
+| No | Peneliti & Tahun | Judul dan Metode | Perbedaan dengan Penelitian Ini |
+|----|------------------|------------------|---------------------------------|
+| 1 | Ronneberger dkk. (2015) | U-Net untuk segmentasi citra biomedis | Sumber arsitektur; di sini dipakai untuk interpolasi, bukan segmentasi |
+| 2 | Niklaus dkk. (2017) | Interpolasi frame lewat konvolusi adaptif | Menyasar video bergerak; di sini rotasi berkas terhadap objek diam |
+| 3 | Isola dkk. (2017) | Pemetaan citra-ke-citra dengan GAN bersyarat | Dasar pemilihan kerugian L1; di sini tanpa diskriminator |
+| 4 | Jiang dkk. (2018) | Super SloMo, aliran optik dua arah | Bertumpu pada aliran optik yang tidak bermakna pada proyeksi |
+| 5 | Huang dkk. (2022) | Estimasi aliran perantara waktu nyata | Citra tiga kanal delapan bit; di sini satu kanal enam belas bit |
+| 6 | Tang dkk. (2024) | Kriteria henti akuisisi neutron berbasis ML | Mencegah proyeksi diambil; di sini memulihkan yang telanjur hilang |
+| 7 | Wu dkk. (2025) | Rekonstruksi bersudut jarang, prior dua ranah | Bekerja pada ranah rekonstruksi; di sini pada ranah proyeksi |
+| 8 | Zhang dkk. (2025) | STC-UNet untuk koreksi artefak sinkrotron | Memperbaiki artefak volume; di sini melengkapi barisan proyeksi |
+| 9 | Rozi dkk. (2025) | Sistem akademik multiplatform dengan Flutter | Tanpa model pembelajaran mendalam dan perangkat keras terpisah |
+| 10 | Maharani & Kurniawan (2025) | Sistem informasi dengan metode prototype | Prototype pada sistem informasi biasa, bukan yang bermesin model |
 
 Kesepuluh penelitian tersebut terbagi menjadi dua kelompok yang selama ini
 berjalan terpisah. Kelompok pertama, yaitu Ronneberger dkk. (2015), Niklaus
@@ -660,9 +640,9 @@ perilakunya terhadap arsip proyeksi yang sebenarnya**, dan
 **[GAMBAR 2. 1 — Arsitektur Spatio-Temporal U-Net]**
 *Gambarkan jalur encoder-decoder berbentuk U dengan sambungan lompat pada setiap tingkat, sumbu waktu pada blok masukan, penyisipan layer SkipFusion pada setiap sambungan lompat, serta jalur masukan skalar waktu t yang menyatu ke jalur pemulihan pada lapisan tersempit.*
 
-Perbedaannya terhadap U-Net baku terletak pada satu layer kustom,
-`SkipFusion`, yang disisipkan pada setiap sambungan lompat dan meruntuhkan
-sumbu waktu sebelum ciri encoder disalurkan ke jalur pemulihan.
+Perbedaannya terhadap U-Net baku terletak pada satu layer kustom, `SkipFusion`,
+yang disisipkan pada setiap sambungan lompat dan meruntuhkan sumbu waktu
+sebelum ciri encoder disalurkan ke jalur pemulihan.
 
 **Tabel 2. 2 Operasi di Dalam Layer Kustom SkipFusion**
 
@@ -674,61 +654,49 @@ sumbu waktu sebelum ciri encoder disalurkan ke jalur pemulihan.
 
 Notasi `‖` menyatakan penggabungan pada sumbu kanal dan `∗₁ₓ₁` konvolusi
 berkernel 1 × 1. Karena kedua reduksi digabungkan lebih dahulu, kedalaman
-masukan konvolusi itu selalu dua kali kedalaman keluarannya, dan hal itu
-terbaca pada berkas bobot: keempat instansnya menyimpan kernel (1, 1, 512,
-256), (1, 1, 256, 128), (1, 1, 128, 64) dan (1, 1, 64, 32). Layer itu harus
-didefinisikan identik saat pemuatan, sebab berkas bobot menyimpan namanya
+masukan konvolusi itu selalu dua kali kedalaman keluarannya, dan keempat
+instansnya menyimpan kernel (1, 1, 512, 256) sampai (1, 1, 64, 32). Layer itu
+harus didefinisikan identik saat pemuatan, sebab berkas bobot menyimpan namanya
 sebagai `Custom>SkipFusion`.
 
-**Susunan lapisan.** Pemeriksaan langsung menunjukkan model terdiri atas
-**31 lapisan** dengan **21.921.601 parameter**, berukuran 87.796.792 byte.
+Pemeriksaan langsung menunjukkan model terdiri atas **31 lapisan** dengan
+**21.921.601 parameter**, berukuran 87.796.792 byte.
 
-**Tabel 2. 3 Susunan Lapisan STUNet_2to1_TimeCond**
+**Tabel 2. 3 Susunan Lapisan STUNet_2to1_TimeCond (ringkas)**
 
-| Bagian | Lapisan | Keluaran | Peran |
-|--------|---------|----------|-------|
-| Masukan | `InputLayer` `(2, 1024, 1024, 1)` | 2 frame batas | Pasangan frame pada sumbu waktu |
-| Masukan | `InputLayer` `(1,)` | skalar `t` | Posisi waktu frame yang diminta |
-| Penyusutan | `TimeDistributed(Conv2D 32, 3×3, ReLU)` | 1024 × 1024 × 32 | Ciri awal, dihitung terpisah untuk tiap frame |
-| Penyusutan | `TimeDistributed(MaxPooling2D 2×2)` | 512 × 512 | Penurunan resolusi |
-| Penyusutan | `TimeDistributed(Conv2D 64, 3×3, ReLU)` | 512 × 512 × 64 | Ciri tingkat kedua |
-| Penyusutan | `TimeDistributed(MaxPooling2D 2×2)` | 256 × 256 | Penurunan resolusi |
-| **Temporal** | `ConvLSTM2D 128, 3×3, ReLU` | 256 × 256 × 128 | Perekaman hubungan antarframe |
-| Penyusutan | `TimeDistributed(MaxPooling2D 2×2)` | 128 × 128 | Penurunan resolusi |
-| **Temporal** | `ConvLSTM2D 256, 3×3, ReLU` | 128 × 128 × 256 | Perekaman hubungan antarframe |
-| Penyusutan | `TimeDistributed(MaxPooling2D 2×2)` | 64 × 64 | Penurunan resolusi |
-| **Temporal** | `ConvLSTM2D 512, 3×3, ReLU` | 64 × 64 × 512 | Peleburan sumbu waktu pada lapisan tersempit |
-| Pengondisi | `Dense 4096, ReLU` → `Reshape (64, 64, 1)` | 64 × 64 × 1 | Skalar `t` diubah menjadi peta spasial |
-| Pengondisi | `Concatenate` | 64 × 64 × 513 | Penyisipan pengondisi waktu ke lapisan tersempit |
-| Pemulihan | `Conv2DTranspose 256` → `SkipFusion 256` → `Concatenate` → `Conv2D 256` | 128 × 128 | Tingkat pemulihan pertama |
-| Pemulihan | `Conv2DTranspose 128` → `SkipFusion 128` → `Concatenate` → `Conv2D 128` | 256 × 256 | Tingkat pemulihan kedua |
-| Pemulihan | `Conv2DTranspose 64` → `SkipFusion 64` → `Concatenate` → `Conv2D 64` | 512 × 512 | Tingkat pemulihan ketiga |
-| Pemulihan | `Conv2DTranspose 32` → `SkipFusion 32` → `Concatenate` → `Conv2D 32` | 1024 × 1024 | Tingkat pemulihan keempat |
-| Keluaran | `Conv2D 1, 3×3, tanh` | 1024 × 1024 × 1 | Satu frame antara pada rentang `[−1, 1]` |
+| # | Nama | Kelas | Catatan |
+|---|------|-------|---------|
+| 0 | `input_layer` | InputLayer | (None, 2, 1024, 1024, 1) |
+| 1–4 | `time_distributed_42…45` | TimeDistributed | Conv2D dan MaxPooling2D per frame |
+| 5, 7 | `conv_lstm2d_21, 22` | ConvLSTM2D | 128 dan 256 filter, `return_sequences=True` |
+| 8 | `time_scalar` | InputLayer | (None, 1) |
+| 10 | `dense_7` | Dense | 4096 unit |
+| 11 | `conv_lstm2d_23` | ConvLSTM2D | 512 filter, `return_sequences=False` |
+| 12–13 | `reshape_7`, `concatenate_11` | Reshape, Concatenate | Peta 64 × 64 disisipkan di lapisan tersempit |
+| 15–27 | `skip_fusion_28…31` | Custom>SkipFusion | 256, 128, 64, 32 filter |
+| 14–30 | `conv2d_transpose_4…7`, `conv2d_48…52` | Conv2DTranspose, Conv2D | Jalur pemulihan, ditutup aktivasi `tanh` |
 
-Tiga hal pada susunan itu menentukan sifat model. **Pertama**, ketiga
-`ConvLSTM2D` adalah unsur *spatio-temporal* yang sebenarnya: ia memproses
-kedua frame sebagai barisan sehingga hubungan antarframe ikut dipelajari, dan
-lapisan ketiga pada bagian tersempit meleburnya menjadi satu peta ciri.
-**Kedua**, pengondisian waktu disisipkan pada lapisan tersempit — skalar `t`
-diperluas `Dense` menjadi 4096 nilai, dibentuk ulang menjadi peta 64 × 64,
-lalu digabungkan di sana, sehingga posisi waktu memengaruhi seluruh jalur
-pemulihan. **Ketiga**, aktivasi keluarannya `tanh`, dan itulah sebabnya model
-bekerja pada rentang `[−1, 1]` sehingga normalisasi masukan wajib mengikuti
-rentang tersebut.
+Susunan lengkap ke-31 lapisan dapat dibaca langsung dari berkas bobot; yang
+disajikan di sini adalah lapisan yang menentukan sifat model.
+
+Tiga hal menentukan sifat model ini. Ketiga `ConvLSTM2D` adalah unsur
+*spatio-temporal* yang sebenarnya, sebab ia memproses kedua frame sebagai
+barisan sehingga hubungan antarframe ikut dipelajari, dan lapisan ketiga
+meleburnya menjadi satu peta ciri. Pengondisian waktu disisipkan pada lapisan
+tersempit melalui `Dense 4096` dan `Reshape 64 × 64`, sehingga posisi waktu
+memengaruhi seluruh jalur pemulihan. Aktivasi keluarannya `tanh`, dan itulah
+sebabnya normalisasi masukan wajib mengikuti rentang `[−1, 1]`.
 
 ```
 x' = 2 · (x − x_min) / (x_max − x_min) − 1
 ```
 
 dengan `x_min = 0` dan `x_max = 65535` sebagai konstanta global, bukan nilai
-per citra. Normalisasi per citra akan membuat keabuan yang sama pada dua frame
-berbeda dipetakan berbeda, sehingga model kehilangan acuan intensitas absolut
-yang bermakna secara fisika pada citra atenuasi.
+per citra, sebab normalisasi per citra akan membuat model kehilangan acuan
+intensitas absolut yang bermakna secara fisika pada citra atenuasi.
 
-**Pembentukan sampel pelatihan.** Setiap contoh disusun dari tiga frame nyata:
-model diberi frame ke-`i` dan ke-`i+g`, diberi tahu `t = m/g`, lalu dituntut
-menghasilkan frame ke-`i+m`.
+Setiap contoh pelatihan disusun dari tiga frame nyata: model diberi frame ke-`i`
+dan ke-`i+g`, diberi tahu `t = m/g`, lalu dituntut menghasilkan frame ke-`i+m`.
 
 ```
 untuk g = 2 .. G_max
@@ -739,77 +707,47 @@ sampel ← (I_i, I_{i+m}, I_{i+g}, t)
 ```
 
 Karena frame sasaran adalah hasil pindai yang sebenarnya, kebenaran acuan
-tersedia tanpa pelabelan manual. Terdapat dua ragam: pada ragam **titik tengah
-saja** hanya `t = 0,5` yang diambil, dan distribusi inilah dasar bobot awal
-sekaligus alasan sistem harus berinterpolasi secara rekursif; pada ragam
-**`t` seimbang** seluruh nilai `t = m/g` diambil, dan ragam kedua itulah
-tujuan penyempurnaan model.
+tersedia tanpa pelabelan manual. Pada ragam **titik tengah saja** hanya
+`t = 0,5` yang diambil, dan distribusi itulah dasar bobot awal sekaligus alasan
+sistem harus berinterpolasi secara rekursif; pada ragam **`t` seimbang**
+seluruh nilai `t = m/g` diambil, dan ragam kedua itulah tujuan penyempurnaan.
 
 ### 2.2.6 Fungsi Kerugian dan Optimasi
 
-Fungsi kerugiannya galat absolut rerata (L1) antara keluaran dan frame acuan.
+Fungsi kerugiannya galat absolut rerata, `L1 = (1/N) Σ |ŷ_p − y_p|`, dihitung
+antara keluaran model dan frame acuan. L1 dipilih dan bukan L2 karena L1 kurang
+menghukum galat besar yang jarang terjadi sehingga keluarannya lebih tajam,
+sedangkan L2 mendorong model merata-ratakan kemungkinan dan menghasilkan citra
+kabur (Isola dkk., 2017).
 
-```
-L(θ) = (1/N) Σ_{p=1..N} | G(I₀, I₂, t ; θ)_p − y_p |
-```
-
-L1 dipilih dan bukan L2 karena L1 kurang menghukum galat besar yang jarang
-terjadi sehingga keluarannya lebih tajam, sedangkan L2 mendorong model
-merata-ratakan kemungkinan dan menghasilkan citra kabur (Isola dkk., 2017).
 Pembaruan parameter memakai Adam (Kingma & Ba, 2015), yang memelihara rerata
-bergerak momen pertama dan kedua dari gradien.
-
-```
-m_t = β₁ · m_{t−1} + (1 − β₁) · g_t
-v_t = β₂ · v_{t−1} + (1 − β₂) · g_t²
-
-m̂_t = m_t / (1 − β₁^t)
-v̂_t = v_t / (1 − β₂^t)
-
-θ_t = θ_{t−1} − α · m̂_t / (√v̂_t + ε)
-```
-
-Nilai `β₁` yang dipakai 0,5 mengikuti konvensi keluarga model pembangkit
-citra, sedangkan `β₂` dan `ε` memakai nilai bawaan. Laju pembelajaran `α`
-dapat diatur pada setiap sesi.
+bergerak momen pertama dan kedua dari gradien. Nilai `β₁` yang dipakai 0,5
+mengikuti konvensi keluarga model pembangkit citra, sedangkan `β₂` dan `ε`
+memakai nilai bawaan, dan laju pembelajaran `α` dapat diatur per sesi.
 
 ### 2.2.7 Metrik Evaluasi Kualitas Citra
 
-Empat metrik dipakai untuk menilai frame hasil terhadap frame acuan. **MAE**
-menyatakan rerata selisih mutlak per piksel dan **RMSE** akar rerata kuadrat
-selisih sehingga lebih peka terhadap galat besar.
+Empat metrik dipakai. **MAE** `= (1/N) Σ |ŷ_p − y_p|` menyatakan rerata selisih
+mutlak per piksel, **RMSE** `= √((1/N) Σ (ŷ_p − y_p)²)` lebih peka terhadap
+galat besar, dan **PSNR** `= 10 log₁₀(MAX² / MSE)` menyatakan nisbah daya
+sinyal puncak terhadap daya derau dalam desibel; nilai PSNR yang lebih tinggi
+menandakan kemiripan lebih besar, dan ia tidak terdefinisi ketika kedua citra
+identik.
 
-```
-MAE = (1/N) Σ | ŷ_p − y_p |
-```
-
-```
-MSE  = (1/N) Σ ( ŷ_p − y_p )²
-RMSE = √MSE
-```
-
-**PSNR** menyatakan nisbah daya sinyal puncak terhadap daya derau dalam
-desibel; nilai yang lebih tinggi menandakan kemiripan lebih besar, dan ia tidak
-terdefinisi ketika kedua citra identik.
+**SSIM** menilai kemiripan struktural dengan membandingkan luminans, kontras,
+dan struktur secara terpisah (Wang, Bovik, Sheikh, & Simoncelli, 2004).
 
 ```
 PSNR = 10 · log₁₀ ( MAX² / MSE )
 ```
 
-**SSIM** menilai kemiripan struktural dengan membandingkan luminans, kontras,
-dan struktur secara terpisah (Wang, Bovik, Sheikh, & Simoncelli, 2004), dan
-berkisar antara −1 dan 1.
+Nilai SSIM berkisar antara −1 dan 1. PSNR dan SSIM terdefinisi pada rentang
+`[0, 1]` sementara model bekerja pada `[−1, 1]`, sehingga keluaran harus
+dipetakan kembali sebelum diukur.
 
 ```
 SSIM(x,y) = [ (2 μ_x μ_y + C₁)(2 σ_xy + C₂) ] / [ (μ_x² + μ_y² + C₁)(σ_x² +
 σ_y² + C₂) ]
-```
-
-PSNR dan SSIM terdefinisi pada rentang `[0, 1]` sementara model bekerja pada
-`[−1, 1]`, sehingga keluaran harus dipetakan kembali sebelum diukur.
-
-```
-a = (ŷ + 1) / 2 ,  b = (y + 1) / 2
 ```
 
 Kelalaian pada pemetaan itu menghasilkan angka yang tampak wajar namun keliru,
@@ -988,29 +926,29 @@ yang sedang berjalan di BRIN.
 
 ## 2.4 Kerangka Berpikir
 
+Kerangka berpikir penelitian ini menghubungkan tiga hal: keterbatasan yang
+melahirkan celah pada barisan proyeksi, proses yang dikerjakan untuk
+mengatasinya, dan keluaran yang diharapkan.
+
 **[GAMBAR 2. 2 — Kerangka Berpikir Penelitian]**
 *Gambarkan diagram alir tiga kolom.*
 
-Kerangka berpikir penelitian ini bertolak dari keterbatasan waktu berkas
-neutron yang menyebabkan munculnya celah pada barisan proyeksi. Celah tersebut
-tidak dapat diisi secara memuaskan dengan interpolasi linier maupun pengerjaan
-manual, sementara pengisian dengan model pembelajaran mendalam menuntut kartu
-grafis yang tidak tersedia secara lokal dan tidak boleh mengorbankan
-kedaulatan data penelitian.
+Masalahnya berpangkal pada waktu berkas neutron yang terbatas dan dijadwalkan
+ketat, yang melahirkan celah baik karena jarak sudut sengaja diperlebar maupun
+karena proyeksi gagal terekam. Pengisian manual tidak konsisten dan tidak dapat
+diulang, sementara inferensi model menuntut kartu grafis yang tidak dimiliki
+laboratorium dan data penelitian tidak boleh berpindah ke pihak ketiga.
 
-Penelitian ini menjawabnya dengan menggabungkan tiga hal. Algoritma
-Spatio-Temporal U-Net menyediakan kemampuan membangkitkan frame antara dengan
-kesetiaan yang terukur. Arsitektur *hybrid cloud-NAS* menyediakan akses ke
-kartu grafis tanpa memindahkan penyimpanan data. Metode Prototyping memastikan
-sistem yang dibangun sesuai dengan cara kerja peneliti yang sebenarnya, bukan
-dengan bayangan yang disusun di awal.
+Prosesnya menempuh analisa sistem berjalan dan sistem usulan, perancangan
+sistem multiplatform di atas arsitektur *hybrid cloud-NAS*, analisa perilaku
+model terhadap arsip BRIN yang sebenarnya, perancangan interpolasi rekursif
+beserta pencatatan asal-usul frame, dan validasi *hold-out* pada setiap iterasi
+Prototyping.
 
-Keluaran yang diharapkan adalah sistem yang dapat diakses dari peramban maupun
-telepon genggam, model yang telah disempurnakan dan catatan metrik per epoch, dan yang terpenting, setiap frame hasil interpolasi yang disertai
-catatan asal-usul dan angka mutunya, sehingga peneliti yang menerimanya
-memiliki dasar untuk mempertahankan hasil tersebut.
-
----
+Keluaran yang diharapkan adalah sistem multiplatform terintegrasi yang mengisi
+celah secara otomatis, batas keberlakuan model yang terukur alih-alih
+ditafsirkan, dan frame hasil yang disertai asal-usul serta angka mutu sehingga
+peneliti yang menerimanya memiliki dasar untuk mempertahankan hasil tersebut.
 
 # BAB III
 # ANALISA DAN PERANCANGAN
@@ -1126,6 +1064,9 @@ dan angka mutu setiap frame yang dihasilkan.
 **[GAMBAR 3. 3 — Arsitektur Sistem yang Diusulkan]**
 *Gambarkan diagram arsitektur berlapis.*
 
+**[GAMBAR 3. 4 — Alur Kerja Sistem yang Diusulkan]**
+*Bagan alir alur kerja sesudah sistem dan model tersedia, sebagai pasangan Gambar 3.2 yang menggambarkan alur manual.*
+
 Alur kerja sistem yang diusulkan adalah sebagai berikut:
 
 1. Peneliti masuk melalui aplikasi peramban atau Android, lalu mengunggah
@@ -1182,7 +1123,7 @@ yang boleh hilang sewaktu-waktu, bukan sebagai dependensi yang pasti tersedia.
 Sistem melayani dua peran manusia dan satu pelaku bukan manusia. Kewenangan
 masing-masing disajikan pada Tabel 3.3.
 
-**[GAMBAR 3. 4 — Diagram Use Case Sistem]**
+**[GAMBAR 3. 5 — Diagram Use Case Sistem]**
 *Gambarkan diagram use case dengan tiga aktor.*
 
 **Tabel 3. 3 Aktor dan Kewenangannya**
@@ -1199,7 +1140,7 @@ akun lain harus tertutup bahkan bagi administrator.
 
 ### 3.5.3 Perancangan Aktivitas
 
-**[GAMBAR 3. 5 — Diagram Aktivitas Pengisian Celah Proyeksi]**
+**[GAMBAR 3. 6 — Diagram Aktivitas Pengisian Celah Proyeksi]**
 *Gambarkan diagram aktivitas dengan tiga kolom renang: Peneliti, Peladen Lokal, dan Layanan Inferensi.*
 
 Simpul keputusan yang kembali ke layanan inferensi adalah tempat sifat
@@ -1209,21 +1150,19 @@ celah, bukan oleh jumlah frame yang diunggah.
 
 ### 3.5.4 Perancangan Basis Data
 
-**[GAMBAR 3. 6 — Diagram Relasi Antar-Entitas]**
+**[GAMBAR 3. 7 — Diagram Relasi Antar-Entitas]**
 *Gambarkan diagram relasi antar-entitas dengan entitas users, models, analysis_records, training_datasets, training_jobs, training_metrics, training_samples, dan user_activities.*
 
 **Tabel 3. 4 Rancangan Tabel Basis Data**
 
-| Tabel | Isi | Kolom Penting |
-|-------|-----|---------------|
-| `users` | Akun peneliti dan administrator | `id`, `name`, `email`, `password`, `role`, `is_active` |
-| `models` | Model terdaftar beserta alamat layanan inferensinya | `id`, `name`, `version`, `endpoint_url`, `auth_token`, `status`, `is_active` |
-| `analysis_records` | Satu baris per pekerjaan pengisian celah | `id`, `user_id`, `model_id`, `job_id`, `status`, `input_files_count`, `processing_time_seconds`, `validation`, `expires_at`, `files_deleted_at` |
-| `training_datasets` | Arsip data latih yang dititipkan peneliti | `id`, `name`, `source_type`, `archive_path`, `size_bytes`, `checksum`, `uploaded_by`, `archive_deleted_at` |
-| `training_jobs` | Satu baris per sesi pelatihan | `id`, `name`, `training_dataset_id`, `total_epochs`, `current_epoch`, `status`, `hyperparameters`, `checkpoint_path`, `weights_path`, `heartbeat_at` |
-| `training_metrics` | Metrik per epoch | `id`, `training_job_id`, `epoch`, `metrics`, `recorded_at` |
-| `training_samples` | Gambar contoh keluaran model per epoch | `id`, `training_job_id`, `epoch`, `image_path` |
-| `user_activities` | Jejak audit tindakan pengguna | `id`, `user_id`, `activity_type`, `description`, `ip_address`, `created_at` |
+| Tabel | Isi |
+|-------|-----|
+| `users`, `access_requests` | Akun beserta perannya, dan permintaan yang menunggu persetujuan |
+| `models` | Model terdaftar, alamat layanan inferensinya, keadaan ketersediaannya |
+| `analysis_records` | Satu baris per pekerjaan interpolasi beserta keadaan dan asal-usul hasilnya |
+| `training_datasets`, `training_jobs` | Arsip data latih dan sesi pelatihan beserta titik simpannya |
+| `training_metrics`, `training_samples` | Metrik dan contoh keluaran per epoch |
+| `user_activities`, `notifications`, `conversations`, `messages`, `news_posts` | Penelusuran, pemberitahuan, percakapan, dan pengumuman |
 
 Dua rancangan pada tabel di atas menjawab keadaan yang khas pada sistem ini.
 Pertama, `analysis_records` dan `training_datasets` menyimpan penanda waktu
@@ -1242,23 +1181,14 @@ Kontrak utamanya disajikan pada Tabel 3.5.
 
 **Tabel 3. 5 Rancangan Antarmuka Pemrograman Aplikasi**
 
-| Metode dan Alamat | Kegunaan | Pemanggil |
-|-------------------|----------|-----------|
-| `POST /api/login` | Menukar kredensial dengan token | Peneliti, Administrator |
-| `GET /api/me/models` | Daftar model beserta keadaan ketersediaannya | Peneliti |
-| `POST /api/predictions/uploads` | Membuka sesi unggah berpotongan | Peneliti |
-| `PATCH /api/predictions/uploads/{id}` | Mengirim satu potongan arsip | Peneliti |
-| `POST /api/predictions/uploads/{id}/finalize` | Menutup sesi unggah dan membentuk pekerjaan | Peneliti |
-| `GET /api/predictions/{id}` | Keadaan satu pekerjaan beserta posisi antreannya | Peneliti |
-| `POST /api/predictions/{id}/start` | Menjalankan pengisian celah | Peneliti |
-| `GET /api/predictions/{id}/frames` | Daftar frame masukan dan keluaran beserta asal-usulnya | Peneliti |
-| `GET /api/predictions/{id}/download/complete` | Mengunduh arsip hasil beserta metadata dan manifes | Peneliti |
-| `POST /api/me/training/jobs` | Memulai sesi pelatihan | Peneliti |
-| `GET /api/me/training/jobs/{id}` | Kemajuan sesi pelatihan beserta metrik per epoch | Peneliti |
-| `POST /api/training/worker/claim` | Mengambil pekerjaan pelatihan dari antrean | Pekerja GPU |
-| `POST /api/training/worker/jobs/{id}/checkpoint` | Mengirim titik simpan dan metrik satu epoch | Pekerja GPU |
-| `POST /api/training/worker/jobs/{id}/complete` | Mengirim bobot akhir | Pekerja GPU |
-| `GET /api/admin/queue` | Antrean seluruh pengguna beserta keadaan pekerja | Administrator |
+| Kelompok | Kegunaan | Pemanggil |
+|----------|----------|-----------|
+| Autentikasi dan akun | Masuk, keluar, ganti sandi, berkas profil | Semua |
+| Unggah dan pekerjaan | Unggah berpotongan, buat pekerjaan, keadaan, frame, unduh hasil | Peneliti |
+| Pelatihan model | Unggah data latih, mulai sesi, kemajuan per epoch, titik simpan | Peneliti dan pekerja |
+| Pengelolaan model | Daftar model, alamat layanan, pemeriksaan ketersediaan | Administrator |
+| Administrasi | Pengguna, permintaan akses, antrean seluruh pengguna, penyimpanan | Administrator |
+| Komunikasi | Percakapan, pemberitahuan, pengumuman | Semua |
 
 Unggahan dirancang berpotongan sejak awal karena arsip proyeksi merupakan
 berkas terbesar yang diterima sistem ini, dan sambungan yang terputus di
@@ -1343,10 +1273,10 @@ yang diperkirakan, sehingga retensinya dirancang sejak awal:
 ### 3.5.8 Perancangan Antarmuka Pengguna
 
 
-**[GAMBAR 3. 7 — Rancangan Antarmuka Unggah dan Pratinjau Frame]**
+**[GAMBAR 3. 8 — Rancangan Antarmuka Unggah dan Pratinjau Frame]**
 *Gambarkan tata letak layar unggah: area pemilihan berkas dengan indikator kemajuan unggah berpotongan, daftar frame yang terbaca beserta nomornya, penanda celah pada barisan, penelusur tumpukan frame dengan penggeser dan kemampuan perbesar, serta tombol mulai analisis.*
 
-**[GAMBAR 3. 8 — Rancangan Antarmuka Pemantauan Pelatihan Model]**
+**[GAMBAR 3. 9 — Rancangan Antarmuka Pemantauan Pelatihan Model]**
 *Gambarkan tata letak layar pelatihan: kartu memulai sesi pelatihan berisi nama sesi dan jumlah epoch, daftar sesi berjalan beserta kemajuannya, tabel metrik per epoch dengan kolom MAE, MSE, PSNR, dan SSIM, serta penelusur gambar contoh keluaran model per epoch.*
 
 Antarmuka dibangun dari satu basis kode Flutter yang dikompilasi menjadi
@@ -1554,7 +1484,7 @@ ISI(a, m)
 ISI(m, b)
 ```
 
-**[GAMBAR 3. 9 — Alur Interpolasi Rekursif]**
+**[GAMBAR 3. 10 — Alur Interpolasi Rekursif]**
 *Gambarkan pohon rekursi untuk contoh frame 1 dan 7.*
 
 Nilai `generation` adalah unsur yang menentukan pada rancangan ini. Frame
@@ -1676,23 +1606,6 @@ membuktikan rantai pelatihan berfungsi dari pengambilan pekerjaan hingga
 pengembalian bobot. Sesi kedua berjalan penuh sepanjang 20 epoch dengan 40
 sampel per epoch.
 
-**Tabel 3. 13 Metrik Pelatihan per Epoch pada Sesi Penyempurnaan Awal**
-
-| Epoch | MAE | MSE | PSNR (dB) | SSIM |
-|------:|----:|----:|----------:|-----:|
-| 1 | 0,014976 | 0,000678 | 38,2060 | 0,9860 |
-| 3 | 0,014770 | 0,000619 | 38,7064 | 0,9861 |
-| 4 | 0,014521 | 0,000597 | 38,9735 | 0,9863 |
-| 5 | 0,014542 | 0,000592 | 39,0188 | 0,9863 |
-| 7 | 0,014345 | 0,000581 | 39,1215 | 0,9865 |
-| 9 | 0,014290 | 0,000573 | 39,1743 | 0,9866 |
-| 10 | 0,014289 | 0,000567 | 39,2281 | 0,9867 |
-| 12 | 0,014060 | 0,000552 | 39,2967 | 0,9868 |
-| 13 | 0,014190 | 0,000559 | 39,2909 | 0,9868 |
-| 15 | 0,014122 | 0,000554 | 39,3137 | 0,9869 |
-| 16 | 0,013962 | 0,000547 | 39,4021 | 0,9869 |
-| 18 | 0,013996 | 0,000544 | 39,4258 | 0,9870 |
-| 20 | 0,013986 | 0,000538 | 39,4436 | 0,9871 |
 
 MAE turun 6,6%, MSE turun 20,6%, PSNR naik 1,24 dB, dan SSIM naik dari 0,9860
 menjadi 0,9871. Kenaikan SSIM tampak kecil karena nilai awalnya sudah tinggi:
@@ -1733,7 +1646,7 @@ data yang dilatihkan** — ragam `t` seimbang dinyalakan dan jarak maksimum samp
 dinaikkan menjadi delapan, sehingga jumlah contoh per epoch naik dari 40
 menjadi 112 mengikuti `S(N,G) = Σ (N−g)(g−1)` untuk `g = 2..G`.
 
-**Tabel 3. 14 Parameter Pelatihan Pembaruan Model**
+**Tabel 3. 13 Parameter Pelatihan Pembaruan Model**
 
 | Parameter | Nilai | Alasan |
 |-----------|-------|--------|
@@ -1746,22 +1659,8 @@ menjadi 112 mengikuti `S(N,G) = Σ (N−g)(g−1)` untuk `g = 2..G`.
 | Jumlah epoch | 20 | Sama dengan sesi pembanding sebelumnya |
 | Bobot awal | `generator(Salinan 3 Ginet TC-D_Revisi).h5` | Bobot dasar hasil penelitian terdahulu |
 
-**Tabel 3. 15 Metrik Pelatihan Pembaruan Model per Epoch**
 
-| Epoch | MAE | PSNR (dB) | SSIM | Epoch | MAE | PSNR (dB) | SSIM |
-|------:|----:|----------:|-----:|------:|----:|----------:|-----:|
-| 1 | 0,022817 | 34,7151 | 0,9804 | 11 | 0,020426 | 35,8952 | 0,9829 |
-| 2 | 0,022297 | 35,1465 | 0,9808 | 12 | 0,020067 | 35,9965 | 0,9831 |
-| 3 | 0,022132 | 35,2299 | 0,9810 | 13 | 0,019863 | 36,1089 | 0,9832 |
-| 4 | 0,021957 | 35,2773 | 0,9812 | 14 | 0,019653 | 36,1519 | 0,9833 |
-| 5 | 0,021814 | 35,3432 | 0,9814 | 15 | 0,019467 | 36,2300 | 0,9834 |
-| 6 | 0,021732 | 35,4262 | 0,9817 | 16 | 0,019074 | 36,3877 | 0,9836 |
-| 7 | 0,021313 | 35,5472 | 0,9821 | 17 | 0,018784 | 36,5265 | 0,9837 |
-| 8 | 0,021169 | 35,6399 | 0,9823 | 18 | 0,018593 | 36,6440 | 0,9840 |
-| 9 | 0,020817 | 35,7518 | 0,9825 | 19 | 0,018376 | 36,7373 | 0,9842 |
-| 10 | 0,020607 | 35,8205 | 0,9827 | 20 | 0,018316 | 36,8088 | 0,9843 |
-
-**Tabel 3. 16 Sapuan Tujuh Posisi dari Satu Pasangan Frame Pindai**
+**Tabel 3. 14 Sapuan Tujuh Posisi dari Satu Pasangan Frame Pindai**
 
 | `t` yang diminta | 1/8 | 2/8 | 3/8 | 4/8 | 5/8 | 6/8 | 7/8 | Rerata |
 |------------------|----:|----:|----:|----:|----:|----:|----:|-------:|
@@ -1770,7 +1669,7 @@ menjadi 112 mengikuti `S(N,G) = Σ (N−g)(g−1)` untuk `g = 2..G`.
 | MAE revisi 4 | 914,4 | 812,4 | 769,1 | 756,9 | 774,8 | 766,4 | 808,9 | **800,4** |
 | MAE campur linier | 501,7 | 762,5 | 925,2 | 989,4 | 955,5 | 787,4 | 510,2 | 776,0 |
 
-**Tabel 3. 17 Hasil Pembaruan terhadap Kriteria Keberhasilan**
+**Tabel 3. 15 Hasil Pembaruan terhadap Kriteria Keberhasilan**
 
 | Kriteria | Bobot dasar | Revisi 4 | Hasil |
 |----------|------------:|---------:|:-----:|
@@ -1779,14 +1678,14 @@ menjadi 112 mengikuti `S(N,G) = Σ (N−g)(g−1)` untuk `g = 2..G`.
 | 3. Tanggapan terhadap `t` meningkat | 3,3 | **562,9** | **Terpenuhi** |
 | 4. Frame layak pada celah 8 bertambah | 0 dari 7 | 0 dari 7 | **Tidak terpenuhi** |
 
-**Tabel 3. 18 Keragaman Keluaran terhadap Gerak Frame Nyata**
+**Tabel 3. 16 Keragaman Keluaran terhadap Gerak Frame Nyata**
 
 | | Jarak antar-keluaran | Jarak antar-frame nyata | Rasio |
 |---|---:|---:|---:|
 | Bobot dasar | 1,5 | 1.107,9 | **0,001** |
 | Revisi 4 | 261,1 | 1.107,9 | **0,236** |
 
-**Tabel 3. 19 Jarak Antar-Hasil pada Objek yang Tidak Dilatihkan**
+**Tabel 3. 17 Jarak Antar-Hasil pada Objek yang Tidak Dilatihkan**
 
 | Sumber frame | Jarak antar-hasil | Rasio terhadap gerak yang benar |
 |--------------|------------------:|-------------------------------:|
@@ -1822,9 +1721,9 @@ setara. Angka mutu tanpa keterangan asal-usul akan menyesatkan.
 
 ## 3.7 Rancangan Pengujian
 
-Pengujian dilakukan pada tiga tingkat sebagaimana disajikan pada Tabel 3.20.
+Pengujian dilakukan pada tiga tingkat sebagaimana disajikan pada Tabel 3.18.
 
-**Tabel 3. 20 Rancangan Skenario Pengujian**
+**Tabel 3. 18 Rancangan Skenario Pengujian**
 
 | Kode | Tingkat | Yang Diuji | Kriteria Berhasil |
 |------|---------|-----------|-------------------|
@@ -1838,7 +1737,7 @@ Pengujian dilakukan pada tiga tingkat sebagaimana disajikan pada Tabel 3.20.
 | M-02 | Mutu keluaran | Perbandingan antargenerasi frame | Frame `generation` 1 menunjukkan galat lebih kecil daripada `generation` 2 ke atas |
 | P-01 | Kinerja | Waktu proses per pekerjaan | Tercatat dan konsisten dengan pengukuran sebelumnya |
 
-**Tabel 3. 21 Format Penyajian Hasil Pengujian**
+**Tabel 3. 19 Format Penyajian Hasil Pengujian**
 
 | Kode | Arsip | Jumlah Frame Masuk | Jumlah Frame Dihasilkan | Waktu Proses | MAE | RMSE | PSNR | Rentang Acuan |
 |------|-------|--------------------|-------------------------|--------------|-----|------|------|---------------|
@@ -1853,7 +1752,7 @@ dengan waktu proses 47 detik, 42 detik, dan 54 detik, serta angka validasi
 
 ## 3.8 Rancangan Iterasi Prototyping
 
-**Tabel 3. 22 Iterasi Prototyping dan Capaian Setiap Iterasi**
+**Tabel 3. 20 Iterasi Prototyping dan Capaian Setiap Iterasi**
 
 | Iterasi | Fokus | Capaian yang Ditargetkan |
 |---------|-------|--------------------------|
@@ -1881,7 +1780,7 @@ awal karena keduanya baru terlihat setelah sistem berjalan dan diukur.
 
 ### 3.9.1 Perangkat Keras
 
-**Tabel 3. 23 Kebutuhan Perangkat Keras**
+**Tabel 3. 21 Kebutuhan Perangkat Keras**
 
 | Komponen | Spesifikasi | Peran |
 |----------|-------------|-------|
@@ -1898,7 +1797,7 @@ setara.
 
 ### 3.9.2 Perangkat Lunak
 
-**Tabel 3. 24 Kebutuhan Perangkat Lunak**
+**Tabel 3. 22 Kebutuhan Perangkat Lunak**
 
 | Perangkat Lunak | Fungsi |
 |-----------------|--------|
@@ -1924,7 +1823,7 @@ Jadwal berikut disusun berdasarkan aktivitas dan capaian, bukan berdasarkan
 bab penulisan. Rentang waktu dinyatakan dalam minggu terhitung sejak proposal
 disetujui.
 
-**Tabel 3. 25 Jadwal Penyusunan Skripsi**
+**Tabel 3. 23 Jadwal Penyusunan Skripsi**
 
 | No | Aktivitas | Minggu 1–2 | Minggu 3–4 | Minggu 5–6 | Minggu 7–8 | Minggu 9–10 | Minggu 11–12 | Minggu 13–14 | Minggu 15–16 |
 |----|-----------|:----------:|:----------:|:----------:|:----------:|:-----------:|:------------:|:------------:|:------------:|
