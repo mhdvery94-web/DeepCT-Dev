@@ -82,3 +82,7 @@ __pycache__/
 # is a local convenience, not part of the project.
 koneksi-vps.bat
 *.local.bat
+
+# Berkas kunci Word (`~$nama.docx`). Ia muncul selama dokumen terbuka dan
+# sempat ikut ter-commit ketika naskah sedang dibuka di Word.
+~$*
