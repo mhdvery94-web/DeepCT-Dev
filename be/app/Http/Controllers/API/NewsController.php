@@ -87,7 +87,7 @@ class NewsController extends Controller
         if (!$post->is_published) {
             $user = $request->user() ?? auth('sanctum')->user();
 
-            if (!$user || $user->role !== 'admin') {
+            if (!$user || !$user->is_active || $user->must_change_password || $user->role !== 'admin') {
                 abort(404);
             }
         }
@@ -123,7 +123,7 @@ class NewsController extends Controller
         if (!$post->is_published) {
             $user = $request->user() ?? auth('sanctum')->user();
 
-            if (!$user || $user->role !== 'admin') {
+            if (!$user || !$user->is_active || $user->must_change_password || $user->role !== 'admin') {
                 abort(404);
             }
         }

@@ -46,9 +46,19 @@ class WorkerRequest
      */
     public function for(?Model $model, int $timeoutSeconds): PendingRequest
     {
-        return $this->configure(
+        return $this->configure(Http::timeout($timeoutSeconds), $model);
+    }
+
+    /** Configure a server before any of its model rows exist locally. */
+    public function forServer(
+        ?string $authToken,
+        bool $verifyTls,
+        int $timeoutSeconds
+    ): PendingRequest {
+        return $this->configureCredentials(
             Http::timeout($timeoutSeconds),
-            $model
+            $authToken,
+            $verifyTls
         );
     }
 
@@ -60,16 +70,27 @@ class WorkerRequest
      */
     public function configure(PendingRequest $request, ?Model $model): PendingRequest
     {
+        return $this->configureCredentials(
+            $request,
+            $model?->auth_token,
+            (bool) $model?->verify_tls
+        );
+    }
+
+    private function configureCredentials(
+        PendingRequest $request,
+        ?string $authToken,
+        bool $verifyTls
+    ): PendingRequest
+    {
         $request = $request->withHeaders([
             'ngrok-skip-browser-warning' => 'true',
         ]);
 
-        if (!$model?->verify_tls) {
+        if (! $verifyTls) {
             $request = $request->withoutVerifying();
         }
 
-        $token = $model?->auth_token;
-
-        return filled($token) ? $request->withToken($token) : $request;
+        return filled($authToken) ? $request->withToken($authToken) : $request;
     }
 }

@@ -8,6 +8,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
+use App\Models\AnalysisRecord;
+use App\Services\ResultEvidence;
+use RuntimeException;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -81,6 +84,27 @@ class User extends Authenticatable
     protected static function booted(): void
     {
         static::deleting(function (self $user) {
+            // The database cascades prediction rows, but it cannot cascade
+            // their files. Remove those before the rows disappear; a failed
+            // storage operation leaves the account and its records available
+            // for a later retry.
+            $directories = [
+                "predictions/{$user->id}",
+                "temp/uploads/{$user->id}",
+                "temp/downloads/{$user->id}",
+            ];
+
+            foreach (AnalysisRecord::where('user_id', $user->id)->get() as $record) {
+                $directories[] = ResultEvidence::directoryFor($record);
+            }
+
+            foreach ($directories as $directory) {
+                if (Storage::directoryExists($directory)
+                    && !Storage::deleteDirectory($directory)) {
+                    throw new RuntimeException("Could not remove {$directory} while deleting the account.");
+                }
+            }
+
             $user->notifications()->delete();
             $user->tokens()->delete();
 

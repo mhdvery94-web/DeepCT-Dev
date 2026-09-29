@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 use ZipArchive;
 
 /**
- * Turns an uploaded ZIP of frames into a queued prediction job.
+ * Turns an uploaded ZIP of frames into a prediction ready for review.
  *
  * Shared by both upload paths so they cannot drift apart: the direct
  * `POST /api/predictions` for small files, and the chunked flow used for
@@ -23,9 +23,14 @@ class PredictionIntake
     /** Per-frame ceiling; a 1024x1024 16-bit TIFF is ~2 MB. */
     private const MAX_FRAME_BYTES = 50 * 1024 * 1024;
 
+    /** The ZIP limit also applies to its expanded contents. */
+    private const MAX_EXTRACTED_BYTES = 2 * 1024 * 1024 * 1024;
+
+    private const MAX_INPUT_FRAMES = 1000;
+
     /**
      * @param  string  $absoluteZipPath  a complete ZIP already on local disk
-     * @return AnalysisRecord the queued job
+     * @return AnalysisRecord the uploaded job awaiting START
      *
      * @throws IntakeException when the archive is unusable
      */
@@ -133,41 +138,94 @@ class PredictionIntake
             throw new IntakeException('The file is not a readable ZIP archive.', 422);
         }
 
-        Storage::makeDirectory($destination);
-        $extracted = 0;
+        try {
+            $entries = [];
+            $names = [];
+            $expandedBytes = 0;
 
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $entry = $zip->getNameIndex($i);
+            // Read the central directory before writing any extracted bytes.
+            // A small compressed archive may expand far beyond the room that
+            // the upload-size check reserved.
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $entry = $zip->getNameIndex($i);
 
-            if ($entry === false || str_ends_with($entry, '/')) {
-                continue;
+                if ($entry === false || str_ends_with($entry, '/')) {
+                    continue;
+                }
+
+                $filename = basename($entry);
+                if (str_contains($entry, '__MACOSX') || str_starts_with($filename, '.')) {
+                    continue;
+                }
+
+                $extension = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+                if ($extension !== 'tif' && $extension !== 'tiff') {
+                    continue;
+                }
+
+                $stat = $zip->statIndex($i);
+                $size = $stat['size'] ?? null;
+                if (!is_int($size) || $size < 0 || $size > self::MAX_FRAME_BYTES) {
+                    throw new IntakeException("Frame {$filename} exceeds the 50 MB per-file limit.", 422);
+                }
+
+                // Flattening folders must not silently replace a scanned frame.
+                $flatName = strtolower($filename);
+                if (isset($names[$flatName])) {
+                    throw new IntakeException("The archive contains more than one frame named {$filename}.", 422);
+                }
+                $names[$flatName] = true;
+
+                $expandedBytes += $size;
+                if ($expandedBytes > self::MAX_EXTRACTED_BYTES) {
+                    throw new IntakeException('The extracted frames exceed the 2 GB archive limit.', 422);
+                }
+
+                $entries[] = [$entry, $filename, $size];
+                if (count($entries) > self::MAX_INPUT_FRAMES) {
+                    throw new IntakeException('The archive contains more than 1000 frames.', 422);
+                }
             }
 
-            // Skip macOS resource forks and anything hidden.
-            if (str_contains($entry, '__MACOSX') || str_starts_with(basename($entry), '.')) {
-                continue;
+            $refusal = app(StorageGuard::class)->refusalFor(
+                max((int) filesize($absoluteZipPath), $expandedBytes)
+            );
+            if ($refusal !== null) {
+                throw new IntakeException($refusal, 507);
             }
 
-            $extension = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
-            if ($extension !== 'tif' && $extension !== 'tiff') {
-                continue;
+            Storage::makeDirectory($destination);
+
+            foreach ($entries as [$entry, $filename, $expectedSize]) {
+                $source = $zip->getStream($entry);
+                if ($source === false) {
+                    throw new IntakeException("Could not read frame {$filename} from the archive.", 422);
+                }
+
+                $target = fopen(Storage::path("{$destination}/{$filename}"), 'wb');
+                if ($target === false) {
+                    fclose($source);
+                    throw new IntakeException("Could not store frame {$filename}.", 500);
+                }
+
+                try {
+                    // The second limit checks bytes actually produced, even
+                    // when the ZIP directory reports a smaller size.
+                    $written = stream_copy_to_stream($source, $target, self::MAX_FRAME_BYTES + 1);
+                } finally {
+                    fclose($source);
+                    fclose($target);
+                }
+
+                if ($written === false || $written !== $expectedSize) {
+                    throw new IntakeException("Frame {$filename} is corrupt or exceeds its declared size.", 422);
+                }
             }
 
-            $stream = $zip->getStream($entry);
-            if ($stream === false) {
-                continue;
-            }
-
-            // basename() also neutralises any `../` path traversal in the entry.
-            Storage::put($destination . '/' . basename($entry), $stream);
-            fclose($stream);
-
-            $extracted++;
+            return count($entries);
+        } finally {
+            $zip->close();
         }
-
-        $zip->close();
-
-        return $extracted;
     }
 
     /**

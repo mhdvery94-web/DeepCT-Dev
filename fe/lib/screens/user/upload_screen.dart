@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/model_status_message.dart';
@@ -11,6 +10,8 @@ import '../../services/me_service.dart';
 import '../../services/prediction_service.dart';
 import '../../services/upload_resume_store.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/archive_source.dart';
+import '../../utils/file_archive.dart';
 import '../../utils/file_extension.dart';
 import '../../utils/frame_bundle.dart';
 import '../../widgets/app_dialog.dart';
@@ -43,7 +44,7 @@ class _UploadScreenState extends State<UploadScreen> {
   List<AvailableModel> _models = const [];
   AvailableModel? _selectedModel;
 
-  Uint8List? _fileBytes;
+  ArchiveSource? _source;
   String? _fileName;
 
   bool _uploading = false;
@@ -68,6 +69,12 @@ class _UploadScreenState extends State<UploadScreen> {
     super.initState();
     _loadModels();
     _loadPending();
+  }
+
+  @override
+  void dispose() {
+    _source?.close();
+    super.dispose();
   }
 
   Future<void> _loadPending() async {
@@ -164,12 +171,16 @@ class _UploadScreenState extends State<UploadScreen> {
       // Several loose .tif frames are as valid a choice as one archive, so a
       // researcher no longer has to zip them first.
       allowMultiple: true,
-      // The chunked uploader needs the bytes in memory anyway, and on web
-      // there is no path to read from.
-      withData: true,
+      // Native ZIPs stay on disk and are read one range at a time. The web
+      // picker still supplies bytes because it has no filesystem path.
+      withData: kIsWeb,
     );
 
-    final picked = result?.files.where((f) => f.bytes != null).toList() ?? [];
+    final picked =
+        result?.files
+            .where((f) => f.bytes != null || f.path != null)
+            .toList() ??
+        [];
     if (picked.isEmpty) return;
 
     if (!mounted) return;
@@ -180,40 +191,77 @@ class _UploadScreenState extends State<UploadScreen> {
         .toList();
 
     if (picked.length == 1 && hasExtension(picked.single.name, const ['zip'])) {
+      final file = picked.single;
+      final source = file.bytes != null
+          ? BytesArchiveSource(file.bytes!, filename: file.name)
+          : await openFileArchive(file.path!, filename: file.name);
+
+      if (!mounted) {
+        await source.close();
+        return;
+      }
+
+      final previous = _source;
       setState(() {
-        _fileBytes = picked.single.bytes;
-        _fileName = picked.single.name;
+        _source = source;
+        _fileName = file.name;
         _uploadError = null;
       });
+      await previous?.close();
       return;
     }
 
     if (tiffs.length == picked.length) {
+      if (tiffs.any((f) => f.size > 50 * 1024 * 1024)) {
+        final previous = _source;
+        setState(() {
+          _source = null;
+          _fileName = null;
+          _uploadError = 'Each frame must be 50 MB or smaller.';
+        });
+        await previous?.close();
+        return;
+      }
       // Bundled here so the backend keeps one intake shape. The names travel
       // unchanged; their numbering is what marks the gaps to fill.
       final bundle = await bundleFrames([
-        for (final f in tiffs) (name: f.name, bytes: f.bytes!),
+        for (final f in tiffs) (name: f.name, bytes: await _bytesOf(f)),
       ]);
 
       if (!mounted) return;
 
+      final previous = _source;
       setState(() {
-        _fileBytes = bundle.bytes;
+        _source = BytesArchiveSource(bundle.bytes, filename: bundle.filename);
         _fileName = bundle.filename;
         _uploadError = null;
       });
+      await previous?.close();
       return;
     }
 
+    final previous = _source;
     setState(() {
       // Cleared, so a previously chosen archive cannot be uploaded by
       // accident while this error is on screen.
-      _fileBytes = null;
+      _source = null;
       _fileName = null;
       _uploadError =
           'Choose one .zip archive, or one or more numbered .tif frames — '
           'not a mixture.';
     });
+    await previous?.close();
+  }
+
+  Future<Uint8List> _bytesOf(PlatformFile file) async {
+    if (file.bytes != null) return file.bytes!;
+
+    final source = await openFileArchive(file.path!, filename: file.name);
+    try {
+      return await source.read(0, source.length);
+    } finally {
+      await source.close();
+    }
   }
 
   Future<void> _loadUploadedFrames(int id) async {
@@ -315,11 +363,11 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _submit({bool resuming = false}) async {
-    final bytes = _fileBytes;
+    final source = _source;
     final model = _selectedModel;
     final pending = _pending;
 
-    if (bytes == null) return;
+    if (source == null) return;
     if (!resuming && model == null) return;
 
     setState(() {
@@ -329,17 +377,16 @@ class _UploadScreenState extends State<UploadScreen> {
     });
 
     try {
-      final queued = resuming && pending != null
+      final uploaded = resuming && pending != null
           ? await _service.resume(
               pending: pending,
-              bytes: bytes,
+              source: source,
               onProgress: (p) {
                 if (mounted) setState(() => _progress = p);
               },
             )
           : await _service.upload(
-              bytes: bytes,
-              filename: _fileName ?? 'frames.zip',
+              source: source,
               modelId: model!.id,
               onProgress: (p) {
                 if (mounted) setState(() => _progress = p);
@@ -349,16 +396,17 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
       setState(() {
         _uploading = false;
-        _fileBytes = null;
+        _source = null;
         _fileName = null;
         _progress = 0;
         _pending = null;
-        _uploaded = queued;
+        _uploaded = uploaded;
       });
+      await source.close();
 
       // Nothing is queued yet. The frames are fetched so they can be looked
       // at before a GPU slot is spent on them.
-      await _loadUploadedFrames(queued.id);
+      await _loadUploadedFrames(uploaded.id);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -369,6 +417,12 @@ class _UploadScreenState extends State<UploadScreen> {
       // The service keeps the session when the failure looked like network
       // trouble, so re-reading it tells the user whether resuming is on offer.
       await _loadPending();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _uploadError = 'Could not read the selected archive: $e';
+      });
     }
   }
 
@@ -377,10 +431,10 @@ class _UploadScreenState extends State<UploadScreen> {
   /// Compared by size here and by MD5 inside the service — this only decides
   /// what the button says; the service refuses a mismatch outright.
   bool get _isResume =>
-      _pending != null && _fileBytes?.length == _pending!.totalSize;
+      _pending != null && _source?.length == _pending!.totalSize;
 
   bool get _canSubmit {
-    if (_uploading || _fileBytes == null) return false;
+    if (_uploading || _source == null) return false;
 
     // Resuming needs no model: the session already carries the one chosen when
     // the upload was started.
@@ -389,7 +443,8 @@ class _UploadScreenState extends State<UploadScreen> {
     return _selectedModel != null && _selectedModel!.isAvailable;
   }
 
-  static String _mb(int bytes) => '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  static String _mb(int bytes) =>
+      '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
   Widget _buildResumeBanner(BuildContext context, PendingUpload pending) {
     return Container(
@@ -632,7 +687,7 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Widget _buildFilePicker(BuildContext context) {
-    final hasFile = _fileBytes != null;
+    final hasFile = _source != null;
 
     return InkWell(
       onTap: _uploading ? null : _pickFile,
@@ -661,7 +716,7 @@ class _UploadScreenState extends State<UploadScreen> {
             const SizedBox(height: 4),
             Text(
               hasFile
-                  ? _formatBytes(_fileBytes!.length)
+                  ? _formatBytes(_source!.length)
                   : 'A .zip archive, or several numbered .tif frames',
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -879,9 +934,7 @@ class _ModelOption extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: selected
-                ? status.withValues(alpha: 0.06)
-                : AppTheme.surface,
+            color: selected ? status.withValues(alpha: 0.06) : AppTheme.surface,
             border: Border.all(
               color: selected ? status : status.withValues(alpha: 0.35),
               width: selected ? 2 : 1,

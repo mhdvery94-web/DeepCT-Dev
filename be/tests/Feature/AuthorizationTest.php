@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\Model;
+use App\Models\AnalysisRecord;
 use App\Models\User;
 use App\Models\UserActivity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -63,6 +65,7 @@ class AuthorizationTest extends TestCase
             'reset password' => ['POST', '/api/admin/users/1/reset-password'],
             'list models' => ['GET', '/api/admin/models'],
             'create model' => ['POST', '/api/admin/models'],
+            'sync models' => ['POST', '/api/admin/models/sync'],
             'delete model' => ['DELETE', '/api/admin/models/1'],
             'health check' => ['POST', '/api/admin/models/1/health-check'],
             'test prediction' => ['POST', '/api/admin/models/1/test'],
@@ -246,6 +249,87 @@ class AuthorizationTest extends TestCase
             ->assertForbidden();
 
         $this->assertNotNull(User::find($this->admin->id));
+    }
+
+    public function test_deleting_an_account_removes_prediction_and_upload_files(): void
+    {
+        Storage::fake('local');
+        $model = Model::create([
+            'name' => 'Test Model', 'version' => 'v1',
+            'endpoint_url' => 'https://worker.example/predict',
+            'status' => 'online', 'is_active' => true,
+        ]);
+        $record = AnalysisRecord::create([
+            'user_id' => $this->researcher->id,
+            'model_id' => $model->id,
+            'job_id' => 'deleted-user-run',
+            'input_folder' => "predictions/{$this->researcher->id}/deleted-user-run/input",
+            'output_folder' => "predictions/{$this->researcher->id}/deleted-user-run/output",
+            'status' => 'completed',
+            'expires_at' => now()->addDay(),
+        ]);
+        Storage::put("{$record->input_folder}/frame_001.tif", 'frame');
+        Storage::put("prediction-evidence/{$record->id}/frame_002.png", 'thumbnail');
+        Storage::put("temp/uploads/{$this->researcher->id}/unfinished.part", 'chunk');
+
+        $this->apiAs($this->tokenAs($this->admin))
+            ->deleteJson("/api/admin/users/{$this->researcher->id}")
+            ->assertOk();
+
+        $this->assertSame(0, AnalysisRecord::where('user_id', $this->researcher->id)->count());
+        $this->assertSame([], Storage::allFiles("predictions/{$this->researcher->id}"));
+        $this->assertSame([], Storage::allFiles("prediction-evidence/{$record->id}"));
+        $this->assertSame([], Storage::allFiles("temp/uploads/{$this->researcher->id}"));
+    }
+
+    public function test_an_account_with_a_running_prediction_cannot_be_deleted(): void
+    {
+        $model = Model::create([
+            'name' => 'Test Model', 'version' => 'v1',
+            'endpoint_url' => 'https://worker.example/predict',
+            'status' => 'online', 'is_active' => true,
+        ]);
+        AnalysisRecord::create([
+            'user_id' => $this->researcher->id,
+            'model_id' => $model->id,
+            'job_id' => 'running-user-run',
+            'input_folder' => "predictions/{$this->researcher->id}/running-user-run/input",
+            'output_folder' => "predictions/{$this->researcher->id}/running-user-run/output",
+            'status' => 'processing',
+            'expires_at' => now()->addDay(),
+        ]);
+
+        $this->apiAs($this->tokenAs($this->admin))
+            ->deleteJson("/api/admin/users/{$this->researcher->id}")
+            ->assertStatus(409);
+
+        $this->assertNotNull($this->researcher->fresh());
+    }
+
+    public function test_disabling_an_account_revokes_its_existing_tokens(): void
+    {
+        $researcherToken = $this->tokenAs($this->researcher);
+        $adminToken = $this->tokenAs($this->admin);
+
+        $this->apiAs($adminToken)
+            ->patchJson("/api/admin/users/{$this->researcher->id}/toggle")
+            ->assertOk();
+
+        $this->assertSame(0, $this->researcher->tokens()->count());
+        $this->apiAs($researcherToken)->getJson('/api/user')->assertUnauthorized();
+    }
+
+    public function test_admin_password_reset_revokes_existing_tokens(): void
+    {
+        $researcherToken = $this->tokenAs($this->researcher);
+        $adminToken = $this->tokenAs($this->admin);
+
+        $this->apiAs($adminToken)
+            ->postJson("/api/admin/users/{$this->researcher->id}/reset-password")
+            ->assertOk();
+
+        $this->assertSame(0, $this->researcher->tokens()->count());
+        $this->apiAs($researcherToken)->getJson('/api/user')->assertUnauthorized();
     }
 
     public function test_an_admin_cannot_deactivate_their_own_account(): void

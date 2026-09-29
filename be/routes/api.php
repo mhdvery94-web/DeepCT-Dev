@@ -60,7 +60,7 @@ Route::get('/news/{id}/video', [NewsController::class, 'video'])->name('api.news
 
 // GPU training workers. Outside `auth:sanctum` on purpose: a worker is a
 // machine with a long-lived shared secret, not a person with an account, and
-// it must not be able to reach anything but these six routes. See
+// it must not be able to reach anything but these seven routes. See
 // EnsureTrainingWorker and ARCHITECTURE.md 7.
 Route::middleware('training.worker')->prefix('training/worker')->group(function () {
     Route::post('/claim', [TrainingWorkerController::class, 'claim'])->name('api.training.worker.claim');
@@ -73,7 +73,7 @@ Route::middleware('training.worker')->prefix('training/worker')->group(function 
 });
 
 // Protected routes (authentication required)
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
     // Auth routes
     Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
     Route::get('/user', [AuthController::class, 'me'])->name('api.user');
@@ -157,6 +157,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Model management
         Route::get('/models', [ModelController::class, 'index'])->name('api.admin.models.index');
         Route::post('/models', [ModelController::class, 'store'])->name('api.admin.models.store');
+        Route::post('/models/sync', [ModelController::class, 'sync'])->name('api.admin.models.sync');
         Route::get('/models/{id}', [ModelController::class, 'show'])->name('api.admin.models.show');
         Route::put('/models/{id}', [ModelController::class, 'update'])->name('api.admin.models.update');
         Route::delete('/models/{id}', [ModelController::class, 'destroy'])->name('api.admin.models.destroy');

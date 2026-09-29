@@ -1,14 +1,17 @@
 # Referensi API
 
-104 endpoint di bawah `/api`, plus `GET /api/health`. Daftar ini dibuat dari
-`php artisan route:list --path=api` per 25 Agustus 2026 — jalankan perintah itu
+104 route di bawah `/api`, **termasuk** `GET /api/health`. Dihitung dari
+`php artisan route:list --path=api` per 28 September 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 
 **Base URL:** `http://127.0.0.1:8000/api` (atau domain ngrok yang mem-forward ke
 sana).
 
-**Autentikasi:** `Authorization: Bearer {token}` untuk semua kecuali `/login`
-dan `/health`.
+**Autentikasi:** `Authorization: Bearer {token}` untuk route akun. `/login`,
+`/health`, `/access-requests`, `/messages/public`, dan berita terbit adalah
+publik; `/training/worker/*` memakai token worker tersendiri. Akun nonaktif
+ditolak pada setiap request. Akun yang wajib mengganti password hanya dapat
+mengakses `/user`, `/me/password`, dan `/logout` sampai password diubah.
 
 **Bentuk balasan** selalu sama:
 
@@ -21,7 +24,8 @@ Endpoint berpaginasi menambahkan blok `pagination` berisi `total`, `per_page`,
 
 **Kode status:** 200 sukses · 201 dibuat · 400 permintaan salah · 401 belum
 login · 403 bukan haknya · 404 tidak ada · 409 konflik · 410 sudah kedaluwarsa ·
-422 validasi gagal · 429 terlalu sering · 503 model tidak tersedia.
+422 validasi gagal · 429 terlalu sering · 503 model tidak tersedia ·
+507 ruang penyimpanan tidak cukup.
 
 ---
 
@@ -32,7 +36,7 @@ login · 403 bukan haknya · 404 tidak ada · 409 konflik · 410 sudah kedaluwar
 | `GET` | `/health` | Liveness probe. Didefinisikan di `routes/web.php`, bukan `api.php`. |
 | `POST` | `/login` | Dibatasi 5 percobaan/menit/IP. |
 | `POST` | `/access-requests` | Formulir Join di landing page. 5/menit/IP. |
-| `POST` | `/messages/public` | Pesan dari halaman login. 5/jam/IP. |
+| `POST` | `/messages/public` | Pesan dari halaman login. 5/10 menit/IP. |
 | `GET` | `/news` | Berita riset yang sudah terbit, urut slide. |
 | `GET` | `/news/{id}/image` | Fotonya. **404 untuk draf**, kecuali pemanggilnya admin. |
 | `GET` | `/news/{id}/video` | Videonya. Aturan yang sama. Menjawab Range, jadi bisa digeser. |
@@ -159,8 +163,9 @@ mengunggah prediksi memang pekerjaan periset — tetapi tujuan `news_video`
 khusus admin, dan ditolak 403 untuk yang lain baik saat `start` maupun
 saat `finalize`. Batasnya 50 MB, diperiksa sebelum satu byte pun dikirim,
 dan tipe berkasnya dibaca dari byte hasil rakitan, bukan dari namanya.
-Draf **404** kecuali request-nya membawa token admin, jadi hasil riset yang
-belum diumumkan tidak bisa ditemukan dengan menebak id.
+Draf **404** kecuali request-nya membawa token admin yang akunnya masih aktif
+dan sudah mengganti password awal. Hasil riset yang belum diumumkan tidak bisa
+ditemukan dengan menebak id atau memakai sesi akun yang dinonaktifkan.
 
 ---
 
@@ -371,7 +376,10 @@ Ditolak lebih awal kalau tidak memenuhi:
 - Nama berkas memuat nomor frame (`frame_001.tif`)
 - **Ada celah di antara nomornya** — `001` dan `005` menghasilkan 002, 003, 004.
   Frame berurutan ditolak: tidak ada yang perlu diinterpolasi.
-- Maksimal 50 MB per frame, dan maksimal 200 frame yang dihasilkan per job
+- Maksimal 50 MB per frame, 1000 frame input, 2 GB total TIFF setelah
+  diekstrak, dan maksimal 200 frame yang dihasilkan per job
+- Nama frame harus unik setelah folder di dalam ZIP diratakan, tanpa membedakan
+  huruf besar/kecil
 
 Entri di dalam subfolder tetap terbaca — ekstraksi meratakannya.
 
@@ -530,9 +538,12 @@ dan frame kecil tidak diperbesar.
 
 ### Unduhan
 
-Keduanya membawa `X-Checksum-MD5` dan `Accept-Ranges: bytes`, jadi unduhan yang
-terputus bisa dilanjutkan. Klien Flutter menghitung ulang MD5-nya dan
-memperingatkan kalau tidak cocok.
+Kedua endpoint membawa `X-Checksum-MD5`; server mendukung HTTP Range untuk
+klien yang ingin melanjutkan unduhan. Klien Flutter saat ini mengunduh ulang
+dari awal jika koneksi terputus. Klien wajib membaca checksum, menghitung ulang
+MD5 selama menerima data, dan hanya menyimpan hasil setelah cocok. Di platform
+native, hasil sementara ditulis ke berkas `.part`; di web, potongan ditahan
+untuk dibuat menjadi Blob setelah verifikasi.
 
 - Job belum selesai → **400**
 - Berkas sudah lewat 24 jam → **410**, dan `show()` melaporkan
@@ -594,13 +605,16 @@ Peneliti yang memanggil salah satunya mendapat **403**.
 | `GET` | `/admin/users` — filter `search`, `role`, `status` |
 | `POST` | `/admin/users` |
 | `GET` | `/admin/users/{id}` |
-| `PUT` | `/admin/users/{id}` — hanya name, username, email, role |
+| `PUT` | `/admin/users/{id}` — name, phone, email, role |
 | `DELETE` | `/admin/users/{id}` |
 | `PATCH` | `/admin/users/{id}/toggle` |
 | `POST` | `/admin/users/{id}/reset-password` |
 
 Password default `user12345678` dikembalikan sebagai `default_password`.
 Admin tidak bisa menghapus atau menonaktifkan akunnya sendiri (403).
+Menonaktifkan atau mereset password mencabut token akun tersebut. Penghapusan
+akun dengan prediksi/training aktif ditolak (409); penghapusan yang berhasil
+membersihkan arsip prediksi, bukti, dan unggahan sementara miliknya.
 
 Ditambah dua route foto: `POST` dan `DELETE /admin/users/{id}/avatar`.
 
@@ -658,7 +672,7 @@ bila gagal atau tunnel mati (`ERR_NGROK_3200`).
 | `POST` | `/admin/access-requests/{id}/reject` — body `note` opsional |
 | `DELETE` | `/admin/access-requests/{id}` |
 
-`approve` **langsung membuat akun user-nya** dan mengembalikan `username` +
+`approve` **langsung membuat akun user-nya** dan mengembalikan `name`/`email` +
 `default_password` sekali. Kalau tidak, admin tetap harus membuat user manual
 dan permintaan itu jadi catatan mati.
 
@@ -756,10 +770,10 @@ di sini yang bisa men-deploy `.h5` ke GPU, jadi model baru dibuat dengan
 
 ### Pekerja GPU — token khusus, bukan token user
 
-Enam route di bawah `/api/training/worker/*`, di luar `auth:sanctum`. Autentikasi
+Tujuh route di bawah `/api/training/worker/*`, di luar `auth:sanctum`. Autentikasi
 lewat `Authorization: Bearer {TRAINING_WORKER_TOKEN}` — worker itu mesin, bukan
 orang: kredensialnya tinggal berminggu-minggu di notebook, tidak butuh akun, dan
-tidak boleh menyentuh apa pun selain enam route ini.
+tidak boleh menyentuh apa pun selain tujuh route ini.
 
 | Method | Path | Untuk |
 |---|---|---|
@@ -767,6 +781,7 @@ tidak boleh menyentuh apa pun selain enam route ini.
 | `GET` | `/training/worker/jobs/{id}/dataset` | Unduh arsip dataset |
 | `POST` | `/training/worker/jobs/{id}/heartbeat` | "Masih hidup" + epoch/metrik |
 | `POST` | `/training/worker/jobs/{id}/checkpoint` | Bobot sementara |
+| `POST` | `/training/worker/jobs/{id}/sample` | Satu PNG sampel per epoch |
 | `POST` | `/training/worker/jobs/{id}/complete` | Bobot final |
 | `POST` | `/training/worker/jobs/{id}/fail` | Melapor gagal |
 
@@ -910,13 +925,19 @@ lihat di bawah.
 
 ### Unggahan yang ditolak sebelum berjalan
 
-Kedua jalur unggah memeriksa ruang lebih dulu dan menjawab **507 Insufficient
-Storage** ketika tidak ada tempat:
+Jalur unggah prediksi dan training langsung memeriksa ruang lebih dulu dan
+menjawab **507 Insufficient Storage** ketika tidak ada tempat:
 
 - **`POST /predictions/uploads`** memeriksa `total_size` yang dideklarasikan,
   sebelum satu byte pun bergerak.
 - **`POST /predictions`** memeriksa ukuran arsip yang sudah di disk, sebelum
   ekstraksi — titik ketika satu berkas menjadi banyak.
+- **`POST /me/training/jobs`** memeriksa ukuran arsip langsung sebelum disimpan.
+
+Prediksi memeriksa direktori ZIP sebelum ekstraksi: maksimal 50 MB per frame,
+1000 frame input, dan 2 GB total TIFF setelah diekstrak. Nama frame yang sama
+setelah folder diratakan ditolak. Header `X-Checksum-MD5` wajib dibaca klien;
+arsip unduhan yang tidak cocok tidak disimpan sebagai hasil berhasil.
 
 507, bukan 400: tidak ada yang salah dengan permintaannya, dan berkas yang
 lebih kecil tidak akan mendapat jawaban berbeda.

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\AnalysisRecord;
+use App\Models\TrainingJob;
 use App\Models\UserActivity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -197,6 +199,16 @@ class UserController extends Controller
             ], 403);
         }
 
+        if (AnalysisRecord::where('user_id', $user->id)
+            ->whereIn('status', ['pending', 'processing'])->exists()
+            || TrainingJob::where('created_by', $user->id)
+                ->whereIn('status', ['queued', 'claimed', 'running'])->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This account still has active work. Finish or cancel it before deleting the account.',
+            ], 409);
+        }
+
         $name = $user->name;
         $user->delete();
 
@@ -237,6 +249,12 @@ class UserController extends Controller
         $user->is_active = !$user->is_active;
         $user->save();
 
+        // Disabling an account must also end sessions issued while it was
+        // active, rather than leaving those tokens valid for seven days.
+        if (!$user->is_active) {
+            $user->tokens()->delete();
+        }
+
         // Log activity
         UserActivity::create([
             'user_id' => auth()->id(),
@@ -272,6 +290,10 @@ class UserController extends Controller
         // must choose a new one before reaching the console.
         $user->must_change_password = true;
         $user->save();
+
+        // A password reset is often a response to lost credentials. Tokens
+        // issued under the old password must not survive that reset.
+        $user->tokens()->delete();
 
         // Log activity
         UserActivity::create([

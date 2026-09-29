@@ -56,24 +56,28 @@ sesuatu yang bisa hilang kapan saja, bukan dependensi yang pasti ada.
                         PATCH  …/{id}   × n                 (per potongan)
                         POST   …/{id}/finalize
        │
-3. PredictionIntake: ekstrak .tif (diratakan), validasi, buat AnalysisRecord,
-   dispatch job                                            status: pending
-       │
-4. queue:work mengambil job                                status: processing
-       │
-5. ProcessDeepLearningImage:
+3. PredictionIntake: periksa ukuran ZIP setelah diekstrak, jumlah frame, nama
+   duplikat, dan ruang disk; ekstrak .tif, validasi, buat AnalysisRecord
+                                                            status: uploaded
+        │
+4. Peneliti melihat preview, lalu POST /api/predictions/{id}/start
+   untuk mengantrekan pekerjaan                              status: pending
+        │
+5. queue:work mengambil job                                 status: processing
+        │
+6. ProcessDeepLearningImage:
       urutkan frame berdasarkan angka di nama berkas
       untuk tiap celah → interpolasi rekursif t=0.5
       simpan tiap hasil ke output/
        │
-6. Selesai                        status: completed, expires_at = now + 24 jam
+7. Selesai                        status: completed, expires_at = now + 24 jam
        │
-7. Klien polling GET /api/predictions tiap 10 detik selama ada yang berjalan
+8. Klien polling GET /api/predictions tiap 10 detik selama ada yang berjalan
        │
-8. Unduh: results (hasil saja) atau complete (input + output + metadata.json)
+9. Unduh: results (hasil saja) atau complete (input + output + metadata.json)
    disertai header X-Checksum-MD5, diverifikasi ulang di klien
        │
-9. predictions:cleanup (tiap jam) menghapus berkas lewat 24 jam,
+10. predictions:cleanup (tiap jam) menghapus berkas lewat 24 jam,
    record tetap disimpan dan ditandai files_deleted_at
 ```
 
@@ -283,8 +287,10 @@ Skema bawaan Laravel: `id` (uuid), `type`, `notifiable_type`/`notifiable_id`,
 mengirimkan event yang sama lewat email nanti cuma menambah `'mail'` di `via()`.
 
 Tabelnya polimorfik, jadi **tidak punya foreign key** ke `users`. Karena itu
-`User::booted()` menghapus notifikasi (dan token, dan berkas avatar) saat akun
-dihapus — tanpa itu barisnya hidup selamanya tanpa ada yang bisa membacanya.
+`User::booted()` menghapus notifikasi, token, avatar, berkas prediksi, bukti
+hasil, dan berkas sementara saat akun dihapus. Penghapusan ditolak selama akun
+masih memiliki prediksi atau training aktif, supaya pekerjaan yang sedang
+berjalan tidak kehilangan berkasnya.
 
 ### `news_posts` — berita riset di landing page
 `title`, `summary`, `body`, `image_path`, `image_mime`, `video_path`,
@@ -359,7 +365,7 @@ sampai, dan mengirim ulang dari offset basi justru dijawab 409. Sesi hanya
 dihapus kalau server menolak secara tegas (mis. 422) — kalau kegagalannya
 berbau jaringan, sesi sengaja ditinggalkan supaya masih bisa dilanjutkan.
 
-**Byte-nya tidak pernah utuh di heap.** Sampai 3 September 2026 klien memilih
+**Pada target native, ZIP tidak pernah utuh di heap.** Sebelum alur ini klien memilih
 berkas dengan `withData: true`, sehingga picker menyerahkan seluruh berkas ke
 heap Dart dan loop potongan hanya mengiris `Uint8List` yang sudah tergeletak di
 sana — yang dihemat chunking cuma *transport*-nya, dan itu bukan bagian yang
@@ -490,15 +496,17 @@ per jam sebagai jaring pengaman.
 | Lapis | Penerapan |
 |---|---|
 | Autentikasi | Sanctum bearer token, kedaluwarsa 7 hari (`config/sanctum.php`) |
-| Sesi | Satu per akun; login mencabut token lain |
+| Status akun | Middleware `account.access` menolak akun nonaktif pada setiap request dan membatasi akun yang belum mengganti password ke profil, ganti password, dan logout. Nonaktif/reset mencabut token yang ada |
+| Sesi | Beberapa perangkat dapat masuk bersamaan; logout mencabut token saat ini, reset/nonaktif mencabut semua token akun |
 | Otorisasi | Middleware `role:admin`; selain itu tiap query di-scope ke `$request->user()` |
 | Rate limit | Login 5 percobaan/menit/IP |
 | Password | bcrypt, 12 rounds |
 | Kepemilikan upload | Dipaksa lewat path storage — `upload_id` akun lain menghasilkan 404 |
-| Integritas unduhan | `X-Checksum-MD5`, diverifikasi ulang di klien |
+| Integritas unduhan | `X-Checksum-MD5` wajib dan diekspos lewat CORS; klien memverifikasi sebelum menyimpan arsip. Klien native menulis sementara lalu mengganti nama setelah checksum cocok |
+| Ekstraksi ZIP | Batas 50 MB/frame, 1000 frame, 2 GB total hasil ekstraksi; nama frame yang sama setelah folder diratakan ditolak |
 | Rahasia | `endpoint_url` model tidak pernah keluar ke non-admin |
 | Autentikasi worker | `auth_token` per model, dikirim `Authorization: Bearer`, terenkripsi saat disimpan, tulis-saja lewat API |
-| Ruang disk | Kedua jalur unggah menolak dengan **507** ketika tidak ada tempat; lihat `StorageGuard` |
+| Ruang disk | Unggah prediksi langsung/chunked dan training langsung menolak dengan **507** ketika tidak ada tempat; lihat `StorageGuard` |
 | Volume hasil | Berkas sentinel membuktikan NAS-nya ter-mount, karena share yang absen menerima tulisan tanpa mengeluh |
 | TLS ke worker | `verify_tls` per model; satu-satunya tempat `withoutVerifying()` tersisa adalah `WorkerRequest` |
 
@@ -519,7 +527,7 @@ Backend saja tidak cukup. Tiga proses terpisah:
 | Proses | Tanpa itu |
 |---|---|
 | `npm run octane` | Tidak ada API sama sekali |
-| `php artisan queue:work` | Upload berhasil tapi job selamanya `pending` |
+| `php artisan queue:work` | Upload dan preview berhasil, tetapi job tetap `pending` setelah START |
 | `php artisan schedule:work` | Berkas kedaluwarsa tidak pernah dihapus; status model jadi basi |
 
 Tidak satu pun berjalan otomatis di setup Laragon saat ini.

@@ -6,11 +6,21 @@ berjalan — centang diisi hanya setelah **diverifikasi**, bukan setelah ditulis
 Ini bukan dokumen status. Jangan buat `*_PLAN.md` atau `*_SUMMARY.md` baru;
 perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
-**Terakhir diperbarui:** 6 September 2026
+**Terakhir diperbarui:** 29 September 2026
 
 ---
 
 ## Diketahui, belum dikerjakan
+
+- [ ] **Selesaikan perpindahan produksi dari VPS ke Raspberry Pi.** Source
+      backend lokal sudah dipasang langsung ke `/var/www/deepct-ai` dan
+      diverifikasi melalui nginx serta NetBird pada 29 September: seluruh
+      migrasi berstatus `Ran`, tiga proses Supervisor hidup, dan `/api/health`
+      serta `/api/news` menjawab 200. Database Pi masih kosong. Yang tersisa:
+      static domain ngrok backend, self-hosted runner GitHub, proyek Vercel
+      baru, uji kompatibilitas MariaDB terhadap suite penuh, pemindahan
+      `APP_KEY`/database/`storage` dari VPS, pengujian ujung-ke-ujung terhadap
+      worker model nyata, masa observasi, lalu penghentian VPS.
 
 - [x] **`hyperparameters` dikirim sebagai `[]`, bukan `{}`.** *(1.35.0)*
       Ternyata tiga tempat, bukan satu: `MeTrainingController`,

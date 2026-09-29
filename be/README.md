@@ -18,9 +18,9 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (104 Total)
+### API Endpoints (104 Total, Including Health)
 
-Plus an unauthenticated `GET /api/health` liveness probe, which is declared in
+The count includes the unauthenticated `GET /api/health` liveness probe, declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
 `/up`. Verify the full list at any time with `php artisan route:list --path=api`.
 
@@ -189,12 +189,12 @@ Admin (11):
 - `GET /api/admin/training/jobs/{id}/weights`
 - `POST /api/admin/training/jobs/{id}/register-model`
 
-Worker (6), under `/api/training/worker/*`: `claim`, `jobs/{id}/dataset`,
-`heartbeat`, `checkpoint`, `complete`, `fail`.
+Worker (7), under `/api/training/worker/*`: `claim`, `jobs/{id}/dataset`,
+`heartbeat`, `checkpoint`, `sample`, `complete`, `fail`.
 
 **The worker authenticates with a shared secret**, not a Sanctum token — it is
 a machine, not a person, its credential lives in a notebook for weeks, and it
-must reach nothing but these six routes. Generate one with
+must reach nothing but these seven routes. Generate one with
 `php artisan training:token`, put it in `TRAINING_WORKER_TOKEN`. With no token
 set, every worker route answers **503**: a half-configured deployment fails
 closed.
@@ -270,6 +270,11 @@ only surface when a researcher's prediction failed.
 - `PATCH /api/admin/users/{id}/toggle` - Toggle active status
 - `POST /api/admin/users/{id}/reset-password` - Reset to default
 
+Disabling or resetting an account revokes all its existing tokens. Deletion
+returns **409** while the account has a pending/processing prediction or a
+queued/claimed/running training job. A successful deletion removes its
+prediction files, kept evidence, and temporary upload/download files.
+
 #### Model Management (8) - Admin Only
 - `GET /api/admin/models` - List models
 - `POST /api/admin/models` - Add new model
@@ -293,13 +298,16 @@ worker directly.
 Without these an ordinary researcher could reach nothing but `GET /user`,
 since everything under `/admin` requires the admin role.
 
-#### Predictions (8) - Any authenticated user (FASE 3)
-- `POST /api/predictions` - Upload a ZIP of numbered `.tif` frames, queue a job
+#### Predictions (11) - Any authenticated user (FASE 3)
+- `POST /api/predictions` - Upload a ZIP of numbered `.tif` frames for review (`uploaded`)
 - `GET /api/predictions` - List the caller's own jobs, paginated
 - `GET /api/predictions/{id}` - Job detail, including queue position while pending
 - `DELETE /api/predictions/{id}` - Delete a job and its files
 - `GET /api/predictions/{id}/frames` - What is on disk, inputs and outputs
+- `POST /api/predictions/{id}/start` - Queue an uploaded job after reviewing its frames
+- `POST /api/predictions/{id}/rerun` - Start a new run with the same frames and another model
 - `GET /api/predictions/{id}/frames/{name}/preview` - That frame as a PNG
+- `GET /api/predictions/{id}/evidence/{name}` - Kept thumbnail after frame expiry
 - `GET /api/predictions/{id}/download/results` - ZIP of generated frames only
 - `GET /api/predictions/{id}/download/complete` - ZIP of input + output + `metadata.json`
 
@@ -311,6 +319,9 @@ names contain frame numbers, and those numbers must leave a **gap** — the job
 interpolates what is missing between them. `frame_001.tif` + `frame_005.tif`
 generates 002, 003 and 004. Consecutive frames are rejected with a clear
 message, as is any job that would generate more than 200 frames.
+Intake also rejects frames over 50 MB, more than 1000 input frames, more than
+2 GB of expanded TIFF data, and duplicate filenames after nested folders are
+flattened. Disk space is checked against the expanded size before extraction.
 
 **Frame preview.** Frames on disk are 16-bit TIFFs, which no browser or Flutter
 build can decode. `TiffPreview` renders them to 8-bit greyscale PNG in plain
@@ -332,7 +343,7 @@ flow is the alternative, and the right choice for anything large:
 - `POST /api/predictions/uploads` - open a session → `{ upload_id, chunk_size }`
 - `PATCH /api/predictions/uploads/{id}` - append one chunk (`offset` + `chunk`)
 - `GET /api/predictions/uploads/{id}` - how many bytes landed, for resuming
-- `POST /api/predictions/uploads/{id}/finalize` - assemble and queue the job
+- `POST /api/predictions/uploads/{id}/finalize` - assemble the archive for review (`uploaded`)
 - `DELETE /api/predictions/uploads/{id}` - abandon the session
 
 Chunks must arrive in order; a gap returns **409** rather than silently
@@ -369,8 +380,8 @@ only change needed to speed uploads up.
   t=0.5, calling the model once per generated frame
 - `CheckModelsHealth` - Auto health check (scheduled every 5 minutes)
 
-⚠️ **Predictions need a queue worker.** Without `php artisan queue:work` an
-upload succeeds but the job stays `pending` forever.
+⚠️ **Predictions need a queue worker.** Without `php artisan queue:work`,
+upload and preview still work, but a job stays `pending` after START.
 
 ⚠️ **Start it through `npm run queue`, not bare `queue:work`.** The script is
 
@@ -455,7 +466,9 @@ Two more settings, both with sensible defaults:
 | `STORAGE_HEADROOM_MULTIPLIER` | `3.0` | An archive costs disk three times over: frames extracted from it, frames generated from those, and the archive built to hand results back |
 | `STORAGE_MINIMUM_FREE_BYTES` | 2 GB | A floor whatever the upload. A machine that runs to zero cannot write to MySQL, cannot record the failure, and cannot log why |
 
-Both upload paths answer **507** when there is no room, before doing any work.
+Prediction upload and direct researcher training upload answer **507** when
+there is no room. Prediction intake checks the ZIP's expanded size before
+extracting frames.
 `GET /api/admin/storage` reports what is used and — more usefully — how much of
 it retention will hand back on its own.
 
@@ -569,7 +582,7 @@ Requires a running `php artisan schedule:work` — see *Scheduled Commands* abov
   by the other side"
 - `notifications` - Laravel's own schema. Polymorphic, so it carries **no
   foreign key** to `users` — `User::booted()` deletes them by hand, along with
-  the account's tokens and avatar file
+  the account's tokens, avatar, prediction files, kept evidence and temporary files
 
 ### Queue Tables
 - `jobs` - Pending queue jobs
@@ -793,6 +806,9 @@ php artisan queue:retry all
 - Token stored in `personal_access_tokens` table
 - Token expires after **7 days** (10080 minutes)
 - Auto cleanup expired tokens (scheduled daily via `tokens:cleanup` command)
+- `account.access` checks active status on every authenticated request. An
+  account with an issued password can only read `/api/user`, change its
+  password, or log out until that password is replaced
 
 #### Concurrent sessions
 

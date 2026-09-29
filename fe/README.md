@@ -85,7 +85,8 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
 ### Researcher Console (`UserShell`)
 - ✅ **Dashboard** — model availability, own analysis counters, activity today,
   and the 5 most recent actions
-- ✅ **New Analysis** — pick a model, pick a ZIP, upload with live progress
+- ✅ **New Analysis** — pick a model and ZIP or numbered TIFF frames, upload
+  with live progress, preview the uploaded frames, then explicitly start analysis
 - ✅ **Results & History** — job status with polling, dual download, delete.
   A completed run also shows what it scored: a frame the archive already held
   was set aside, regenerated, and measured against the real one. Where the same
@@ -127,6 +128,9 @@ under `/api/admin` requires the admin role and is unreachable from this console.
 under 1 MB in a single request and switches to the resumable chunked flow above
 that. The chunk size is whatever the server advertises in the session response,
 never hard-coded, so the client adapts to the server's PHP/RoadRunner limits.
+On native platforms, prediction ZIPs are read from disk by range for hashing,
+upload and resume. Web file picking and bundles made from loose TIFFs still
+hold the source bytes in memory.
 
 **Polling, not push.** `PredictionHistoryScreen` refreshes every 10s *only*
 while a job is pending or processing, and cancels the timer once everything has
@@ -134,8 +138,10 @@ settled. A failed background refresh leaves the existing list on screen rather
 than blanking it.
 
 **Downloads are checksum-verified.** Every archive arrives with an
-`X-Checksum-MD5` header, which the client recomputes locally; a mismatch is
-surfaced to the user rather than silently saving a corrupt ZIP.
+`X-Checksum-MD5` header, which the client requires and recomputes locally.
+Native downloads stream into a temporary file and are renamed only after the
+checksum matches; the browser buffers Blob chunks until verification and then
+starts its download. A mismatch is surfaced without saving a corrupt ZIP.
 
 **Interrupted uploads can be continued.** A failing chunk is retried three
 times, re-reading the server's `received` first — a request that timed out may
@@ -148,7 +154,7 @@ check proves it is the same one.
 ### Shared Features
 - ✅ Responsive design (mobile, tablet, desktop) — covered by layout tests at
   360x640, 390x844, 759x900, 760x900, 768x1024, 1280x720 and 1440x1024
-- ✅ Authentication with JWT token
+- ✅ Authentication with a Laravel Sanctum bearer token
 - ✅ Secure token storage
 - ✅ Role-based routing
 - ✅ Error handling with user-friendly messages
@@ -536,9 +542,10 @@ flutter run
   `flutter build apk --split-per-abi` to cut this to roughly a third per
   device architecture.
 
-### iOS (Future)
-- Not yet configured
-- Will require Xcode & Apple Developer account
+### iOS
+- The iOS project is configured and CI builds an unsigned release on macOS.
+- Installing it on a device or distributing it requires signing with an Apple
+  Developer certificate and provisioning profile.
 
 ---
 
@@ -601,7 +608,7 @@ flutter build appbundle --release
 - ✅ Researcher console shell with sidebar/drawer
 - ✅ Dashboard, upload (direct + chunked), results & history with polling
 - ✅ Frame gallery with server-rendered PNG previews
-- ✅ Checksum-verified downloads on web and Android
+- ✅ Checksum-verified downloads on web and native platforms
 
 ### Completed since
 - ✅ Join form wired to `POST /api/access-requests` + admin review screen
@@ -612,8 +619,9 @@ flutter build appbundle --release
 - ✅ Managed training from the researcher's side: datasets, runs, per-epoch
   metrics, and looking at a dataset before spending GPU time on it
 - ✅ Admin queue board and storage panel
-- ✅ Uploads that stream: bytes are read a range at a time, so a 512 MB dataset
-  never sits in the heap
+- ✅ Native prediction and training ZIP uploads read a range at a time, so a
+  512 MB archive does not sit in the Dart heap; web and loose TIFF bundles
+  still hold source bytes in memory
 
 ### Testing
 The suite is **274 tests across 33 files**, and `flutter analyze` is clean.

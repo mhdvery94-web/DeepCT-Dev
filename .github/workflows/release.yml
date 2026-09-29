@@ -61,25 +61,14 @@ env:
   # every target, web, Android, iOS and desktop all talk to whichever backend
   # wins here.
   #
-  # There are two backends and the order below is the switch between them:
-  #
-  #   NGROK_BE_VPS   the VPS. Set, and everything points at it.
-  #   NGROK_BE       the lab machine. Used when NGROK_BE_VPS is empty, so
-  #                  clearing the first variable moves every client back
-  #                  without touching this file.
-  #   API_BASE_URL   honoured for anyone still setting the original name.
-  #
-  # Both are ngrok addresses, and that is not a stopgap on the VPS side: port
-  # 8443 is closed in the cloud firewall and every candidate subdomain answers
-  # NXDOMAIN, so certbot cannot issue for one. A tunnel terminates TLS itself
-  # and reaches in from outside, which is what the web client needs — its page
-  # is HTTPS, and a browser will not call http:// from it.
+  # Production has one backend: the Raspberry Pi. Its address must be a stable
+  # public HTTPS URL; the Pi's NetBird address is private and Vercel cannot
+  # reach it. There is deliberately no hard-coded fallback: producing a client
+  # that silently talks to the retired VPS is worse than stopping the build.
   API_BASE_URL: >-
     ${{ github.event.inputs.api_base_url
-        || vars.NGROK_BE_VPS
-        || vars.NGROK_BE
-        || vars.API_BASE_URL
-        || 'https://nucleus-drone-grueling.ngrok-free.dev/api' }}
+        || vars.RASPI_API_BASE_URL
+        || vars.API_BASE_URL }}
 
 jobs:
   # Ten seconds that stop a ten-minute build from producing clients nobody can
@@ -96,7 +85,7 @@ jobs:
           set -euo pipefail
 
           if [ -z "${API_BASE_URL:-}" ]; then
-            echo "::error::API_BASE_URL is empty. Set the repository variable NGROK_BE."
+            echo "::error::API_BASE_URL is empty. Set the repository variable RASPI_API_BASE_URL."
             exit 1
           fi
 
@@ -108,7 +97,7 @@ jobs:
             *)
               echo "::error::API_BASE_URL is '$API_BASE_URL', which does not end in /api."
               echo "The client appends paths directly to it, so every request would 404."
-              echo "Set the repository variable NGROK_BE to '${API_BASE_URL%/}/api'."
+              echo "Set RASPI_API_BASE_URL to '${API_BASE_URL%/}/api'."
               exit 1
               ;;
           esac
@@ -177,11 +166,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 8.3 because that is what the VPS runs. composer.json allows 8.2, so
-      # testing on 8.3 tests the version production will actually execute.
+      # Keep this equal to the Raspberry Pi's production PHP version.
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.2'
           extensions: mbstring, pdo_mysql, zip, fileinfo, bcmath
           coverage: none
 
@@ -335,87 +323,27 @@ jobs:
             echo "$URL"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  vps:
-    name: Deploy backend to VPS
+  raspi:
+    name: Deploy backend to Raspberry Pi
     # `test-backend`, not `test`: this job ships `be/` and nothing else.
     needs: [test-backend]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    # The Pi is behind NetBird, so a GitHub-hosted runner cannot SSH to it.
+    # Running the deploy on the Pi also removes the need to store an SSH key in
+    # repository secrets. The custom label prevents another self-hosted runner
+    # from accidentally receiving this production deployment.
+    runs-on: [self-hosted, Linux, ARM64, deepct-raspi]
     # One deployment at a time, and never cancelled halfway. A run interrupted
     # between `rsync` and the restart leaves new code under an old process —
     # the exact state CLAUDE.md warns about, where a new route 404s and nothing
     # in the logs says why.
     concurrency:
-      group: vps-deploy
+      group: raspi-deploy
       cancel-in-progress: false
     env:
-      VPS_HOST: ${{ secrets.VPS_HOST }}
-      VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
-      VPS_PORT: ${{ secrets.VPS_PORT }}
-      VPS_SSH: ${{ secrets.VPS_SSH }}
-      # Optional. When set, the host key is pinned from it rather than being
-      # learned on the spot — see the comment on the connection step.
-      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
       DEPLOY_PATH: /var/www/deepct-ai
     steps:
       - uses: actions/checkout@v4
-
-      # Named individually rather than counted, because "a secret is missing"
-      # sends someone to read four settings pages.
-      - name: Check the secrets are all here
-        run: |
-          set -euo pipefail
-
-          missing=""
-          [ -n "${VPS_HOST:-}" ]     || missing="$missing VPS_HOST"
-          [ -n "${VPS_USERNAME:-}" ] || missing="$missing VPS_USERNAME"
-          [ -n "${VPS_SSH:-}" ]      || missing="$missing VPS_SSH"
-
-          if [ -n "$missing" ]; then
-            echo "::error::Missing repository secret(s):$missing"
-            echo "Settings -> Secrets and variables -> Actions."
-            exit 1
-          fi
-
-          echo "Deploying to ${VPS_USERNAME}@${VPS_HOST}:${VPS_PORT:-22} $DEPLOY_PATH"
-
-      - name: Open the SSH connection
-        run: |
-          set -euo pipefail
-
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$VPS_SSH" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-
-          # Host key handling, stated plainly because the two branches are not
-          # equally safe. With VPS_KNOWN_HOSTS set the key is pinned and a
-          # substituted host is refused. Without it the key is learned from
-          # whatever answers on that address — which still catches a host that
-          # changes between runs, but trusts the first one. Weaker than
-          # pinning, and better than StrictHostKeyChecking=no, which trusts
-          # every one of them.
-          if [ -n "${VPS_KNOWN_HOSTS:-}" ]; then
-            printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
-            echo "Host key pinned from VPS_KNOWN_HOSTS."
-          else
-            ssh-keyscan -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-            echo "::warning::VPS_KNOWN_HOSTS is not set, so the host key was accepted on sight."
-            echo "Pin it with: ssh-keyscan -p ${VPS_PORT:-22} -H <host>"
-          fi
-          chmod 600 ~/.ssh/known_hosts
-
-          cat >> ~/.ssh/config <<CONF
-          Host deploy
-            HostName $VPS_HOST
-            User $VPS_USERNAME
-            Port ${VPS_PORT:-22}
-            IdentityFile ~/.ssh/id_deploy
-            IdentitiesOnly yes
-            StrictHostKeyChecking yes
-            ServerAliveInterval 30
-          CONF
-
-          ssh deploy 'echo "Connected as $(whoami) on $(hostname), $(uname -sr)"'
 
       # `--delete`, so a file removed from the repository is removed from the
       # server too: a controller deleted here but left there is a route that
@@ -446,6 +374,8 @@ jobs:
         run: |
           set -euo pipefail
 
+          sudo -n install -d -o "$(id -un)" -g "$(id -gn)" "$DEPLOY_PATH"
+
           rsync -az --delete --human-readable --stats \
             --exclude='.env' \
             --exclude='.env.*' \
@@ -459,14 +389,12 @@ jobs:
             --exclude='public/storage' \
             --exclude='auth.json' \
             --exclude='.git/' \
-            be/ deploy:"$DEPLOY_PATH"/
+            be/ "$DEPLOY_PATH"/
 
       - name: Install, back up, migrate, restart
         run: |
           set -euo pipefail
 
-          ssh deploy "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
-          set -euo pipefail
           cd "$DEPLOY_PATH"
 
           if [ ! -f .env ]; then
@@ -584,16 +512,12 @@ jobs:
             echo "$known"
             exit 1
           fi
-          REMOTE
-
       # A restart that reported success is not proof the application came back.
       # This asks the running process, on the port nginx proxies to.
       - name: Ask the server whether it is actually up
         run: |
           set -euo pipefail
 
-          ssh deploy "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
-          set -euo pipefail
           cd "$DEPLOY_PATH"
 
           # /api/news is public, cheap, and reaches the database. An empty feed
@@ -612,11 +536,10 @@ jobs:
           sudo -n supervisorctl status brin-octane || true
           tail -n 40 storage/logs/laravel.log 2>/dev/null || true
           exit 1
-          REMOTE
 
           {
             echo "### Backend deployed"
-            echo "Commit ${{ github.sha }} to $DEPLOY_PATH on the VPS."
+            echo "Commit ${{ github.sha }} to $DEPLOY_PATH on the Raspberry Pi."
           } >> "$GITHUB_STEP_SUMMARY"
 
   android:

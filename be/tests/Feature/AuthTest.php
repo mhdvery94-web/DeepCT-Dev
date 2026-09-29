@@ -70,6 +70,18 @@ class AuthTest extends TestCase
         );
     }
 
+    public function test_an_existing_token_cannot_use_a_deactivated_account(): void
+    {
+        $user = $this->makeUser();
+        $token = $this->tokenFor('researcher@brin.go.id', 'user123');
+
+        // Covers a status change outside the admin endpoint as well as the
+        // endpoint's token revocation: account state must be checked per call.
+        $user->update(['is_active' => false]);
+
+        $this->apiAs($token)->getJson('/api/user')->assertForbidden();
+    }
+
     /**
      * Concurrent sessions are allowed. A researcher on a laptop and a phone
      * holds two tokens, and signing in on one must not disturb the other.
@@ -269,6 +281,21 @@ class AuthTest extends TestCase
             ->getJson('/api/user')
             ->assertOk()
             ->assertJsonPath('data.must_change_password', true);
+    }
+
+    public function test_an_issued_password_only_allows_profile_password_change_and_logout(): void
+    {
+        $this->makeUser(['must_change_password' => true]);
+        $token = $this->tokenFor('researcher@brin.go.id', 'user123');
+
+        $this->apiAs($token)->getJson('/api/me/stats')->assertForbidden();
+        $this->apiAs($token)->getJson('/api/user')->assertOk();
+        $this->apiAs($token)->postJson('/api/me/password', [
+            'current_password' => 'user123',
+            'password' => 'new-password-456',
+            'password_confirmation' => 'new-password-456',
+        ])->assertOk();
+        $this->apiAs($token)->getJson('/api/me/stats')->assertOk();
     }
 
     public function test_changing_the_password_clears_the_flag(): void

@@ -98,4 +98,30 @@ class ModelHealthCheckTest extends TestCase
         $this->assertNull($model->health_check_reason);
         $this->assertNull($model->health_check_error);
     }
+
+    public function test_a_catalogued_model_is_online_only_when_it_is_listed(): void
+    {
+        Http::fake([
+            'https://worker.example/models' => Http::response([
+                'models' => [[
+                    'name' => 'deepct-tc-d',
+                    'endpoint' => '/predict/deepct-tc-d',
+                    'active' => true,
+                ]],
+            ]),
+        ]);
+
+        $model = $this->model([
+            'slug' => 'deepct-tc-d',
+            'base_url' => 'https://worker.example',
+            'endpoint' => '/predict/deepct-tc-d',
+            'full_endpoint_url' => 'https://worker.example/predict/deepct-tc-d',
+        ]);
+
+        (new ModelHealthChecker())->check($model);
+
+        $model->refresh();
+        $this->assertSame('online', $model->status);
+        $this->assertTrue($model->worker_active);
+    }
 }

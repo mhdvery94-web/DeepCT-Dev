@@ -1,12 +1,13 @@
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 
 import '../config/api_config.dart';
 import '../models/pagination.dart';
 import '../models/prediction.dart';
 import '../models/prediction_frame.dart';
+import '../utils/archive_source.dart';
+import '../utils/file_download.dart';
 import 'api_client.dart';
 import 'upload_resume_store.dart';
 
@@ -14,16 +15,9 @@ import 'upload_resume_store.dart';
 /// server sent.
 class DownloadedArchive {
   final String filename;
-  final Uint8List bytes;
+  final String location;
 
-  /// Null when the server did not send `X-Checksum-MD5`.
-  final bool? checksumVerified;
-
-  const DownloadedArchive({
-    required this.filename,
-    required this.bytes,
-    this.checksumVerified,
-  });
+  const DownloadedArchive({required this.filename, required this.location});
 }
 
 /// Wraps the FASE 3 prediction endpoints.
@@ -150,42 +144,39 @@ class PredictionService {
     return result.bytes;
   }
 
-  /// Uploads [bytes] and queues a prediction, picking the transport that fits.
+  /// Uploads [source] for review, picking the transport that fits.
   ///
   /// [onProgress] reports 0.0-1.0 across the whole upload, whichever path is
   /// taken, so the UI does not need to know which one ran.
   Future<Prediction> upload({
-    required Uint8List bytes,
-    required String filename,
+    required ArchiveSource source,
     required int modelId,
     void Function(double progress)? onProgress,
   }) async {
-    if (bytes.length < directUploadLimit) {
+    if (source.length < directUploadLimit) {
       return _uploadDirect(
-        bytes: bytes,
-        filename: filename,
+        source: source,
         modelId: modelId,
         onProgress: onProgress,
       );
     }
 
     return _uploadChunked(
-      bytes: bytes,
-      filename: filename,
+      source: source,
       modelId: modelId,
       onProgress: onProgress,
     );
   }
 
   Future<Prediction> _uploadDirect({
-    required Uint8List bytes,
-    required String filename,
+    required ArchiveSource source,
     required int modelId,
     void Function(double progress)? onProgress,
   }) async {
+    final bytes = await source.read(0, source.length);
     final form = FormData.fromMap({
       'model_id': modelId,
-      'file': MultipartFile.fromBytes(bytes, filename: filename),
+      'file': MultipartFile.fromBytes(bytes, filename: source.filename),
     });
 
     final body = await _api.sendMultipart(
@@ -204,8 +195,7 @@ class PredictionService {
   /// Chunks must arrive in order; the server rejects a gap with 409 rather
   /// than silently assembling a corrupt archive.
   Future<Prediction> _uploadChunked({
-    required Uint8List bytes,
-    required String filename,
+    required ArchiveSource source,
     required int modelId,
     void Function(double progress)? onProgress,
   }) async {
@@ -213,8 +203,8 @@ class PredictionService {
       ApiConfig.predictionUploads,
       data: {
         'model_id': modelId,
-        'total_size': bytes.length,
-        'filename': filename,
+        'total_size': source.length,
+        'filename': source.filename,
       },
     );
 
@@ -227,9 +217,9 @@ class PredictionService {
     await _store.save(
       PendingUpload(
         uploadId: uploadId,
-        filename: filename,
-        totalSize: bytes.length,
-        digest: md5.convert(bytes).toString(),
+        filename: source.filename,
+        totalSize: source.length,
+        digest: await digestOf(source),
         modelId: modelId,
         savedAt: DateTime.now(),
       ),
@@ -238,7 +228,7 @@ class PredictionService {
     return _pushChunks(
       uploadId: uploadId,
       chunkSize: chunkSize,
-      bytes: bytes,
+      source: source,
       from: 0,
       onProgress: onProgress,
     );
@@ -246,18 +236,15 @@ class PredictionService {
 
   /// Continues an upload that was interrupted, from wherever the server got to.
   ///
-  /// [bytes] must be the same archive: [PendingUpload.matches] is checked
+  /// [source] must be the same archive: [PendingUpload.matches] is checked
   /// first, because splicing a different file into a half-written session
   /// produces a corrupt ZIP that only fails much later, inside the worker.
   Future<Prediction> resume({
     required PendingUpload pending,
-    required Uint8List bytes,
+    required ArchiveSource source,
     void Function(double progress)? onProgress,
   }) async {
-    if (!pending.matches(
-      size: bytes.length,
-      digest: md5.convert(bytes).toString(),
-    )) {
+    if (!pending.matches(size: source.length, digest: await digestOf(source))) {
       throw const ApiException(
         'That is a different archive. Choose the same file, or discard the '
         'unfinished upload and start again.',
@@ -272,12 +259,12 @@ class PredictionService {
     final received = (data['received'] as num?)?.toInt() ?? 0;
     final chunkSize = (data['chunk_size'] as num?)?.toInt() ?? 1 << 20;
 
-    onProgress?.call((received / bytes.length).clamp(0.0, 1.0));
+    onProgress?.call((received / source.length).clamp(0.0, 1.0));
 
     return _pushChunks(
       uploadId: pending.uploadId,
       chunkSize: chunkSize,
-      bytes: bytes,
+      source: source,
       from: received,
       onProgress: onProgress,
     );
@@ -291,16 +278,17 @@ class PredictionService {
   Future<Prediction> _pushChunks({
     required String uploadId,
     required int chunkSize,
-    required Uint8List bytes,
+    required ArchiveSource source,
     required int from,
     void Function(double progress)? onProgress,
   }) async {
+    final total = source.length;
     var offset = from;
 
     try {
-      while (offset < bytes.length) {
-        final end = (offset + chunkSize).clamp(0, bytes.length);
-        final slice = Uint8List.sublistView(bytes, offset, end);
+      while (offset < total) {
+        final end = (offset + chunkSize).clamp(0, total);
+        final slice = await source.read(offset, end);
 
         // Whether the server took this chunk. On the other path — a retry that
         // discovered the server is further along than we thought — `offset`
@@ -317,11 +305,11 @@ class PredictionService {
                 'offset': offset,
                 'chunk': MultipartFile.fromBytes(slice, filename: 'chunk'),
               }),
-              onSendProgress: (sent, total) {
-                if (total <= 0) return;
+              onSendProgress: (sent, requestTotal) {
+                if (requestTotal <= 0) return;
                 // Blend this chunk's progress into the overall figure.
-                final done = offset + (sent / total) * slice.length;
-                onProgress?.call((done / bytes.length).clamp(0.0, 1.0));
+                final done = offset + (sent / requestTotal) * slice.length;
+                onProgress?.call((done / total).clamp(0.0, 1.0));
               },
             );
             accepted = true;
@@ -343,7 +331,7 @@ class PredictionService {
         }
 
         if (accepted) offset = end;
-        onProgress?.call(offset / bytes.length);
+        onProgress?.call(offset / total);
       }
 
       final body = await _api.post(
@@ -368,9 +356,7 @@ class PredictionService {
   /// How many bytes the server has, or null if even that call failed.
   Future<int?> _receivedSoFar(String uploadId) async {
     try {
-      final status = await _api.get(
-        '${ApiConfig.predictionUploads}/$uploadId',
-      );
+      final status = await _api.get('${ApiConfig.predictionUploads}/$uploadId');
       final data = Map<String, dynamic>.from(status['data'] as Map);
       return (data['received'] as num?)?.toInt();
     } on ApiException {
@@ -419,26 +405,39 @@ class PredictionService {
     String type = 'results',
     void Function(double progress)? onProgress,
   }) async {
-    final result = await _api.getBytes(
+    final result = await _api.getStream(
       '${ApiConfig.predictions}/$id/download/$type',
-      onReceiveProgress: (received, total) {
-        if (total > 0) onProgress?.call(received / total);
-      },
     );
 
     final expected = result.headers.value('x-checksum-md5');
-    bool? verified;
-
-    if (expected != null && expected.isNotEmpty) {
-      verified = md5.convert(result.bytes).toString() == expected.toLowerCase();
+    if (expected == null || !RegExp(r'^[a-fA-F0-9]{32}$').hasMatch(expected)) {
+      await result.bytes.listen((_) {}).cancel();
+      throw const ApiException(
+        'The server did not provide a valid download checksum.',
+      );
     }
 
     final shortJob = jobId.split('-').first;
+    final filename = '${type}_$shortJob.zip';
+    final total = int.tryParse(result.headers.value('content-length') ?? '');
 
-    return DownloadedArchive(
-      filename: '${type}_$shortJob.zip',
-      bytes: result.bytes,
-      checksumVerified: verified,
-    );
+    try {
+      final location = await saveVerifiedStream(
+        filename: filename,
+        bytes: result.bytes,
+        expectedMd5: expected,
+        onProgress: (received) {
+          if (total != null && total > 0) {
+            onProgress?.call((received / total).clamp(0.0, 1.0));
+          }
+        },
+      );
+
+      return DownloadedArchive(filename: filename, location: location);
+    } on StateError catch (e) {
+      throw ApiException(e.toString());
+    } catch (e) {
+      throw ApiException('Could not save the download: $e');
+    }
   }
 }

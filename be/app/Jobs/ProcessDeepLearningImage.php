@@ -24,11 +24,10 @@ use Illuminate\Support\Facades\Storage;
 /**
  * Fills the gaps between uploaded boundary frames by recursive interpolation.
  *
- * The worker is a FastAPI app on Kaggle/Colab behind an ngrok tunnel. Its only
- * route is `POST /predict`, taking **multipart** `file_t0`, `file_t2` and
- * `time_scalar`, and streaming a TIFF back. A handled failure comes back as
- * JSON `{"error": ...}` with HTTP 200, so the status code alone is not enough
- * to tell success from failure.
+ * The worker is a FastAPI app on Kaggle/Colab behind an ngrok tunnel. A model
+ * row supplies its own `POST /predict/{model_name}` URL; every route takes the
+ * same multipart `file_t0`, `file_t2` and `time_scalar` body and streams a TIFF
+ * back. A handled legacy failure may still be JSON with HTTP 200.
  *
  * Interpolation is always at t=0.5 and recursive: given frames 1 and 7, the
  * midpoint 4 is generated first, then 1-4 and 4-7 are filled the same way
@@ -495,13 +494,18 @@ class ProcessDeepLearningImage implements ShouldQueue
                 basename($rightPath),
                 ['Content-Type' => 'image/tiff']
             )
-            ->post($model->endpoint_url, ['time_scalar' => '0.5']);
+            ->post($model->predictionUrl(), ['time_scalar' => '0.5']);
 
         if ($response->failed()) {
-            throw new Exception(
-                "Model returned HTTP {$response->status()} while generating {$label}: " .
-                $this->summarise($response->body())
-            );
+            $detail = $this->summarise($response->body());
+            $message = match ($response->status()) {
+                404 => "Model {$model->slug} was not found while generating {$label}.",
+                422 => "Model rejected the input for {$label}: {$detail}",
+                500 => "Model could not be loaded or inference failed for {$label}: {$detail}",
+                default => "Model returned HTTP {$response->status()} while generating {$label}: {$detail}",
+            };
+
+            throw new Exception($message);
         }
 
         $body = $response->body();
@@ -512,6 +516,12 @@ class ProcessDeepLearningImage implements ShouldQueue
             $decoded = json_decode($body, true);
             $message = $decoded['error'] ?? $decoded['message'] ?? $this->summarise($body);
             throw new Exception("Model rejected {$label}: {$message}");
+        }
+
+        if (! str_contains($contentType, 'image/tiff')) {
+            throw new Exception(
+                "Model returned unexpected content type '{$contentType}' for {$label}."
+            );
         }
 
         if ($body === '') {

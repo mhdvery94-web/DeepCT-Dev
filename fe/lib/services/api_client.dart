@@ -155,6 +155,27 @@ class ApiClient {
     }
   }
 
+  /// Keeps a large response as a stream so the caller can write and hash it
+  /// without allocating the complete archive in the Dart heap.
+  Future<({Stream<Uint8List> bytes, Headers headers})> getStream(
+    String path, {
+    Duration receiveTimeout = const Duration(minutes: 10),
+  }) async {
+    try {
+      final response = await _dio.get<ResponseBody>(
+        path,
+        options: Options(
+          responseType: ResponseType.stream,
+          receiveTimeout: receiveTimeout,
+        ),
+      );
+
+      return (bytes: response.data!.stream, headers: response.headers);
+    } on DioException catch (e) {
+      throw _translate(e);
+    }
+  }
+
   Future<Map<String, dynamic>> put(
     String path, {
     Map<String, dynamic>? data,

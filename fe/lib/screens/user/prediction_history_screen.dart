@@ -8,7 +8,6 @@ import '../../models/prediction.dart';
 import '../../services/api_client.dart';
 import '../../services/prediction_service.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/file_download.dart';
 import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
@@ -126,26 +125,13 @@ class _PredictionHistoryScreenState extends State<PredictionHistoryScreen> {
         },
       );
 
-      final location = await saveBytesFile(
-        filename: archive.filename,
-        bytes: archive.bytes,
-        mimeType: 'application/zip',
-      );
-
       if (!mounted) return;
       setState(() => _downloadingId = null);
 
-      final verified = archive.checksumVerified;
-      final warning = verified == false
-          ? ' — WARNING: checksum mismatch, please retry'
-          : '';
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Saved to $location$warning'),
-          backgroundColor: verified == false
-              ? AppTheme.error
-              : AppTheme.success,
+          content: Text('Saved to ${archive.location}'),
+          backgroundColor: AppTheme.success,
           duration: const Duration(seconds: 5),
         ),
       );
@@ -571,11 +557,7 @@ class _PredictionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.schedule,
-                size: 16,
-                color: AppTheme.accent,
-              ),
+              const Icon(Icons.schedule, size: 16, color: AppTheme.accent),
               const SizedBox(width: 8),
               Text(
                 place == null
@@ -820,7 +802,11 @@ class _QueueWarningBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.warning_amber_outlined, size: 18, color: AppTheme.warning),
+          const Icon(
+            Icons.warning_amber_outlined,
+            size: 18,
+            color: AppTheme.warning,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(message, style: Theme.of(context).textTheme.bodySmall),

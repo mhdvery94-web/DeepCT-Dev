@@ -111,6 +111,22 @@ class ResearcherTrainingTest extends TestCase
         $response->assertJsonPath('data.trainer.name', 'Kaggle trainer');
     }
 
+    public function test_direct_training_upload_checks_storage_before_saving(): void
+    {
+        config(['storage_guard.minimum_free_bytes' => PHP_INT_MAX - 1]);
+
+        $this->apiAs($this->token($this->researcher))
+            ->post('/api/me/training/jobs', [
+                'name' => 'No room',
+                'total_epochs' => 2,
+                'archive' => $this->archive(),
+            ], ['Accept' => 'application/json'])
+            ->assertStatus(507);
+
+        $this->assertSame(0, TrainingJob::count());
+        $this->assertSame([], Storage::allFiles('training/datasets'));
+    }
+
     /**
      * The notebook prints its tunnel root and says "register this as the
      * trainer URL", so that is what gets pasted — but the route is

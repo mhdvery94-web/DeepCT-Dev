@@ -1,14 +1,21 @@
 /// A deep learning model registered in the platform.
 ///
-/// Models are deployed remotely (Kaggle / Google Colab) and reached through
-/// [endpointUrl]; there is no local weights file, so [filePath] is optional.
+/// Models are deployed remotely (Kaggle / Google Colab). Several rows may
+/// share [baseUrl] while each keeps its own [endpoint] prediction path.
 class ModelInfo {
   final int id;
   final String name;
   final String version;
+  final String? slug;
+  final String? baseUrl;
+  final String? endpoint;
+  final String? fullEndpointUrl;
   final String? endpointUrl;
   final String? description;
   final String? filePath;
+  final String? modelFile;
+  final bool workerActive;
+  final DateTime? syncedAt;
 
   /// One of `online`, `offline`, `trouble`.
   final String status;
@@ -45,9 +52,16 @@ class ModelInfo {
     required this.id,
     required this.name,
     required this.version,
+    this.slug,
+    this.baseUrl,
+    this.endpoint,
+    this.fullEndpointUrl,
     this.endpointUrl,
     this.description,
     this.filePath,
+    this.modelFile,
+    this.workerActive = false,
+    this.syncedAt,
     required this.status,
     required this.isActive,
     this.lastHealthCheck,
@@ -89,9 +103,18 @@ class ModelInfo {
       id: _toInt(json['id']),
       name: json['name']?.toString() ?? '-',
       version: json['version']?.toString() ?? '-',
-      endpointUrl: json['endpoint_url']?.toString(),
+      slug: json['slug']?.toString(),
+      baseUrl: json['base_url']?.toString(),
+      endpoint: json['endpoint']?.toString(),
+      fullEndpointUrl: json['full_endpoint_url']?.toString(),
+      endpointUrl:
+          json['full_endpoint_url']?.toString() ??
+          json['endpoint_url']?.toString(),
       description: json['description']?.toString(),
       filePath: json['file_path']?.toString(),
+      modelFile: json['model_file']?.toString(),
+      workerActive: _toBool(json['worker_active']),
+      syncedAt: _toDate(json['synced_at']),
       status: json['status']?.toString() ?? 'offline',
       isActive: _toBool(json['is_active']),
       lastHealthCheck: _toDate(json['last_health_check']),

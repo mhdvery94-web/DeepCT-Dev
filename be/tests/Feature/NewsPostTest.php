@@ -219,6 +219,21 @@ class NewsPostTest extends TestCase
             ->assertOk();
     }
 
+    public function test_a_deactivated_admin_token_cannot_preview_a_draft(): void
+    {
+        $token = $this->tokenAs($this->admin);
+        $this->apiAs($token)->postForm('/api/admin/news', [
+            'title' => 'Embargoed',
+            'summary' => 'Not announced yet.',
+            'image' => $this->pngFile(),
+        ])->assertCreated();
+
+        $id = NewsPost::firstOrFail()->id;
+        $this->admin->update(['is_active' => false]);
+
+        $this->apiAs($token)->get("/api/news/{$id}/image")->assertNotFound();
+    }
+
     public function test_a_file_that_is_not_an_image_is_refused(): void
     {
         // A real file, not `UploadedFile::fake()`: the fake reports its mime

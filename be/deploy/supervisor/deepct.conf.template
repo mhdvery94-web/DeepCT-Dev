@@ -5,7 +5,7 @@
 ; upload succeeds and the prediction sits at `pending` for ever; without the
 ; scheduler, expired files are never deleted and model status goes stale.
 ;
-; The names are load-bearing. The `vps` job in .github/workflows/release.yml
+; The names are load-bearing. The `raspi` job in .github/workflows/release.yml
 ; restarts these three by these exact names and stops with an error if
 ; supervisor does not know one of them. Renaming a program here means editing
 ; that workflow to match.

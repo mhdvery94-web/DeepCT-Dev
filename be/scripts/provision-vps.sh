@@ -28,6 +28,7 @@ set -euo pipefail
 
 APP_DIR="${APP_DIR:-/var/www/deepct-ai}"
 SERVICE_USER="${SERVICE_USER:-$(whoami)}"
+PHP_BIN="${PHP_BIN:-$(command -v php)}"
 SERVER_NAME="${SERVER_NAME:-api.brin.fajrianhost.my.id}"
 APP_URL="${APP_URL:-https://$SERVER_NAME}"  # only written into a *new* .env
 
@@ -115,6 +116,13 @@ else
   echo "    ($PHP_INI)"
 fi
 
+# Composer has to run before the first Artisan command. On an update `vendor/`
+# already exists and this is cheap; on a new server `key:generate` cannot even
+# bootstrap until `vendor/autoload.php` has been installed.
+say "PHP dependencies"
+
+composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+
 # ---------------------------------------------------------------- database
 
 say "Database"
@@ -184,11 +192,13 @@ else
   # See ARCHITECTURE section 8.
 fi
 
-# ---------------------------------------------------------------- dependencies
+# The file contains the application key, database password and worker token.
+# It must not inherit the world-readable mode from .env.example.
+chmod 600 .env
 
-say "Dependencies"
+# ---------------------------------------------------------------- RoadRunner
 
-composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+say "RoadRunner"
 
 # RoadRunner's binary is gitignored, so it is never in the deploy's rsync — and
 # the deploy excludes `rr` explicitly so it is never deleted either. It has to
@@ -210,6 +220,9 @@ fi
 say "Schema"
 
 php artisan migrate --force
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
 
 if [ -n "${SEED_ADMIN_PASSWORD:-}" ]; then
   SEED_ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-admin@brin.go.id}" \

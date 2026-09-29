@@ -142,6 +142,14 @@ class MeTrainingController extends Controller
         ]);
 
         $file = $request->file('archive');
+        $refusal = app(\App\Services\StorageGuard::class)->refusalFor((int) $file->getSize());
+        if ($refusal !== null) {
+            return response()->json([
+                'success' => false,
+                'message' => $refusal,
+            ], 507);
+        }
+
         $path = $file->store(self::DATASET_DIR);
 
         $dataset = TrainingDataset::create([

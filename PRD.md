@@ -9,6 +9,11 @@
 > Perbedaan yang diketahui: worker model kini berjalan di Kaggle (dokumen ini
 > menyebut Google Colab), dan tidak ada input `time_scalar` manual di produk —
 > selalu 0.5, alasannya di [AI_EXPERIMENTS.md](AI_EXPERIMENTS.md).
+> Akun sekarang memakai email untuk login, `name` dan `phone` opsional, bukan
+> `username`; token berlaku 7 hari, bukan target awal 24 jam. Unggahan prediksi
+> disimpan sebagai `uploaded` untuk preview, lalu pengguna menekan START agar
+> masuk antrean. Target iOS dan sejumlah fitur FASE 3 di bawah ini juga sudah
+> berubah status; lihat [API.md](API.md) untuk kontrak yang berlaku.
 
 ---
 

@@ -3,6 +3,7 @@ import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:web/web.dart' as web;
+import 'package:crypto/crypto.dart';
 
 /// Hands [bytes] to the browser as a download named [filename].
 ///
@@ -31,6 +32,51 @@ Future<String> saveBytesFile({
 
   web.URL.revokeObjectURL(url);
 
+  return filename;
+}
+
+/// Browser downloads need a Blob, but each network chunk stays separate until
+/// verification; a corrupt response never triggers a download.
+Future<String> saveVerifiedStream({
+  required String filename,
+  required Stream<Uint8List> bytes,
+  required String expectedMd5,
+  void Function(int received)? onProgress,
+}) async {
+  final chunks = <JSAny>[];
+  Digest? digest;
+  final hash = md5.startChunkedConversion(
+    ChunkedConversionSink<Digest>.withCallback(
+      (values) => digest = values.single,
+    ),
+  );
+  var received = 0;
+
+  await for (final chunk in bytes) {
+    hash.add(chunk);
+    chunks.add(chunk.toJS);
+    received += chunk.length;
+    onProgress?.call(received);
+  }
+  hash.close();
+
+  if (digest?.toString() != expectedMd5.toLowerCase()) {
+    throw StateError('Download checksum does not match the server response.');
+  }
+
+  final blob = web.Blob(
+    chunks.toJS,
+    web.BlobPropertyBag(type: 'application/zip'),
+  );
+  final url = web.URL.createObjectURL(blob);
+  final anchor = web.document.createElement('a') as web.HTMLAnchorElement
+    ..href = url
+    ..download = filename;
+  anchor.style.display = 'none';
+  web.document.body!.appendChild(anchor);
+  anchor.click();
+  web.document.body!.removeChild(anchor);
+  web.URL.revokeObjectURL(url);
   return filename;
 }
 

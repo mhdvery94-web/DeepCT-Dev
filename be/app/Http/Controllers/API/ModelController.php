@@ -5,15 +5,19 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Model;
 use App\Models\UserActivity;
+use App\Services\ModelCatalogSync;
 use App\Services\ModelHealthChecker;
+use App\Services\WorkerRequest;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 
 class ModelController extends Controller
 {
     public function __construct(
         private readonly ModelHealthChecker $healthChecker,
+        private readonly ModelCatalogSync $catalogSync,
     ) {
     }
 
@@ -78,8 +82,10 @@ class ModelController extends Controller
 
         $model = Model::create([
             'name' => $request->name,
+            'slug' => $this->uniqueSlug($request->name),
             'version' => $request->version,
             'kind' => $request->input('kind', 'inference'),
+            ...$this->endpointFields($request->endpoint_url),
             'endpoint_url' => $request->endpoint_url,
             'auth_token' => $request->input('auth_token') ?: null,
             // Defaults false to match every worker registered before this
@@ -91,6 +97,9 @@ class ModelController extends Controller
             // Models are deployed remotely (Kaggle/Colab) and reached via
             // endpoint_url, so there is no local weights file to reference.
             'file_path' => $request->input('file_path'),
+            'model_file' => $request->filled('file_path')
+                ? basename($request->input('file_path'))
+                : null,
             'is_active' => true,
             'status' => 'offline',
             'current_jobs_count' => 0,
@@ -120,6 +129,71 @@ class ModelController extends Controller
             'message' => 'Model berhasil ditambahkan',
             'data' => $model->fresh(),
         ], 201);
+    }
+
+    /** Import every inference model exposed by one FastAPI server. */
+    public function sync(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'base_url' => 'nullable|url|max:500',
+            'auth_token' => 'nullable|string|max:500',
+            'verify_tls' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $baseUrl = $request->input(
+            'base_url',
+            config('services.ai_model_server.base_url')
+        );
+
+        if (! filled($baseUrl)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'AI model server base URL is not configured.',
+            ], 422);
+        }
+
+        try {
+            $result = $this->catalogSync->sync(
+                $baseUrl,
+                $request->input('auth_token'),
+                $request->has('verify_tls')
+                    ? $request->boolean('verify_tls')
+                    : true
+            );
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Model synchronization failed.',
+                'error' => $e->getMessage(),
+            ], 502);
+        }
+
+        UserActivity::create([
+            'user_id' => auth()->id(),
+            'activity_type' => 'update_model',
+            'description' => "Menyinkronkan model dari server AI: {$baseUrl}",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'metadata' => [
+                'base_url' => $baseUrl,
+                'created' => $result['created'],
+                'updated' => $result['updated'],
+                'missing' => $result['missing'],
+            ],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Models synchronized successfully.',
+            'data' => $result,
+        ]);
     }
 
     /**
@@ -163,7 +237,14 @@ class ModelController extends Controller
         }
 
         $oldData = $model->only(['name', 'version', 'endpoint_url']);
-        $model->update($request->only(['name', 'version', 'endpoint_url', 'description']));
+        $model->update($request->only(['name', 'version', 'description']));
+
+        if ($request->has('endpoint_url')) {
+            $model->update([
+                ...$this->endpointFields($request->endpoint_url),
+                'endpoint_url' => $request->endpoint_url,
+            ]);
+        }
 
         // Handled apart from the mass update so "not sent" and "sent empty"
         // stay distinguishable. `only()` would collapse both to absent.
@@ -351,22 +432,24 @@ class ModelController extends Controller
                 ->for($model, 120)
                 ->attach('file_t0', $sampleTif, 'test_t0.tif', ['Content-Type' => 'image/tiff'])
                 ->attach('file_t2', $sampleTif, 'test_t2.tif', ['Content-Type' => 'image/tiff'])
-                ->post($model->endpoint_url, [
+                ->post($model->predictionUrl(), [
                     'time_scalar' => '0.5',
                 ]);
 
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
 
             if ($response->failed()) {
-                throw new \Exception(
-                    'Worker returned HTTP ' . $response->status() . ': ' . $this->summarise($response->body())
-                );
+                throw new \Exception($this->predictionHttpError(
+                    $response->status(),
+                    $response->body(),
+                    $model
+                ));
             }
 
             // A successful run streams back a TIFF; a handled failure returns
             // JSON shaped as {"error": "..."} with HTTP 200.
             $contentType = strtolower((string) $response->header('Content-Type'));
-            $isImage = str_contains($contentType, 'image/');
+            $isImage = str_contains($contentType, 'image/tiff');
 
             if (! $isImage) {
                 $payload = $response->json();
@@ -410,7 +493,11 @@ class ModelController extends Controller
                 ],
             ]);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            $error = $e instanceof ConnectionException
+                ? $this->connectionError($e)
+                : $e->getMessage();
+
             // Log activity
             UserActivity::create([
                 'user_id' => auth()->id(),
@@ -422,15 +509,17 @@ class ModelController extends Controller
                 'metadata' => [
                     'model_id' => $model->id,
                     'success' => false,
-                    'error' => $e->getMessage(),
+                    'error' => $error,
                 ],
             ]);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Test prediksi gagal',
-                'error' => $e->getMessage(),
-            ], 500);
+                'error' => $error,
+            ], $e instanceof ConnectionException
+                ? (str_contains(strtolower($e->getMessage()), 'timed out') ? 504 : 503)
+                : 500);
         }
     }
 
@@ -495,5 +584,64 @@ class ModelController extends Controller
         $body = trim(preg_replace('/\s+/', ' ', $body) ?? '');
 
         return strlen($body) > 200 ? substr($body, 0, 200) . '...' : $body;
+    }
+
+    /** @return array{base_url:?string,endpoint:?string,full_endpoint_url:string} */
+    private function endpointFields(string $url): array
+    {
+        $parts = parse_url($url);
+        $baseUrl = null;
+        $endpoint = null;
+
+        if (is_array($parts) && ! empty($parts['host'])) {
+            $scheme = $parts['scheme'] ?? 'https';
+            $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+            $baseUrl = "{$scheme}://{$parts['host']}{$port}";
+            $endpoint = $parts['path'] ?? '/';
+            if (isset($parts['query'])) {
+                $endpoint .= '?' . $parts['query'];
+            }
+        }
+
+        return [
+            'base_url' => $baseUrl,
+            'endpoint' => $endpoint,
+            'full_endpoint_url' => $url,
+        ];
+    }
+
+    private function uniqueSlug(string $name): string
+    {
+        $base = Str::slug($name) ?: 'model';
+        $slug = $base;
+        $suffix = 2;
+
+        while (Model::where('slug', $slug)->exists()) {
+            $slug = "{$base}-{$suffix}";
+            $suffix++;
+        }
+
+        return $slug;
+    }
+
+    private function predictionHttpError(int $status, string $body, Model $model): string
+    {
+        $detail = $this->summarise($body);
+
+        return match ($status) {
+            404 => "Model {$model->slug} was not found on the AI server.",
+            422 => "The AI server rejected the prediction inputs: {$detail}",
+            500 => "The AI server could not load the model or complete inference: {$detail}",
+            default => "AI server returned HTTP {$status}: {$detail}",
+        };
+    }
+
+    private function connectionError(ConnectionException $e): string
+    {
+        $message = strtolower($e->getMessage());
+
+        return str_contains($message, 'timed out') || str_contains($message, 'curl error 28')
+            ? 'AI server timed out while running the test prediction.'
+            : 'AI server is offline or its tunnel cannot be reached.';
     }
 }

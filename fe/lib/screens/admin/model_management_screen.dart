@@ -19,8 +19,8 @@ import '../../widgets/training_handoff_panel.dart';
 
 /// Admin screen for managing remotely deployed inference models.
 ///
-/// Models run on Kaggle / Google Colab and are registered here by their
-/// endpoint URL; the platform tracks their health rather than their weights.
+/// Models run on one or more FastAPI servers. A server is synchronized from
+/// `/models`; each returned slug gets its own `/predict/{slug}` row.
 class ModelManagementScreen extends StatefulWidget {
   const ModelManagementScreen({super.key});
 
@@ -45,6 +45,7 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
   Pagination _pagination = const Pagination.empty();
 
   bool _isLoading = true;
+  bool _isSyncing = false;
   String? _error;
   int _page = 1;
   String? _statusFilter;
@@ -166,6 +167,25 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
     if (saved == true) {
       if (existing == null) _page = 1;
       _load();
+    }
+  }
+
+  Future<void> _syncModels() async {
+    setState(() => _isSyncing = true);
+
+    try {
+      final result = await _service.sync();
+      _showMessage(
+        'Model sync complete: ${result.created} added, '
+        '${result.updated} updated, ${result.missing} missing.',
+        isError: result.missing > 0,
+      );
+      _page = 1;
+      await _load();
+    } on ApiException catch (e) {
+      _showMessage(e.message, isError: true);
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
     }
   }
 
@@ -332,6 +352,17 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
           icon: const Icon(Icons.refresh, size: 16),
           label: const Text('REFRESH'),
         ),
+        OutlinedButton.icon(
+          onPressed: _isLoading || _isSyncing ? null : _syncModels,
+          icon: _isSyncing
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.sync, size: 16),
+          label: const Text('SYNC MODELS'),
+        ),
         ElevatedButton.icon(
           onPressed: () => _openModelDialog(),
           icon: const Icon(Icons.add, size: 16),
@@ -366,7 +397,7 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
             crossAxisCount: columns,
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
-            mainAxisExtent: 340,
+            mainAxisExtent: 380,
           ),
           itemCount: _models.length,
           itemBuilder: (context, index) {
@@ -469,6 +500,9 @@ class _ModelCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   _kv(context, 'Endpoint', model.endpointUrl ?? 'Not set'),
+                  if (model.modelFile != null)
+                    _kv(context, 'Model file', model.modelFile!),
+                  if (model.slug != null) _kv(context, 'Slug', model.slug!),
                   // Was "2 / 5". That read as a fraction of a limit, and the
                   // limit is gone — it never enforced anything.
                   _kv(context, 'Jobs running', '${model.currentJobsCount}'),

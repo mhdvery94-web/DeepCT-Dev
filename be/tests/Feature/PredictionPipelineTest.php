@@ -9,6 +9,7 @@ use App\Models\Model;
 use App\Models\User;
 use App\Services\ResultEvidence;
 use App\Services\ResultManifest;
+use App\Services\StorageGuard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
@@ -168,6 +169,54 @@ class PredictionPipelineTest extends TestCase
         $this->assertNotNull($record);
         $this->assertSame($this->user->id, $record->user_id);
         $this->assertNotNull($record->expires_at, 'retention window must be set');
+    }
+
+    public function test_foldered_frames_with_the_same_basename_are_rejected(): void
+    {
+        $this->apiAs($this->token)->post('/api/predictions', [
+            'model_id' => $this->model->id,
+            'file' => $this->zipFile([
+                'first/frame_001.tif',
+                'second/frame_001.tif',
+                'frame_005.tif',
+            ]),
+        ], ['Accept' => 'application/json'])
+            ->assertStatus(422);
+
+        $this->assertSame(0, AnalysisRecord::count());
+    }
+
+    public function test_expanded_zip_size_is_checked_before_extraction(): void
+    {
+        $guard = new class extends StorageGuard {
+            public array $checked = [];
+
+            public function refusalFor(int $uploadBytes): ?string
+            {
+                $this->checked[] = $uploadBytes;
+
+                return $uploadBytes > 10000 ? 'Not enough space for expanded frames.' : null;
+            }
+        };
+        $this->app->instance(StorageGuard::class, $guard);
+
+        $path = tempnam(sys_get_temp_dir(), 'expanded') . '.zip';
+        $zip = new ZipArchive();
+        $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        $zip->addFromString('frame_001.tif', str_repeat('a', 20000));
+        $zip->addFromString('frame_005.tif', str_repeat('b', 20000));
+        $zip->close();
+
+        $this->apiAs($this->token)->post('/api/predictions', [
+            'model_id' => $this->model->id,
+            'file' => new UploadedFile($path, 'frames.zip', 'application/zip', null, true),
+        ], ['Accept' => 'application/json'])
+            ->assertStatus(507);
+
+        $this->assertCount(2, $guard->checked);
+        $this->assertGreaterThan(10000, $guard->checked[1]);
+        $this->assertSame([], Storage::allFiles('predictions'));
+        $this->assertSame(0, AnalysisRecord::count());
     }
 
     /**

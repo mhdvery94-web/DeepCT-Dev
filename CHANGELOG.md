@@ -17,17 +17,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Bootstrap the current local backend working tree on the Raspberry Pi at
+  `/var/www/deepct-ai`: PHP 8.2, MariaDB 10.11, nginx, ARM64 RoadRunner and the
+  Octane/queue/scheduler Supervisor programs are running. All migrations report
+  `Ran`; `/api/health` and database-backed `/api/news` were observed returning
+  200 through nginx and from the development machine over NetBird. This is not
+  the production cutover: the Pi database is empty, and VPS data, static ngrok,
+  GitHub runner and new Vercel project remain outstanding.
+- Prepare the release workflow for a `deepct-raspi` self-hosted ARM64 runner,
+  remove the VPS SSH secrets and hard-coded old API fallback, and select the
+  backend solely through `RASPI_API_BASE_URL`.
+- Make fresh-server provisioning install Composer dependencies before the first
+  Artisan command, resolve the PHP binary under `set -u`, protect `.env` with
+  mode 600, and create Laravel's production caches.
+
+### Fixed
+- Enforce inactive-account and issued-password restrictions on every authenticated API request; revoke tokens on disable or reset.
+- Reject oversized ZIP expansion, too many input frames, and duplicate flattened frame names before extracting; check direct training uploads against available storage.
+- Clean prediction, evidence and temporary upload files when an account is deleted; refuse deletion while its jobs are active.
+- Read native prediction uploads by range and verify streamed downloads before publishing them. Expose the checksum header to browser clients.
+- Align the API, architecture, backend and frontend guides with the explicit prediction START step, current routes, account rules, ZIP limits and platform-specific streaming behavior.
+
 ### Planned Features (FASE 3+)
-- Upload & Download system (ZIP streaming, chunked upload)
-- Prediction processing (recursive interpolation)
-- Queue management dengan position tracking
-- Auto-delete expired files (24 hours)
 - Batch processing untuk multiple file pairs
 - Email notifications untuk expiry warnings
 - Real-time updates menggunakan WebSocket/Pusher
-- Model comparison feature
 - Export reports (PDF, CSV)
-- iOS mobile app
 - Dark mode
 - Multi-language support
 

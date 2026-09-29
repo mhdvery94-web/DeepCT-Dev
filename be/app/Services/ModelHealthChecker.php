@@ -13,8 +13,8 @@ use Illuminate\Support\Facades\Http;
  * Determines whether a remotely deployed inference model is reachable.
  *
  * The models run as FastAPI apps on Kaggle / Google Colab, exposed through an
- * ngrok tunnel. Their only route is `POST /predict`, which requires a
- * multipart body (`file_t0`, `file_t2`, `time_scalar`).
+ * ngrok tunnel. Legacy workers expose one `POST /predict`; multi-model workers
+ * expose `GET /models` and one `POST /predict/{model_name}` per catalogue row.
  *
  * We therefore probe with a cheap GET instead of posting a fake body:
  *
@@ -54,6 +54,7 @@ class ModelHealthChecker
     public const REASON_TUNNEL_DOWN = 'tunnel_down';
     public const REASON_UNREACHABLE = 'unreachable';
     public const REASON_SLOW = 'slow';
+    public const REASON_MODEL_MISSING = 'model_missing';
 
     /**
      * Probe the model endpoint and persist the resulting status.
@@ -62,7 +63,7 @@ class ModelHealthChecker
      */
     public function check(Model $model): array
     {
-        if (empty($model->endpoint_url)) {
+        if (empty($model->predictionUrl())) {
             return $this->persist(
                 $model, 'offline', null, 'Endpoint URL is not set',
                 self::REASON_NO_ENDPOINT
@@ -74,7 +75,7 @@ class ModelHealthChecker
 
             $response = app(WorkerRequest::class)
                 ->for($model, self::TIMEOUT_SECONDS)
-                ->get($this->probeUrl($model->endpoint_url));
+                ->get($this->healthUrl($model));
 
             return $this->interpret(
                 $model,
@@ -111,7 +112,7 @@ class ModelHealthChecker
         $probeable = [];
 
         foreach ($models as $model) {
-            if (empty($model->endpoint_url)) {
+            if (empty($model->predictionUrl())) {
                 $results[$model->id] = $this->persist(
                     $model, 'offline', null, 'Endpoint URL is not set',
                     self::REASON_NO_ENDPOINT
@@ -137,7 +138,7 @@ class ModelHealthChecker
         $responses = Http::pool(fn (Pool $pool) => array_map(
             fn (Model $model) => $worker
                 ->configure($pool->timeout(self::TIMEOUT_SECONDS), $model)
-                ->get($this->probeUrl($model->endpoint_url)),
+                ->get($this->healthUrl($model)),
             $probeable
         ));
 
@@ -206,6 +207,57 @@ class ModelHealthChecker
             );
         }
 
+        // A catalogue response proves both the server and this particular
+        // model are available. Unlike a legacy root probe, 404 here means the
+        // required /models contract is missing and is not healthy.
+        if ($model->usesModelCatalog()) {
+            if (! $response->successful()) {
+                return $this->persist(
+                    $model,
+                    'offline',
+                    $responseTime,
+                    "Model catalogue unreachable (HTTP {$response->status()})",
+                    self::REASON_UNREACHABLE
+                );
+            }
+
+            $payload = $response->json();
+            $models = is_array($payload) ? ($payload['models'] ?? null) : null;
+            if (! is_array($models)) {
+                return $this->persist(
+                    $model,
+                    'offline',
+                    $responseTime,
+                    'Model catalogue returned invalid JSON',
+                    self::REASON_UNREACHABLE
+                );
+            }
+
+            $present = collect($models)->contains(function ($entry) use ($model) {
+                if (! is_array($entry)) {
+                    return false;
+                }
+
+                return ($entry['name'] ?? null) === $model->slug
+                    || ($entry['endpoint'] ?? null) === $model->endpoint;
+            });
+
+            if (! $present) {
+                return $this->persist(
+                    $model,
+                    'offline',
+                    $responseTime,
+                    'Model is absent from the AI server catalogue',
+                    self::REASON_MODEL_MISSING
+                );
+            }
+
+            $matched = collect($models)->first(fn ($entry) => is_array($entry)
+                && (($entry['name'] ?? null) === $model->slug
+                    || ($entry['endpoint'] ?? null) === $model->endpoint));
+            $model->worker_active = (bool) ($matched['active'] ?? false);
+        }
+
         // Any HTTP status served by the app itself means the process is up.
         // 404 on the root path is expected: FastAPI only defines /predict.
         if (! $this->isServedByApp($response->status())) {
@@ -249,6 +301,13 @@ class ModelHealthChecker
         return "{$scheme}://{$parts['host']}{$port}/";
     }
 
+    private function healthUrl(Model $model): string
+    {
+        return $model->usesModelCatalog()
+            ? (string) $model->catalogUrl()
+            : $this->probeUrl((string) $model->predictionUrl());
+    }
+
     /**
      * True when the HTTP status was produced by the application itself.
      *
@@ -285,6 +344,7 @@ class ModelHealthChecker
             // has to lose the reason it was down, or the client keeps
             // explaining a failure that is over.
             'health_check_reason' => $reason,
+            'worker_active' => $model->worker_active,
         ]);
 
         // Only on a *transition*. This runs every ten seconds, so a model that

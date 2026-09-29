@@ -8,12 +8,16 @@ class Model extends EloquentModel
 {
     protected $fillable = [
         'name',
+        'slug',
         'version',
         // 'inference' or 'trainer'. One registry, two purposes: a trainer
         // endpoint is registered, switched on and health-checked exactly like
         // an inference endpoint, so it would be a second table with the same
         // columns and the same probe behind it.
         'kind',
+        'base_url',
+        'endpoint',
+        'full_endpoint_url',
         'endpoint_url',
         // Shared secret sent to the worker as `Authorization: Bearer`, and
         // whether that worker's certificate is checked. See the migration
@@ -21,8 +25,11 @@ class Model extends EloquentModel
         'auth_token',
         'verify_tls',
         'file_path',
+        'model_file',
+        'worker_active',
         'status',
         'last_health_check',
+        'synced_at',
         'current_jobs_count',
         'accuracy',
         'description',
@@ -67,7 +74,9 @@ class Model extends EloquentModel
         'verify_tls' => 'boolean',
         'accuracy' => 'decimal:2',
         'is_active' => 'boolean',
+        'worker_active' => 'boolean',
         'last_health_check' => 'datetime',
+        'synced_at' => 'datetime',
         'deployed_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -102,5 +111,26 @@ class Model extends EloquentModel
     public function isTrainer(): bool
     {
         return $this->kind === 'trainer';
+    }
+
+    /** The URL used for inference, with a fallback for pre-migration rows. */
+    public function predictionUrl(): ?string
+    {
+        return $this->full_endpoint_url ?: $this->endpoint_url;
+    }
+
+    /** Whether this row came from a multi-model server catalogue. */
+    public function usesModelCatalog(): bool
+    {
+        return $this->kind === 'inference'
+            && filled($this->base_url)
+            && filled($this->slug);
+    }
+
+    public function catalogUrl(): ?string
+    {
+        return filled($this->base_url)
+            ? rtrim($this->base_url, '/') . '/models'
+            : null;
     }
 }
