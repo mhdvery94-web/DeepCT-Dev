@@ -18,6 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Run the Raspberry Pi backend and public tunnel under PM2. `deepct-app` owns
+  `npm run serve:all` (Octane, the database queue worker and scheduler), while
+  `deepct-ngrok` exposes port 8000. The saved PM2 process list is now owned by
+  the enabled `pm2-jihyo.service`; the previous Supervisor programs were
+  stopped and their configuration was retained only as a disabled rollback
+  copy.
+- Register the ARM64 `deepct-raspi` GitHub Actions runner as a system service
+  and deploy the backend locally on the Pi. The release job installs production
+  npm dependencies, reloads `deepct-app`, leaves the independent tunnel alive,
+  saves the PM2 process list, and verifies the database-backed `/api/news`
+  endpoint before reporting success.
+- Publish the Raspberry Pi API at
+  `https://zestfully-usable-pledge.ngrok-free.dev/api` and set it as the
+  repository variable `RASPI_API_BASE_URL`. After a PM2/systemd handoff both
+  `/api/health` and `/api/news` were observed returning HTTP 200 through the
+  public HTTPS tunnel.
 - Support one FastAPI/ngrok domain serving many inference models. Admin **Sync
   Models** checks the server root, imports `GET /models`, upserts by unique slug,
   preserves local activation/credentials, and records a separate prediction

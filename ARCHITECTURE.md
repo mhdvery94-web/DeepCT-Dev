@@ -705,26 +705,27 @@ notebook training yang belum ada. Karena itu ia dijadwalkan terakhir, dan
 
 ---
 
-## 8. Deployment: `brin.fajrianhost.my.id`
+## 8. Deployment: Raspberry Pi + ngrok + Vercel
 
-Rencana: frontend di Vercel, backend di tempat lain, keduanya di bawah
-subdomain dari `fajrianhost.my.id`.
+Topologi produksi yang sedang dimigrasikan adalah frontend statis di Vercel,
+backend persisten pada Raspberry Pi 5, dan worker model di Kaggle/Colab. Kedua
+server persisten/berumur sesi itu diterbitkan lewat tunnel ngrok yang berbeda;
+Vercel tidak menjalankan PHP maupun model.
 
 ### Frontend di Vercel — bisa, dan memang cocok
 
 `flutter build web` menghasilkan berkas statis. Itu persis yang Vercel jalankan
 paling baik, dan gratis untuk ukuran proyek ini.
 
-```
-brin.fajrianhost.my.id   →  CNAME  →  cname.vercel-dns.com
-```
+Domain sendiri tidak wajib. Sampai domain disiapkan, URL bawaan proyek
+`*.vercel.app` sudah HTTPS dan dapat dipakai sebagai alamat web produksi.
 
 Build command-nya harus menyuntikkan alamat API, karena baseUrl dibaca saat
 kompilasi:
 
 ```bash
 flutter build web --release \
-  --dart-define=API_BASE_URL=https://api.brin.fajrianhost.my.id/api
+  --dart-define=API_BASE_URL=https://zestfully-usable-pledge.ngrok-free.dev/api
 ```
 
 Output ada di `fe/build/web`. Di Vercel: framework preset **Other**, output
@@ -751,50 +752,29 @@ ini waktu pindah ke Octane, dan angkanya ada di README: health check turun dari
 seluruh perbaikan itu **dan** kehilangan queue worker, scheduler, serta
 penyimpanan berkas.
 
-### Yang benar untuk backend: satu VPS kecil
+### Backend pada Raspberry Pi
 
-Semua yang dibutuhkan aplikasi ini sudah biasa di VPS termurah sekalipun:
+Backend terpasang di `/var/www/deepct-ai`. PHP 8.2, MariaDB 10.11 dan
+RoadRunner ARM64 menjalankan aplikasi; PM2 menjaga dua proses dari
+[`be/deploy/pm2/ecosystem.config.cjs`](be/deploy/pm2/ecosystem.config.cjs):
 
-```
-api.brin.fajrianhost.my.id  →  A  →  <IP VPS>
-```
+| Proses | Perintah | Tanggung jawab |
+|---|---|---|
+| `deepct-app` | `npm run serve:all` | Octane port 8000, queue worker dan scheduler |
+| `deepct-ngrok` | `ngrok http 8000` | Tunnel HTTPS publik langsung ke Octane |
 
-Kebutuhannya: PHP 8.2+, MySQL 8, dan **satu proses supervisor** yang menjaga
-tiga hal yang hari ini dijalankan tangan (`npm run serve:all`):
+PM2 menyimpan daftar proses di `/home/jihyo/.pm2/dump.pm2` dan unit systemd
+`pm2-jihyo.service` menghidupkannya kembali setelah reboot. Konfigurasi
+Supervisor lama dinonaktifkan agar tidak ada Octane, queue worker atau scheduler
+duplikat. Nginx masih tersedia untuk akses lokal/NetBird, tetapi tunnel publik
+yang diminta untuk arsitektur ini menuju port 8000 secara langsung.
 
-```ini
-[program:brin-octane]
-command=php artisan octane:start --server=roadrunner --host=127.0.0.1 --port=8000
-autorestart=true
-
-[program:brin-queue]
-command=php artisan queue:work --tries=1 --timeout=7200
-autorestart=true
-
-[program:brin-schedule]
-command=php artisan schedule:work
-autorestart=true
-```
-
-nginx di depannya sebagai reverse proxy + TLS (Let's Encrypt). Perlu diingat:
-di belakang nginx, **batas `php.ini` mulai berlaku lagi** — hal yang sekarang
-tidak berlaku karena RoadRunner mem-parsing multipart sendiri (§4). Naikkan
-`client_max_body_size` di nginx dan `upload_max_filesize`/`post_max_size` di
-`php.ini`, atau unggahan besar akan tertolak di produksi padahal lolos di
-pengembangan.
-
-RAM 1 GB cukup: 4 worker Octane + queue worker + MySQL muat, karena kerja berat
-tidak pernah ada di sini — ia di GPU Kaggle.
-
-### Alternatif tanpa VPS: tetap di mesin lab
-
-Backend tetap di mesin ini, tapi ganti ngrok gratis dengan **Cloudflare
-Tunnel**: hostname tetap, tanpa halaman interstitial, dan bisa langsung
-dipetakan ke `api.brin.fajrianhost.my.id`. Header
-`ngrok-skip-browser-warning` yang ditaburkan di klien jadi tidak perlu lagi.
-
-Konsekuensinya jujur saja: kalau mesin lab mati, platform mati. Itu wajar untuk
-demo dan skripsi, tidak untuk layanan yang dipakai orang lain.
+Alamat yang diverifikasi pada 30 September 2026 adalah
+`https://zestfully-usable-pledge.ngrok-free.dev/api`: `/api/health` dan
+`/api/news` sama-sama menjawab HTTP 200 dari luar Pi, dan hostname tetap sama
+setelah PM2 diambil alih oleh systemd. Jika akun ngrok tidak mereservasi domain
+itu, hostname tetap harus dianggap dapat berubah pada sesi baru; setiap
+perubahan harus diikuti dengan pembaruan `RASPI_API_BASE_URL` dan rebuild web.
 
 ### Yang harus disiapkan sebelum deploy
 
@@ -831,60 +811,26 @@ demo dan skripsi, tidak untuk layanan yang dipakai orang lain.
    "disknya mati": tujuh berkas itu ada di mesin yang sama dengan
    databasenya. Backup di luar mesin masih belum ada.
 
-### Dua backend, dan klien hanya bisa menunjuk satu
+### Satu alamat API untuk semua klien
 
-Sejak VPS hidup, ada **dua** backend yang dua-duanya sah:
+Alamat API dikompilasi masuk ke klien. Sebuah build hanya dapat menunjuk satu
+backend dan nilai itu berlaku untuk web, APK, iOS dan desktop. Workflow release
+membaca repository variable **`RASPI_API_BASE_URL`**; nama lama dan fallback ke
+VPS sudah dihapus supaya build baru tidak diam-diam kembali ke server lama.
 
-| | Di mana | Untuk apa |
-|---|---|---|
-| **Lokal** | mesin lab, port 8000, lewat ngrok | Pengembangan, dan satu-satunya yang pernah diuji ujung-ke-ujung terhadap worker GPU |
-| **VPS** | `/var/www/deepct-ai`, di balik nginx | Layanan yang hidup terus, tidak ikut mati kalau mesin lab dimatikan |
+Nilainya saat ini adalah
+`https://zestfully-usable-pledge.ngrok-free.dev/api`. Mengubah tunnel berarti
+mengubah variable itu lalu menjalankan build baru. Job `preflight` memeriksa
+nilainya tidak kosong dan berakhiran `/api` — bentuknya saja, bukan apakah
+alamat itu benar-benar menjawab.
 
-Yang perlu diingat, dan gampang terlewat: **alamat API dikompilasi masuk ke
-klien.** Sebuah build hanya bisa menunjuk satu backend, dan ia berlaku untuk
-semua target sekaligus — web, APK, iOS, desktop.
-
-Yang memilihkan, berurutan:
-
-| Variabel | Menunjuk ke |
-|---|---|
-| **`NGROK_BE_VPS`** | VPS. Terisi, dan semuanya menunjuk ke sana. |
-| `NGROK_BE` | Mesin lab. Dipakai kalau yang di atas kosong — jadi **mengosongkan satu variabel** mengembalikan semua klien tanpa menyentuh kode. |
-| `API_BASE_URL` | Nama lama, masih dihormati. |
-
-Keduanya alamat ngrok, dan di sisi VPS itu bukan tambal sulam. Lihat "TLS di
-VPS" di bawah.
-
-Jadi keduanya bisa hidup berdampingan, tapi klien yang di-deploy ke Vercel
-berbicara ke salah satu saja.
-
-**Dan satu variabel itu tidak bisa memuaskan semua target sekaligus selama VPS
-masih HTTP.** Ini yang paling mudah menghabiskan sore:
-
-| Klien | Ke `http://<ip>:8080/api` | Ke `https://…/api` |
-|---|---|---|
-| **APK Android** | Jalan. `usesCleartextTraffic="true"` ada di manifest | Jalan |
-| **Web di Vercel** | **Diblokir.** Halaman Vercel selalu HTTPS, dan browser menolak permintaan `http://` dari halaman HTTPS sebagai mixed content | Jalan |
-
-Kegagalannya tidak sopan: tidak ada error jaringan yang jelas, cuma request
-yang tidak pernah berangkat dan sebuah pesan di console browser. Jadi selama
-VPS belum punya TLS, mengarahkan `NGROK_BE` ke sana **memperbaiki APK dan
-mematikan web**.
-
-Jalan keluarnya satu: sertifikat untuk VPS-nya. Arahkan sebuah nama ke IP-nya,
-lalu `sudo certbot --nginx -d <nama itu>`. Sesudah itu satu alamat HTTPS
-melayani ketiga target sekaligus dan variabelnya cukup diubah sekali. Memindahkannya ke VPS berarti mengubah satu
-variabel di Settings → Secrets and variables → Actions → Variables, lalu
-menjalankan ulang workflow-nya; tidak ada kode yang berubah. Job `preflight`
-memeriksa nilainya tidak kosong dan berakhiran `/api` — **bentuknya saja, bukan
-apakah alamat itu menjawab**, jadi menunjuk ke backend yang mati tetap lolos.
-
-### Menyiapkan VPS-nya sekali: `be/scripts/provision-vps.sh`
+### Bootstrap server sekali: `be/scripts/provision-vps.sh`
 
 Job deploy sengaja tidak menyiapkan apa pun — ia tidak pernah menulis `.env`,
 tidak menjalankan `db:seed`, dan tidak menyentuh nginx, karena deploy yang
 memiliki ketiganya akan menimpa kredensial produksi pada push berikutnya.
-Skrip ini yang mengerjakannya, sekali, di server:
+Skrip ini yang mengerjakannya, sekali, di server. Namanya dipertahankan karena
+historis, tetapi dapat dipakai untuk bootstrap Pi:
 
 ```bash
 cd /var/www/deepct-ai
@@ -898,26 +844,26 @@ membutuhkannya. Di server ia mendarat sebagai
 yang justru merupakan langkah 1 dari urutan di bawah.
 
 Ia membuat database dan usernya, menulis `.env` dengan `APP_DEBUG=false` plus
-`TRAINING_WORKER_TOKEN` baru, mengunduh binari RoadRunner, menjalankan migrasi,
-memasang ketiga program supervisor dan reverse proxy nginx, lalu **menanyakan
-`GET /api/news` ke proses yang benar-benar berjalan** sebelum menyatakan
-selesai.
+`TRAINING_WORKER_TOKEN` baru, mengunduh binari RoadRunner dan menjalankan
+migrasi. Bagian Supervisor di skrip adalah jalur bootstrap lama; instalasi Pi
+aktif menggunakan PM2 setelah provisioning selesai.
 
 Aman dijalankan ulang, dan satu hal yang tidak akan pernah ia timpa adalah
 `.env` yang sudah ada — di situ `APP_KEY` tinggal, dan menggantinya membuat
 setiap nilai terenkripsi dan setiap token yang pernah diterbitkan tidak terbaca
 lagi.
 
-nginx dan supervisor bukan urusannya; ia mendelegasikan keduanya ke
-`be/deploy/apply.sh`.
+nginx dan konfigurasi Supervisor lama didelegasikan ke `be/deploy/apply.sh`.
+Jangan menjalankan bagian Supervisor itu kembali pada Pi tanpa menonaktifkannya
+lagi, karena PM2 sudah menjadi pemilik proses produksi.
 
-### nginx dan supervisor: `be/deploy/apply.sh`
+### Konfigurasi bootstrap lama: `be/deploy/apply.sh`
 
-Terpisah dari provisioning karena sifatnya berbeda. Provisioning berjalan
-sekali dan melakukan hal yang tak bisa dibatalkan; ini hanya menulis ulang dua
-berkas konfigurasi, aman dijalankan kapan pun keduanya berubah, dan **ikut
-terkirim di setiap deploy** — jadi perubahan timeout atau batas unggah sampai
-ke server tanpa siapa pun mengingat skrip provisioning itu ada.
+Skrip ini masih menulis konfigurasi nginx dan Supervisor untuk instalasi lama.
+Ia tetap berguna untuk bootstrap atau rollback, tetapi **bukan** pengelola
+proses aktif di Pi. Konfigurasi proses aktif ada di
+`deploy/pm2/ecosystem.config.cjs`; workflow release tidak memanggil
+`deploy/apply.sh`.
 
 ```bash
 cd /var/www/deepct-ai
@@ -964,7 +910,11 @@ worker akan meng-SIGKILL prediksi yang sedang berjalan** — sampai dua jam wakt
 GPU dan satu job milik peneliti, hilang sepuluh detik setelah restart yang tak
 seorang pun mengira merusak. Template ini menyetelnya 7260.
 
-### TLS di VPS: kenapa ngrok, bukan certbot
+### Catatan historis TLS VPS
+
+Bagian ini menjelaskan alasan VPS lama akhirnya memakai ngrok. Deployment Pi
+yang aktif tidak memakai certbot atau port publik: `deepct-ngrok` membuka
+tunnel keluar ke port Octane 8000 dan memberi frontend URL HTTPS.
 
 Klien web butuh HTTPS — halamannya disajikan Vercel lewat HTTPS, dan browser
 menolak memanggil `http://` dari sana tanpa error jaringan apa pun. Jadi
@@ -1014,30 +964,29 @@ Satu lagi yang halus: yang diedit adalah **php.ini milik CLI**, bukan FPM.
 RoadRunner menjalankan aplikasi lewat SAPI CLI, dan tidak ada PHP-FPM di
 tumpukan ini sama sekali — mengedit ini FPM tidak akan berpengaruh apa pun.
 
-**Urutan deploy pertama**, dan ia memang bertelur-ayam:
+**Urutan deploy pertama pada Pi:**
 
-1. Push ke `main`. Job `vps` men-`rsync` kodenya ke server, lalu **berhenti**
-   dengan "`.env` does not exist" — itu perilaku yang benar, bukan kegagalan.
-2. Jalankan `scripts/provision-vps.sh` di server. Sekarang kodenya sudah ada
-   di sana untuk dikerjakan.
-3. Jalankan ulang workflow-nya. Deploy penuh berjalan sampai selesai.
+1. Bootstrap `/var/www/deepct-ai`, `.env`, database dan RoadRunner sekali.
+2. Daftarkan runner ARM64 dengan label `deepct-raspi` lalu pasang runner sebagai
+   systemd service.
+3. Pasang PM2 dan ngrok, mulai kedua proses dari
+   `deploy/pm2/ecosystem.config.cjs`, jalankan `pm2 save`, lalu aktifkan
+   `pm2-jihyo.service`.
+4. Set `RASPI_API_BASE_URL` ke URL HTTPS tunnel yang berakhiran `/api`, lalu
+   push atau jalankan ulang workflow.
 
 ### Deploy otomatis dari GitHub Actions
 
-Job `vps` di `.github/workflows/release.yml` mengirim `be/` ke VPS pada tiap
-push ke `main` dan tiap tag. Klien web tidak ikut — ia pergi ke Vercel lewat
-job `vercel`, sesuai pembagian di awal bagian ini.
+Job `raspi` di `.github/workflows/release.yml` berjalan **langsung pada Pi** di
+runner `[self-hosted, Linux, ARM64, deepct-raspi]` setiap push ke `main`, tag,
+atau dispatch manual. Tidak ada SSH dari GitHub dan tidak ada private key server
+di repository secrets. Klien web tetap pergi ke Vercel lewat job `vercel`.
 
-Empat secret repository dibutuhkan, dan job-nya menyebut yang hilang satu per
-satu alih-alih sekadar gagal:
-
-| Secret | Isi |
-|---|---|
-| `VPS_HOST` | Alamat atau hostname server |
-| `VPS_USERNAME` | Akun SSH-nya (`ubuntu` di mesin sekarang) |
-| `VPS_PORT` | Port SSH; **opsional**, dianggap 22 kalau kosong |
-| `VPS_SSH` | Private key OpenSSH, isi berkasnya, bukan path |
-| `VPS_KNOWN_HOSTS` | **Opsional.** Kalau diisi, host key dipatok dari sini. Kalau tidak, ia dipelajari dari apa pun yang menjawab di alamat itu — cukup untuk menangkap host yang *berubah* antar run, tapi mempercayai yang pertama. |
+Runner dipasang sebagai service
+`actions.runner.DeepCT-Dev-DeepCT-AI-PROD.deepct-raspi.service`. Repository
+variable `RASPI_API_BASE_URL` diperlukan untuk build klien. Vercel memerlukan
+`VERCEL_TOKEN`, `VERCEL_ORG_ID`, dan `VERCEL_PROJECT_ID`; ketiganya berasal dari
+akun/proyek Vercel baru, bukan dari Pi.
 
 Urutannya, dan alasan tiap langkah ada:
 
@@ -1053,12 +1002,12 @@ Urutannya, dan alasan tiap langkah ada:
    Kalau dump-nya gagal, deploy berhenti di situ — sebelum migrasi menyentuh
    apa pun.
 4. **`migrate --force`**, lalu `config:cache`, `route:cache`, `view:cache`.
-5. **`supervisorctl restart`** untuk `brin-octane`, `brin-queue` dan
-   `brin-schedule`. Ketiga nama itu sekarang **mengikat**: job-nya memanggil
-   mereka apa adanya, dan berhenti dengan pesan yang jelas kalau supervisor
-   tidak mengenali salah satunya. Octane memegang aplikasi di memori — tanpa
-   restart, kode baru ada di disk sementara proses lama terus melayani yang
-   lama, persis jebakan yang diperingatkan CLAUDE.md.
+5. **`pm2 startOrReload ... --only deepct-app`** memuat kode backend baru tanpa
+   me-restart tunnel. Job hanya memulai `deepct-ngrok` jika proses itu belum
+   ada, karena restart tunnel yang tidak memiliki reserved URL dapat mengganti
+   hostname publik. Setelah itu `pm2 save` memperbarui keadaan yang dipulihkan
+   systemd. Octane memegang aplikasi di memori — tanpa reload, kode baru ada di
+   disk sementara proses lama terus melayani versi lama.
 6. **`GET /api/news` di `127.0.0.1:8000`**, sampai sepuluh kali dengan jeda 3
    detik. Restart yang melapor sukses bukan bukti aplikasinya kembali hidup;
    ini menanyakannya ke proses yang benar-benar berjalan. Endpoint itu dipakai
@@ -1080,8 +1029,8 @@ tiga pintu masuk, dan pekerjaannya tidak sama:
 | Pemicu | Yang dibangun | Hasilnya ke mana |
 |---|---|---|
 | **Push ke cabang fitur** | dua job test + `web` | Artifact di run itu, plus preview Vercel |
-| **Push ke `main`** | semuanya | Rilis `latest`, Vercel produksi, **dan deploy backend ke VPS** |
-| **Tag `v*`** (`git tag v1.2.0 && git push origin v1.2.0`) | semuanya | GitHub Release + Google Drive + VPS |
+| **Push ke `main`** | semuanya | Rilis `latest`, Vercel produksi, **dan deploy backend ke Pi** |
+| **Tag `v*`** (`git tag v1.2.0 && git push origin v1.2.0`) | semuanya | GitHub Release + Google Drive + Pi |
 | **Actions → Run workflow** | semuanya | Google Drive saja |
 
 | Job | Runner | Hasil |
@@ -1091,14 +1040,14 @@ tiga pintu masuk, dan pekerjaannya tidak sama:
 | `test-backend` | ubuntu | `php artisan test` di atas MySQL 8 dan PHP 8.3 |
 | `web` | ubuntu | `brin-neutron-ct-web.zip` + direktori untuk Vercel |
 | `vercel` | ubuntu | Deploy klien web (produksi di `main`, preview di cabang) |
-| `vps` | ubuntu | **Deploy backend ke VPS** — lihat §8 |
+| `raspi` | **self-hosted ARM64** | **Deploy backend pada Pi** — lihat §8 |
 | `android` | ubuntu | `brin-neutron-ct.apk` |
 | `linux` | ubuntu | Bundle x64, butuh GTK 3 di mesin tujuan |
 | `apple` | **macos** | `.ipa` dan `.app`, dua-duanya tanpa tanda tangan |
 | `publish` | ubuntu | GitHub Release + unggah ke Google Drive |
 
 **Kenapa ada dua job test.** `test` menjalankan sisi Flutter, `test-backend`
-menjalankan sisi Laravel. Pemisahannya bukan soal kerapian: `vps` bergantung
+menjalankan sisi Laravel. Pemisahannya bukan soal kerapian: `raspi` bergantung
 pada `test-backend` saja, karena job itu mengirim `be/` dan tidak ada
 hubungannya dengan klien. Sebelum job VPS ada, suite backend memang tidak
 pernah berjalan di CI sama sekali — itu bisa dimaklumi selama berkas ini cuma
@@ -1108,14 +1057,14 @@ membangun klien, dan berhenti bisa dimaklumi begitu ia mulai men-deploy.
 kali lipat menit ubuntu, dan APK maupun `.ipa` yang tidak diminta siapa pun
 adalah menit runner yang terbuang tiap push. Cabang fitur mendapat kedua job
 test dan sebuah preview URL; `android`, `linux`, `apple`, `vercel` produksi dan
-`vps` menunggu sampai `main` atau sebuah tag.
+`raspi` menunggu sampai `main` atau sebuah tag.
 
 Efek samping yang justru berharga: sebelumnya `flutter analyze` dan
 `flutter test` hanya berjalan saat ada tag, jadi `main` bisa rusak berminggu-
 minggu tanpa ketahuan. Sekarang tiap push mengujinya.
 
 Alamat API dikompilasi masuk, jadi CI membacanya dari repository variable
-**`NGROK_BE`**, dengan `API_BASE_URL` masih dihormati sebagai nama lama.
+**`RASPI_API_BASE_URL`** tanpa fallback ke alamat VPS lama.
 Job `preflight` memeriksa ia tidak kosong dan berakhiran `/api` — **bentuknya
 saja, bukan apakah alamat itu benar-benar menjawab.**
 

@@ -945,11 +945,13 @@ php artisan migrate
 ## 🚀 Deployment
 
 ### Production Checklist
-- [ ] Set `APP_ENV=production`
-- [ ] Set `APP_DEBUG=false`
-- [ ] Configure proper `APP_URL`
+- [x] Set `APP_ENV=production`
+- [x] Set `APP_DEBUG=false`
+- [ ] Configure the final public `APP_URL`
 - [ ] Use Redis for cache (`CACHE_DRIVER=redis`)
-- [ ] Setup queue worker with Supervisor
+- [x] Run API, queue worker and scheduler through PM2 (`deepct-app`)
+- [x] Run the port-8000 ngrok tunnel through PM2 (`deepct-ngrok`)
+- [x] Enable `pm2-jihyo.service` and save the process list for reboot recovery
 - [ ] Enable opcache
 - [ ] Configure database backup
 - [ ] Setup monitoring (logs, errors)

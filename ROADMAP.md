@@ -6,7 +6,7 @@ berjalan — centang diisi hanya setelah **diverifikasi**, bukan setelah ditulis
 Ini bukan dokumen status. Jangan buat `*_PLAN.md` atau `*_SUMMARY.md` baru;
 perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
-**Terakhir diperbarui:** 29 September 2026
+**Terakhir diperbarui:** 30 September 2026
 
 ---
 
@@ -14,13 +14,16 @@ perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
 - [ ] **Selesaikan perpindahan produksi dari VPS ke Raspberry Pi.** Source
       backend lokal sudah dipasang langsung ke `/var/www/deepct-ai` dan
-      diverifikasi melalui nginx serta NetBird pada 29 September: seluruh
-      migrasi berstatus `Ran`, tiga proses Supervisor hidup, dan `/api/health`
-      serta `/api/news` menjawab 200. Database Pi masih kosong. Yang tersisa:
-      static domain ngrok backend, self-hosted runner GitHub, proyek Vercel
-      baru, uji kompatibilitas MariaDB terhadap suite penuh, pemindahan
-      `APP_KEY`/database/`storage` dari VPS, pengujian ujung-ke-ujung terhadap
-      worker model nyata, masa observasi, lalu penghentian VPS.
+      diverifikasi lagi pada 30 September: seluruh migrasi berstatus `Ran`,
+      `deepct-app` dan `deepct-ngrok` hidup di bawah PM2/systemd,
+      `/api/health` serta `/api/news` menjawab 200 melalui HTTPS ngrok, runner
+      GitHub ARM64 `deepct-raspi` online, dan deploy backend dari Actions sudah
+      berhasil. `RASPI_API_BASE_URL` sudah menunjuk ke tunnel tersebut.
+      Database Pi masih kosong. Yang tersisa: membuat proyek Vercel baru dan
+      memasang tiga secret-nya, uji kompatibilitas MariaDB terhadap suite
+      penuh, pemindahan `APP_KEY`/database/`storage` dari VPS, pengujian
+      ujung-ke-ujung terhadap worker model nyata, masa observasi, lalu
+      penghentian VPS.
 
 - [x] **`hyperparameters` dikirim sebagai `[]`, bukan `{}`.** *(1.35.0)*
       Ternyata tiga tempat, bukan satu: `MeTrainingController`,

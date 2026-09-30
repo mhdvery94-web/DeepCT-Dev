@@ -180,22 +180,24 @@ The web client is a static bundle and deploys to any static host or CDN.
 
 **The backend requires a persistent server**, not a serverless platform. Octane
 is a long-lived process, the queue worker and scheduler are long-lived
-processes, the health check runs on a 10-second interval, a prediction job may
+processes, the health check runs on a one-minute interval, a prediction job may
 run for up to two hours, and results reach ~1.5 GB on disk. Production is being
-moved from the VPS to a Raspberry Pi 5 with nginx, Supervisor and RoadRunner;
-the public API will be a static ngrok HTTPS endpoint. The Flutter web bundle is
+moved from the VPS to a Raspberry Pi 5 with nginx, PM2 and RoadRunner; the
+public API is exposed by an ngrok HTTPS tunnel on port 8000. The Flutter web bundle is
 built by GitHub Actions and sent to Vercel as prebuilt output, so Vercel never
 runs Laravel.
 
-**Migration state observed on 29 September 2026:** the current local backend
-working tree is installed at `/var/www/deepct-ai` on the Pi. PHP 8.2,
-MariaDB 10.11, nginx, RoadRunner, `brin-octane`, `brin-queue` and
-`brin-schedule` are running. Every migration reports `Ran`; `/api/health` and
-the database-backed `/api/news` both answer 200 through nginx and over NetBird.
-The database is deliberately fresh and empty. VPS data, a static ngrok domain,
-the GitHub self-hosted runner and the new Vercel project have **not** been
-migrated yet, so this is a verified bootstrap rather than the production
-cutover.
+**Migration state observed on 30 September 2026:** the backend is installed at
+`/var/www/deepct-ai` on the Pi. PHP 8.2, MariaDB 10.11, nginx and ARM64
+RoadRunner are installed. PM2 keeps `deepct-app` (`npm run serve:all`) and
+`deepct-ngrok` online, and the enabled `pm2-jihyo.service` restores both after a
+reboot. Every migration reports `Ran`; `/api/health` and the database-backed
+`/api/news` both answer 200 locally and at
+`https://zestfully-usable-pledge.ngrok-free.dev`. The `deepct-raspi`
+self-hosted GitHub runner is online and a backend deploy from commit `a0f2ec7`
+completed successfully. The Pi database is still deliberately fresh and empty.
+VPS data and storage, the new Vercel project, and a real model-worker
+end-to-end run have **not** been migrated yet, so this is not the final cutover.
 
 The release workflow now targets a self-hosted ARM64 runner labelled
 `deepct-raspi`; the Pi is private behind NetBird, so a GitHub-hosted runner
@@ -209,7 +211,7 @@ bootstraps a fresh Pi correctly: Composer runs before the first Artisan command,
 `.env` is mode 600, production caches are generated, and the RoadRunner binary
 is downloaded for the host architecture.
 
-Configuration, DNS layout, the supervisor unit files and the deploy job step by
+Configuration, tunnel layout, the PM2 process file and the deploy job step by
 step are in [ARCHITECTURE.md](ARCHITECTURE.md) §8, along with the
 pre-deployment checklist.
 
