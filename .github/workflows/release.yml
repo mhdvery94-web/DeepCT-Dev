@@ -434,6 +434,7 @@ jobs:
 
           echo "--- Dependencies"
           composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+          npm ci --omit=dev --no-audit --no-fund
 
           # The backup goes before the migration, not after. ARCHITECTURE.md
           # section 8 lists "no database backups" as an outstanding item, and
@@ -473,45 +474,35 @@ jobs:
           chmod -R ug+rwX bootstrap/cache storage || true
 
           echo "--- Restart"
-          # Passwordless sudo is checked on its own, because without it every
-          # supervisorctl call below fails identically and the error would read
-          # as "supervisor does not know these programs" when it means "this
-          # account may not ask".
-          if ! sudo -n true 2>/dev/null; then
-            echo "::error::$(whoami) cannot use sudo without a password."
-            echo "supervisorctl needs it. Grant it, or give this account supervisor access directly."
+          if ! command -v pm2 >/dev/null 2>&1; then
+            echo "::error::PM2 is not installed on the Raspberry Pi."
+            echo "Install it with: sudo npm install -g pm2"
             exit 1
+          fi
+
+          # One-time migration from the original Supervisor layout. Leaving
+          # either copy alive would duplicate queue/scheduler workers and make
+          # the old Octane process keep port 8000. `stop` is harmless once the
+          # programs have already been disabled.
+          if command -v supervisorctl >/dev/null 2>&1; then
+            for legacy in brin-octane brin-queue brin-schedule brin-ngrok; do
+              sudo -n supervisorctl stop "$legacy" >/dev/null 2>&1 || true
+            done
           fi
 
           # Octane holds the application in memory. Without this the old
           # process keeps serving the old code, and a new route 404s while
           # every other sign says the deploy worked.
-          #
-          # The list is read once rather than probing each name: a program that
-          # is configured but currently stopped makes `supervisorctl status
-          # <name>` exit non-zero, which would report it as missing when it is
-          # merely down — and stopped is exactly the state a restart fixes.
-          known="$(sudo -n supervisorctl status 2>/dev/null | awk '{print $1}')"
-          absent=""
-          for program in brin-octane brin-queue brin-schedule; do
-            # `(^|:)name$` so a program inside a supervisor group matches too,
-            # and the restart uses the full name supervisor actually printed.
-            target="$(echo "$known" | grep -E "(^|:)${program}\$" | head -1 || true)"
-            if [ -n "$target" ]; then
-              sudo -n supervisorctl restart "$target"
-            else
-              absent="$absent $program"
-            fi
-          done
+          pm2 startOrReload deploy/pm2/ecosystem.config.cjs \
+            --only deepct-app --update-env
 
-          if [ -n "$absent" ]; then
-            echo "::error::supervisor does not know:$absent"
-            echo "New code is on disk, but the old processes are still serving it."
-            echo "Install the three programs from ARCHITECTURE.md section 8, then re-run."
-            echo "What supervisor does know:"
-            echo "$known"
-            exit 1
+          # The tunnel is independent of Laravel deploys. Restarting an ngrok
+          # endpoint without a reserved URL can change its public hostname, so
+          # start it once and then let PM2 keep it alive across crashes/reboots.
+          if ! pm2 describe deepct-ngrok >/dev/null 2>&1; then
+            pm2 start deploy/pm2/ecosystem.config.cjs --only deepct-ngrok
           fi
+          pm2 save
       # A restart that reported success is not proof the application came back.
       # This asks the running process, on the port nginx proxies to.
       - name: Ask the server whether it is actually up
@@ -533,7 +524,8 @@ jobs:
           done
 
           echo "::error::The API never answered 200 on 127.0.0.1:8000 within 30s."
-          sudo -n supervisorctl status brin-octane || true
+          pm2 status || true
+          pm2 logs deepct-app --lines 40 --nostream || true
           tail -n 40 storage/logs/laravel.log 2>/dev/null || true
           exit 1
 

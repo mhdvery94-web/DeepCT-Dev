@@ -5,8 +5,8 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
-        "octane": "del storage\\logs\\octane-server-state.json 2>nul & php artisan octane:start --server=roadrunner --workers=4 --max-requests=250",
-        "octane:watch": "del storage\\logs\\octane-server-state.json 2>nul & php artisan octane:start --server=roadrunner --workers=4 --max-requests=250 --watch",
+        "octane": "php -r \"@unlink('storage/logs/octane-server-state.json');\" && php artisan octane:start --server=roadrunner --workers=4 --max-requests=250",
+        "octane:watch": "php -r \"@unlink('storage/logs/octane-server-state.json');\" && php artisan octane:start --server=roadrunner --workers=4 --max-requests=250 --watch",
         "octane:reset": "node scripts/octane-reset.mjs",
         "queue": "node scripts/queue-supervisor.mjs",
         "queue:once": "php -d memory_limit=1G artisan queue:work --tries=1 --timeout=7200 --memory=768",
@@ -15,11 +15,13 @@
         "serve:all": "concurrently -k -n api,queue,cron -c blue,green,yellow \"npm:octane\" \"npm:queue\" \"npm:schedule\"",
         "kill-rr": "taskkill /F /IM rr.exe /T || echo RoadRunner is already stopped"
     },
+    "dependencies": {
+        "concurrently": "^9.0.1"
+    },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
         "axios": "^1.11.0",
         "chokidar": "^5.0.0",
-        "concurrently": "^9.0.1",
         "laravel-vite-plugin": "^2.0.0",
         "tailwindcss": "^4.0.0",
         "vite": "^7.0.7"
