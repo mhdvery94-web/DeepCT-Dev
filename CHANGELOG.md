@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Disable Vercel's automatic Git deployments at the repository root. The
+  connected Vercel project must use Root Directory `./`; GitHub Actions remains
+  the only publisher and sends the already-built Flutter bundle with
+  `vercel deploy --prebuilt`, preventing Vercel from misdetecting `be/` as a
+  Vite application and looking for a nonexistent `dist/` directory.
 - Run the Raspberry Pi backend and public tunnel under PM2. `deepct-app` owns
   `npm run serve:all` (Octane, the database queue worker and scheduler), while
   `deepct-ngrok` exposes port 8000. The saved PM2 process list is now owned by

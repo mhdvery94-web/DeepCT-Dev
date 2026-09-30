@@ -982,6 +982,12 @@ runner `[self-hosted, Linux, ARM64, deepct-raspi]` setiap push ke `main`, tag,
 atau dispatch manual. Tidak ada SSH dari GitHub dan tidak ada private key server
 di repository secrets. Klien web tetap pergi ke Vercel lewat job `vercel`.
 
+Project Vercel memakai Root Directory `./`. `vercel.json` di root mematikan
+auto-deploy dari Git supaya Vercel tidak mencoba membangun `be/` sebagai proyek
+Vite dan mencari `dist/`. Satu-satunya jalur publish adalah job `vercel`, yang
+mengunduh artifact `web-dist`, membentuk `.vercel/output`, lalu mengirimnya
+dengan `vercel deploy --prebuilt`.
+
 Runner dipasang sebagai service
 `actions.runner.DeepCT-Dev-DeepCT-AI-PROD.deepct-raspi.service`. Repository
 variable `RASPI_API_BASE_URL` diperlukan untuk build klien. Vercel memerlukan
