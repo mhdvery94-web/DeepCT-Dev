@@ -100,16 +100,28 @@ karena itu ada batas 200 frame per job.
 
 ### Kontrak worker model
 
-`POST {endpoint_url}` **multipart**: `file_t0`, `file_t2`, `time_scalar`.
+Satu domain ngrok menunjuk ke satu FastAPI multi-model server:
+
+```text
+GET  /
+GET  /models
+POST /predict/{model_name}
+```
+
+`GET /models` adalah katalog dinamis. Admin menjalankan **Sync Models**;
+Laravel melakukan upsert berdasarkan `slug`, jadi menambah bobot di worker
+tidak memerlukan perubahan source backend. Request inferensi tetap
+`POST {full_endpoint_url}` **multipart**: `file_t0`, `file_t2`, `time_scalar`.
 
 Balasan sukses adalah stream TIFF. **Kegagalan yang tertangani dibalas JSON
 `{"error": ...}` dengan HTTP 200** — jadi status code saja tidak cukup untuk
 menyimpulkan berhasil. Kode harus memeriksa `Content-Type`.
 
-Health check sengaja memakai GET ke akar tunnel, bukan POST ke `/predict`:
-pernah ada bug di mana probe POST tanpa berkas dibalas 422 dan model yang sehat
-dilaporkan offline selamanya. GET juga menghindari memicu inferensi GPU
-sungguhan hanya untuk mengecek denyut.
+Sinkronisasi memeriksa `GET /` sebagai denyut server sebelum membaca katalog.
+Health check per-model memakai `GET /models` dan memastikan slug/path model
+masih tercantum; model yang hilang ditandai `model_missing`, tidak dihapus.
+Tidak ada probe yang memanggil `/predict`, sehingga pemeriksaan kesehatan tidak
+memicu inferensi GPU.
 
 ---
 
@@ -162,7 +174,9 @@ menyusun urutannya sekali, `positionOf()` mengambil satu baris darinya, dan
 `board()` melayani panel admin dari urutan yang sama persis.
 
 ### `models` — registry model AI
-`name`, `version`, `endpoint_url`, `auth_token`, `verify_tls`, `status` (enum
+`name`, `slug` (unik), `version`, `base_url`, `endpoint`,
+`full_endpoint_url`, `endpoint_url` (alias kompatibilitas), `model_file`,
+`worker_active`, `synced_at`, `auth_token`, `verify_tls`, `status` (enum
 online/offline/trouble), `is_active`, `last_health_check`,
 `health_check_error`, `health_check_reason`, `current_jobs_count`,
 `total_predictions`, `accuracy`, `deployed_at`.
@@ -195,10 +209,11 @@ model **baru**, jadi keputusannya dibuat di tempat yang terlihat.
 `"Tunnel is not running (ERR_NGROK_3200)"` — dan **hanya terlihat admin**,
 karena dialah yang menyalakan ulang worker. `health_check_reason` adalah
 kegagalan yang sama sebagai kode (`no_endpoint`, `tunnel_down`, `unreachable`,
-`slow`), dan itulah yang diterima periset: klien memetakannya jadi kalimat
+`slow`, `model_missing`), dan itulah yang diterima periset: klien memetakannya jadi kalimat
 yang bisa ditindaklanjuti, dan kodenya tidak membawa nama host.
 
-`endpoint_url` **hanya boleh terlihat admin**. Mengetahuinya berarti bisa
+`base_url`, `endpoint`, `full_endpoint_url`, dan alias `endpoint_url` **hanya
+boleh terlihat admin**. Mengetahuinya berarti bisa
 melewati platform dan menembak worker GPU langsung, jadi `/api/me/models`
 sengaja mengembalikan bentuk yang lebih sempit.
 

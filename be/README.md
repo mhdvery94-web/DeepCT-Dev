@@ -275,15 +275,21 @@ returns **409** while the account has a pending/processing prediction or a
 queued/claimed/running training job. A successful deletion removes its
 prediction files, kept evidence, and temporary upload/download files.
 
-#### Model Management (8) - Admin Only
+#### Model Management (9) - Admin Only
 - `GET /api/admin/models` - List models
 - `POST /api/admin/models` - Add new model
+- `POST /api/admin/models/sync` - Sync every `/models` entry from one FastAPI server
 - `GET /api/admin/models/{id}` - Get model detail
 - `PUT /api/admin/models/{id}` - Update model
 - `DELETE /api/admin/models/{id}` - Delete model
 - `PATCH /api/admin/models/{id}/toggle` - Toggle active status
 - `POST /api/admin/models/{id}/health-check` - Manual health check
 - `POST /api/admin/models/{id}/test` - Test prediction
+
+Set `AI_MODEL_SERVER_BASE_URL` once for the shared ngrok/FastAPI server. The
+sync route checks `GET /`, fetches `GET /models`, and upserts by slug. Each row
+stores its own `/predict/{model_name}` path; adding a model on the GPU server no
+longer requires a Laravel source change.
 
 #### Self-service (3) - Any authenticated user
 - `GET /api/me/stats` - Counters for the caller's own dashboard
@@ -646,7 +652,7 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**368 tests, 1,452 assertions, 35-60s.** They run against MySQL, not sqlite: three
+**383 tests, 1,526 assertions.** They run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:

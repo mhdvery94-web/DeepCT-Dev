@@ -43,8 +43,14 @@ void main() {
     });
 
     test('reads the TLS setting', () {
-      expect(ModelInfo.fromJson(payload({'verify_tls': true})).verifyTls, isTrue);
-      expect(ModelInfo.fromJson(payload({'verify_tls': false})).verifyTls, isFalse);
+      expect(
+        ModelInfo.fromJson(payload({'verify_tls': true})).verifyTls,
+        isTrue,
+      );
+      expect(
+        ModelInfo.fromJson(payload({'verify_tls': false})).verifyTls,
+        isFalse,
+      );
     });
 
     test('a payload from an older server reads as unprotected, not broken', () {
@@ -65,6 +71,32 @@ void main() {
 
       expect(model.hasAuthToken, isTrue);
       expect(model.verifyTls, isTrue);
+    });
+
+    test('reads a model synchronized from a shared server catalogue', () {
+      final model = ModelInfo.fromJson(
+        payload({
+          'slug': 'ginet-tcd-revisi',
+          'base_url': 'https://worker.example',
+          'endpoint': '/predict/ginet-tcd-revisi',
+          'full_endpoint_url':
+              'https://worker.example/predict/ginet-tcd-revisi',
+          'model_file': 'generator(Ginet TC-D).h5',
+          'worker_active': 0,
+          'synced_at': '2026-09-30T01:00:00+07:00',
+        }),
+      );
+
+      expect(model.slug, 'ginet-tcd-revisi');
+      expect(model.baseUrl, 'https://worker.example');
+      expect(model.endpoint, '/predict/ginet-tcd-revisi');
+      expect(
+        model.endpointUrl,
+        'https://worker.example/predict/ginet-tcd-revisi',
+      );
+      expect(model.modelFile, 'generator(Ginet TC-D).h5');
+      expect(model.workerActive, isFalse);
+      expect(model.syncedAt, isNotNull);
     });
   });
 }

@@ -33,7 +33,8 @@ class ModelCatalogSyncTest extends TestCase
 
     public function test_an_admin_can_sync_models_from_one_server_without_duplicates(): void
     {
-        $this->fakeServer('old-weights.h5');
+        $file = 'old-weights.h5';
+        $this->fakeServer($file);
 
         $this->apiAs($this->token)->postJson('/api/admin/models/sync', [
             'base_url' => 'https://worker.example',
@@ -59,7 +60,7 @@ class ModelCatalogSyncTest extends TestCase
 
         // Admin choices survive sync; only remote catalogue fields change.
         $model->update(['is_active' => false, 'auth_token' => 'kept-secret']);
-        $this->fakeServer('new-weights.keras');
+        $file = 'new-weights.keras';
 
         $this->apiAs($this->token)->postJson('/api/admin/models/sync', [
             'base_url' => 'https://worker.example',
@@ -77,18 +78,18 @@ class ModelCatalogSyncTest extends TestCase
 
     public function test_sync_marks_a_model_missing_without_deleting_it(): void
     {
-        $this->fakeServer('weights.h5');
+        $models = [[
+            'name' => 'ginet-tcd-revisi',
+            'file' => 'weights.h5',
+            'endpoint' => '/predict/ginet-tcd-revisi',
+            'active' => false,
+        ]];
+        $this->fakeServerModels($models);
         $this->apiAs($this->token)->postJson('/api/admin/models/sync', [
             'base_url' => 'https://worker.example',
         ])->assertOk();
 
-        Http::fake([
-            'https://worker.example/' => Http::response(['status' => 'running']),
-            'https://worker.example/models' => Http::response([
-                'count' => 0,
-                'models' => [],
-            ]),
-        ]);
+        $models = [];
 
         $this->apiAs($this->token)->postJson('/api/admin/models/sync', [
             'base_url' => 'https://worker.example',
@@ -135,14 +136,17 @@ class ModelCatalogSyncTest extends TestCase
         );
     }
 
-    private function fakeServer(string $file): void
+    private function fakeServer(string &$file): void
     {
-        Http::fake([
-            'https://worker.example/' => Http::response([
-                'service' => 'tomography-ai',
-                'status' => 'running',
-            ]),
-            'https://worker.example/models' => Http::response([
+        Http::fake(function ($request) use (&$file) {
+            if ($request->url() === 'https://worker.example/') {
+                return Http::response([
+                    'service' => 'tomography-ai',
+                    'status' => 'running',
+                ]);
+            }
+
+            return Http::response([
                 'count' => 1,
                 'active_model' => null,
                 'models' => [[
@@ -151,7 +155,25 @@ class ModelCatalogSyncTest extends TestCase
                     'endpoint' => '/predict/ginet-tcd-revisi',
                     'active' => false,
                 ]],
-            ]),
-        ]);
+            ]);
+        });
+    }
+
+    private function fakeServerModels(array &$models): void
+    {
+        Http::fake(function ($request) use (&$models) {
+            if ($request->url() === 'https://worker.example/') {
+                return Http::response([
+                'service' => 'tomography-ai',
+                'status' => 'running',
+                ]);
+            }
+
+            return Http::response([
+                'count' => count($models),
+                'active_model' => null,
+                'models' => $models,
+            ]);
+        });
     }
 }

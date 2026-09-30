@@ -71,7 +71,7 @@ Full component and schema documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 | **Dataset retention** | Training archives nobody has come back to are freed on a window measured from **last use**, not upload — a dataset is uploaded here precisely to be reused. One with a queued or running job is never swept. The run's numbers stay; the frames behind them go, and the API says which of the two an empty frame list means |
 | **Storage guard** | Prediction upload and direct training upload refuse with 507 when there is no room. ZIP extraction checks expanded size, frame count, duplicate names and available space before writing. A sentinel file proves the results volume is mounted |
 | **Storage report** | Free space on the admin dashboard, split into what retention reclaims within a day and what nothing reclaims at all |
-| **Model registry** | Multiple inference endpoints, health-checked every minute and on demand from the upload screen, with live availability in both consoles |
+| **Model registry** | One FastAPI/ngrok server can publish many models through `/models`; admin sync upserts them by slug and each row keeps its own `/predict/{model}` path. Availability is checked every minute and on demand |
 | **Queue board** | Who the model is working for right now and who is waiting behind them, in the worker's own order — read from the prediction records rather than inferred from the audit trail, and numbered by the same definition the researcher sees on their own job |
 | **Worker credentials** | A per-model shared secret sent as `Authorization: Bearer` and checked by the worker in constant time, stored encrypted and write-only through the API, plus a per-model say over TLS verification — needed the moment a worker moves off a random tunnel onto a LAN address |
 | **Managed training** | Datasets, a job queue, and a GPU worker protocol that survives the worker dying mid-run |
@@ -130,22 +130,25 @@ The API address is a build-time constant, so every target is selected with
 
 ### Inference worker
 
-The worker is a FastAPI application holding the `.h5` weights, running on a GPU
-host and exposed over HTTPS. Register its URL through **Admin → Model
-Management**; it is not configured through `.env`.
+The worker is a FastAPI application holding the `.h5`/`.keras` weights, running
+on a GPU host and exposed over HTTPS. `AI_MODEL_SERVER_BASE_URL` selects the
+server (currently `https://nucleus-drone-grueling.ngrok-free.dev`); **Admin →
+Model Management → Sync Models** imports every row from `GET /models`.
 
-Its contract is a multipart `POST` with `file_t0`, `file_t2` and `time_scalar`,
-returning a TIFF. A *handled* failure comes back as JSON with **HTTP 200**, so
-the status code alone never confirms success.
+One tunnel serves every model. The catalogue supplies paths such as
+`/predict/ginet-tcd-revisi`; Laravel posts multipart `file_t0`, `file_t2` and
+`time_scalar` to the selected model's full URL and requires `image/tiff` on
+success. Legacy workers may return a handled JSON error with HTTP 200, so the
+body type is still checked.
 
 ---
 
 ## Testing
 
 ```bash
-cd be && php artisan test        # 368 tests, 1,452 assertions
+cd be && php artisan test        # 383 tests, 1,526 assertions
 cd fe && flutter analyze         # must be clean
-cd fe && flutter test            # 274 tests across 33 files
+cd fe && flutter test            # 276 tests across 33 files
 ```
 
 The backend suite runs against MySQL rather than SQLite: several migrations use

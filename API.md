@@ -1,7 +1,7 @@
 # Referensi API
 
-104 route di bawah `/api`, **termasuk** `GET /api/health`. Dihitung dari
-`php artisan route:list --path=api` per 28 September 2026 — jalankan perintah itu
+105 route di bawah `/api`, **termasuk** `GET /api/health`. Dihitung dari
+`php artisan route:list --path=api` per 30 September 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 
 **Base URL:** `http://127.0.0.1:8000/api` (atau domain ngrok yang mem-forward ke
@@ -618,12 +618,13 @@ membersihkan arsip prediksi, bukti, dan unggahan sementara miliknya.
 
 Ditambah dua route foto: `POST` dan `DELETE /admin/users/{id}/avatar`.
 
-### Model (8)
+### Model (9)
 
 | Method | Path |
 |---|---|
 | `GET` | `/admin/models` — filter `status` |
 | `POST` | `/admin/models` — langsung health check setelah dibuat |
+| `POST` | `/admin/models/sync` — upsert katalog FastAPI berdasarkan `slug` |
 | `GET` | `/admin/models/{id}` |
 | `PUT` | `/admin/models/{id}` — partial |
 | `DELETE` | `/admin/models/{id}` — 403 kalau masih ada job berjalan |
@@ -633,6 +634,17 @@ Ditambah dua route foto: `POST` dan `DELETE /admin/users/{id}/avatar`.
 
 `test` menjalankan **inferensi sungguhan** dengan frame contoh yang dibuat
 sendiri. Nyata memakan waktu ~18–21 detik dan memakai kuota GPU.
+
+`sync` memakai `base_url` dari body atau `AI_MODEL_SERVER_BASE_URL`, memeriksa
+`GET /`, lalu membaca `GET /models`. Model baru ditambahkan, model lama
+diperbarui tanpa menimpa `is_active` atau secret admin, dan slug yang hilang
+dari katalog ditandai offline tanpa dihapus. Respons `data` memuat `created`,
+`updated`, `missing`, dan baris model hasil sinkronisasi.
+
+Setiap model hasil sinkronisasi menyimpan `slug`, `base_url`, `endpoint`,
+`full_endpoint_url`, `model_file`, `worker_active`, dan `synced_at`.
+`endpoint_url` tetap dikirim ke admin sebagai alias kompatibilitas. Semua alamat
+worker tetap disembunyikan dari endpoint peneliti.
 
 #### Rahasia dan TLS worker
 

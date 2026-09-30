@@ -344,7 +344,7 @@ class ModelHealthChecker
             // has to lose the reason it was down, or the client keeps
             // explaining a failure that is over.
             'health_check_reason' => $reason,
-            'worker_active' => $model->worker_active,
+            'worker_active' => (bool) $model->worker_active,
         ]);
 
         // Only on a *transition*. This runs every ten seconds, so a model that

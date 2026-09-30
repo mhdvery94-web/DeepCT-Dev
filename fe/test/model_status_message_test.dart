@@ -31,12 +31,22 @@ void main() {
     expect(modelStatusMessage('unreachable'), contains('not responding'));
   });
 
-  test('a row written before the reason column existed still reads sensibly', () {
-    // Every model row has a null reason until the next health check writes
-    // one, which is at most a minute after the migration runs.
-    expect(modelStatusMessage(null), contains('not responding'));
-    expect(modelStatusMessage('something_new'), contains('not responding'));
+  test('a model missing from the catalogue asks for synchronization', () {
+    final message = modelStatusMessage('model_missing');
+
+    expect(message, contains('no longer published'));
+    expect(message, contains('synchronize'));
   });
+
+  test(
+    'a row written before the reason column existed still reads sensibly',
+    () {
+      // Every model row has a null reason until the next health check writes
+      // one, which is at most a minute after the migration runs.
+      expect(modelStatusMessage(null), contains('not responding'));
+      expect(modelStatusMessage('something_new'), contains('not responding'));
+    },
+  );
 
   test('no message names an HTTP status code or an error identifier', () {
     for (final reason in [
@@ -44,6 +54,7 @@ void main() {
       'no_endpoint',
       'slow',
       'unreachable',
+      'model_missing',
       null,
     ]) {
       expect(

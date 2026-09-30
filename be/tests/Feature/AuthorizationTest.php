@@ -152,11 +152,15 @@ class AuthorizationTest extends TestCase
      * endpoint URL would let them bypass the platform and call the GPU worker
      * directly.
      */
-    public function test_me_models_never_exposes_the_endpoint_url(): void
+    public function test_me_models_never_exposes_worker_connection_details(): void
     {
         Model::create([
             'name' => 'Test Model',
             'version' => 'v1',
+            'slug' => 'test-model',
+            'base_url' => 'https://secret-worker.example',
+            'endpoint' => '/predict/test-model',
+            'full_endpoint_url' => 'https://secret-worker.example/predict/test-model',
             'endpoint_url' => 'https://secret-worker.example/predict',
             'status' => 'online',
             'is_active' => true,
@@ -170,6 +174,9 @@ class AuthorizationTest extends TestCase
 
         $this->assertStringNotContainsString('secret-worker', $response->getContent());
         $this->assertStringNotContainsString('endpoint_url', $response->getContent());
+        $this->assertStringNotContainsString('base_url', $response->getContent());
+        $this->assertStringNotContainsString('full_endpoint_url', $response->getContent());
+        $this->assertStringNotContainsString('/predict/test-model', $response->getContent());
     }
 
     public function test_me_models_hides_inactive_models(): void

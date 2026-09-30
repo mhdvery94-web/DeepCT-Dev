@@ -32,6 +32,10 @@ String modelStatusMessage(String? reason) {
       return 'The model server is answering slowly. '
           'Your job may take longer than usual.';
 
+    case 'model_missing':
+      return 'This model is no longer published by the model server. '
+          'Ask an administrator to synchronize the model list.';
+
     case 'unreachable':
     default:
       // Also the answer for null and for any code added later that this build

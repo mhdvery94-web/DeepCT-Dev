@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Support one FastAPI/ngrok domain serving many inference models. Admin **Sync
+  Models** checks the server root, imports `GET /models`, upserts by unique slug,
+  preserves local activation/credentials, and records a separate prediction
+  path and weights filename for every model. Prediction and test calls now use
+  `full_endpoint_url`, require a TIFF response, and distinguish worker 404, 422,
+  500, timeout and connection failures.
 - Bootstrap the current local backend working tree on the Raspberry Pi at
   `/var/www/deepct-ai`: PHP 8.2, MariaDB 10.11, nginx, ARM64 RoadRunner and the
   Octane/queue/scheduler Supervisor programs are running. All migrations report
@@ -33,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mode 600, and create Laravel's production caches.
 
 ### Fixed
+- Coerce the new `worker_active` flag to a database-safe boolean when checking
+  legacy model rows that were instantiated before their defaults were loaded.
 - Enforce inactive-account and issued-password restrictions on every authenticated API request; revoke tokens on disable or reset.
 - Reject oversized ZIP expansion, too many input frames, and duplicate flattened frame names before extracting; check direct training uploads against available storage.
 - Clean prediction, evidence and temporary upload files when an account is deleted; refuse deletion while its jobs are active.
