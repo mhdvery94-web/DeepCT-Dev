@@ -139,7 +139,11 @@ class AdminSeederTest extends TestCase
         $this->putNamedEnv('SEED_USER_EMAIL', 'researcher@brin.go.id');
         $this->putNamedEnv('SEED_USER_PASSWORD', 'researcher-secret');
 
-        $this->seed(AdminUserSeeder::class);
+        // Calling the testing helper would dispatch `db:seed`, whose
+        // production safeguard prompts for confirmation before the seeder is
+        // reached. Run the seeder itself because the behaviour under test is
+        // its production branch, not Artisan's confirmation prompt.
+        app(AdminUserSeeder::class)->run();
 
         $researcher = User::where('email', 'researcher@brin.go.id')->firstOrFail();
         $this->assertSame('user', $researcher->role);
@@ -161,6 +165,6 @@ class AdminSeederTest extends TestCase
             'SEED_USER_EMAIL and SEED_USER_PASSWORD must be supplied together.'
         );
 
-        $this->seed(AdminUserSeeder::class);
+        app(AdminUserSeeder::class)->run();
     }
 }
