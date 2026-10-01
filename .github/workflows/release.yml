@@ -532,6 +532,24 @@ jobs:
 
           php artisan db:seed --class=Database\\Seeders\\AdminUserSeeder --force
 
+          # PM2 has just reloaded Octane in the preceding step. The process can
+          # exist before RoadRunner has bound port 8000, so an immediate login
+          # turns a successful bootstrap into a false failure. Wait for the
+          # public liveness route rather than sleeping for a guessed duration.
+          api_ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/api/health >/dev/null; then
+              api_ready=true
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$api_ready" != "true" ]; then
+            echo "::error::Laravel did not become ready on port 8000 within 60 seconds."
+            exit 1
+          fi
+
           check_login() {
             local email="$1"
             local password="$2"
