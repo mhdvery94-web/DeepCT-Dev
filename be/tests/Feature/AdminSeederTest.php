@@ -23,16 +23,25 @@ class AdminSeederTest extends TestCase
     use RefreshDatabase;
 
     private ?string $saved = null;
+    private ?string $savedUserEmail = null;
+    private ?string $savedUserPassword = null;
+    private string $savedEnvironment;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->saved = $_SERVER['SEED_ADMIN_PASSWORD'] ?? null;
+        $this->savedUserEmail = $_SERVER['SEED_USER_EMAIL'] ?? null;
+        $this->savedUserPassword = $_SERVER['SEED_USER_PASSWORD'] ?? null;
+        $this->savedEnvironment = app()->environment();
     }
 
     protected function tearDown(): void
     {
         $this->putEnv($this->saved);
+        $this->putNamedEnv('SEED_USER_EMAIL', $this->savedUserEmail);
+        $this->putNamedEnv('SEED_USER_PASSWORD', $this->savedUserPassword);
+        app()->detectEnvironment(fn () => $this->savedEnvironment);
         parent::tearDown();
     }
 
@@ -46,15 +55,20 @@ class AdminSeederTest extends TestCase
      */
     private function putEnv(?string $value): void
     {
+        $this->putNamedEnv('SEED_ADMIN_PASSWORD', $value);
+    }
+
+    private function putNamedEnv(string $name, ?string $value): void
+    {
         if ($value === null) {
-            unset($_SERVER['SEED_ADMIN_PASSWORD'], $_ENV['SEED_ADMIN_PASSWORD']);
-            putenv('SEED_ADMIN_PASSWORD');
+            unset($_SERVER[$name], $_ENV[$name]);
+            putenv($name);
             return;
         }
 
-        $_SERVER['SEED_ADMIN_PASSWORD'] = $value;
-        $_ENV['SEED_ADMIN_PASSWORD'] = $value;
-        putenv("SEED_ADMIN_PASSWORD={$value}");
+        $_SERVER[$name] = $value;
+        $_ENV[$name] = $value;
+        putenv("{$name}={$value}");
     }
 
     private function admin(): User
@@ -116,5 +130,37 @@ class AdminSeederTest extends TestCase
 
         $this->assertSame(1, User::where('role', 'admin')->count());
         $this->assertTrue(Hash::check('second-one', $this->admin()->password));
+    }
+
+    public function test_production_can_explicitly_seed_a_researcher(): void
+    {
+        app()->detectEnvironment(fn () => 'production');
+        $this->putEnv('admin-secret');
+        $this->putNamedEnv('SEED_USER_EMAIL', 'researcher@brin.go.id');
+        $this->putNamedEnv('SEED_USER_PASSWORD', 'researcher-secret');
+
+        $this->seed(AdminUserSeeder::class);
+
+        $researcher = User::where('email', 'researcher@brin.go.id')->firstOrFail();
+        $this->assertSame('user', $researcher->role);
+        $this->assertTrue($researcher->is_active);
+        $this->assertFalse($researcher->must_change_password);
+        $this->assertNotNull($researcher->email_verified_at);
+        $this->assertTrue(Hash::check('researcher-secret', $researcher->password));
+    }
+
+    public function test_production_researcher_credentials_must_be_complete(): void
+    {
+        app()->detectEnvironment(fn () => 'production');
+        $this->putEnv('admin-secret');
+        $this->putNamedEnv('SEED_USER_EMAIL', 'researcher@brin.go.id');
+        $this->putNamedEnv('SEED_USER_PASSWORD', null);
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage(
+            'SEED_USER_EMAIL and SEED_USER_PASSWORD must be supplied together.'
+        );
+
+        $this->seed(AdminUserSeeder::class);
     }
 }

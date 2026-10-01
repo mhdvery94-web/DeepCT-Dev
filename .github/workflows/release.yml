@@ -39,6 +39,11 @@ on:
         description: 'API base URL to compile into the clients'
         required: false
         default: ''
+      bootstrap_users:
+        description: 'Create or reset the production admin and researcher from repository secrets'
+        required: false
+        type: boolean
+        default: false
 
 # Pushing twice in a minute should not leave two builds racing for the same
 # artifact names. The newer push wins; a tag build is never cancelled.
@@ -503,6 +508,66 @@ jobs:
             pm2 start deploy/pm2/ecosystem.config.cjs --only deepct-ngrok
           fi
           pm2 save
+
+      # This is deliberately separate from the normal deployment step. The
+      # passwords exist only in this process, so config:cache cannot bake them
+      # into bootstrap/cache/config.php. It also runs only when an operator
+      # selects the manual workflow input; pushes never reset credentials.
+      - name: Bootstrap and verify production login accounts
+        if: github.event_name == 'workflow_dispatch' && inputs.bootstrap_users
+        env:
+          SEED_ADMIN_EMAIL: admin@brin.go.id
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+          SEED_USER_EMAIL: researcher@brin.go.id
+          SEED_USER_PASSWORD: ${{ secrets.SEED_USER_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          cd "$DEPLOY_PATH"
+
+          if [ -z "${SEED_ADMIN_PASSWORD:-}" ] || [ -z "${SEED_USER_PASSWORD:-}" ]; then
+            echo "::error::SEED_ADMIN_PASSWORD and SEED_USER_PASSWORD repository secrets are required."
+            exit 1
+          fi
+
+          php artisan db:seed --class=Database\\Seeders\\AdminUserSeeder --force
+
+          check_login() {
+            local email="$1"
+            local password="$2"
+            local expected_role="$3"
+            local body
+            local code
+            local payload
+            local role
+
+            body="$(mktemp)"
+            payload="$(php -r 'echo json_encode(["email" => $argv[1], "password" => $argv[2]]);' "$email" "$password")"
+            code="$(curl -sS -o "$body" -w '%{http_code}' \
+              -X POST http://127.0.0.1:8000/api/login \
+              -H 'Accept: application/json' \
+              -H 'Content-Type: application/json' \
+              --data "$payload")"
+
+            if [ "$code" != "200" ]; then
+              rm -f "$body"
+              echo "::error::Login smoke test for $expected_role returned HTTP $code."
+              exit 1
+            fi
+
+            role="$(php -r '$data=json_decode(file_get_contents($argv[1]), true); echo $data["data"]["user"]["role"] ?? "";' "$body")"
+            rm -f "$body"
+
+            if [ "$role" != "$expected_role" ]; then
+              echo "::error::Login smoke test expected role $expected_role but received $role."
+              exit 1
+            fi
+
+            echo "Login smoke test passed for role: $expected_role"
+          }
+
+          check_login "$SEED_ADMIN_EMAIL" "$SEED_ADMIN_PASSWORD" admin
+          check_login "$SEED_USER_EMAIL" "$SEED_USER_PASSWORD" user
       # A restart that reported success is not proof the application came back.
       # This asks the running process, on the port nginx proxies to.
       - name: Ask the server whether it is actually up

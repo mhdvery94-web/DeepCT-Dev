@@ -22,6 +22,20 @@ class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
+        $productionUserEmail = app()->environment('production')
+            ? (env('SEED_USER_EMAIL') ?: null)
+            : null;
+        $productionUserPassword = app()->environment('production')
+            ? (env('SEED_USER_PASSWORD') ?: null)
+            : null;
+
+        if (app()->environment('production')
+            && (($productionUserEmail === null) xor ($productionUserPassword === null))) {
+            throw new \LogicException(
+                'SEED_USER_EMAIL and SEED_USER_PASSWORD must be supplied together.'
+            );
+        }
+
         // The live environment first, the config second, and that order fixes a
         // real failure rather than expressing a preference.
         //
@@ -71,12 +85,33 @@ class AdminUserSeeder extends Seeder
             $this->command?->info("  Administrator seeded: {$admin->email}");
         }
 
-        // A sample researcher, for local work only. Seeding one on a public
-        // server would hand out a working account nobody asked for.
         if (app()->environment('production')) {
+            // Production gets a researcher only when an operator explicitly
+            // supplies both credentials. The deploy workflow exposes this as
+            // a manual bootstrap action, so an ordinary deploy can never
+            // create an account or reset its password by accident.
+            if ($productionUserEmail !== null && $productionUserPassword !== null) {
+                $researcher = User::updateOrCreate(
+                    ['email' => $productionUserEmail],
+                    [
+                        'name' => 'Researcher',
+                        'password' => Hash::make($productionUserPassword),
+                        'role' => 'user',
+                        'is_active' => true,
+                        'must_change_password' => false,
+                        'email_verified_at' => now(),
+                    ]
+                );
+
+                $this->command?->info("  Researcher seeded: {$researcher->email}");
+            }
+
             return;
         }
 
+        // A sample researcher, for local work only. Seeding one on a public
+        // server without the explicit credentials above would hand out a
+        // working account nobody asked for.
         User::updateOrCreate(
             ['email' => 'researcher@brin.go.id'],
             [
