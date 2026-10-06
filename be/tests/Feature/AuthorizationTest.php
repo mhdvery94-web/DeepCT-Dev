@@ -65,7 +65,6 @@ class AuthorizationTest extends TestCase
             'reset password' => ['POST', '/api/admin/users/1/reset-password'],
             'list models' => ['GET', '/api/admin/models'],
             'create model' => ['POST', '/api/admin/models'],
-            'sync models' => ['POST', '/api/admin/models/sync'],
             'delete model' => ['DELETE', '/api/admin/models/1'],
             'health check' => ['POST', '/api/admin/models/1/health-check'],
             'test prediction' => ['POST', '/api/admin/models/1/test'],

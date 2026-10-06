@@ -16,7 +16,7 @@ use Illuminate\Validation\Rule;
  * Managed model training — the administrator's half.
  *
  * The platform never trains anything; it records what should be trained and
- * what came back. The GPU lives on Kaggle and its half of the conversation is
+ * what came back. The GPU lives on a remote worker and its half of the conversation is
  * in [TrainingWorkerController].
  */
 class TrainingController extends Controller
@@ -46,13 +46,13 @@ class TrainingController extends Controller
      *
      * The upload path was removed from this endpoint on purpose. An
      * administrator registering a dataset is recording where data already
-     * lives — Kaggle, Drive, an institutional share — and pushing 20 GB up a
+     * lives — an institutional share, cloud storage — and pushing 20 GB up a
      * home tunnel only for the GPU host to pull it back down again is absurd
      * when the worker has a fast link and can fetch it directly.
      *
-     * Researchers upload; that is [MeTrainingController], and it goes through
-     * the resumable chunked path because a laptop on hotel wifi is exactly the
-     * case a single multipart POST cannot survive.
+     * Researchers used to upload here; that path (the former
+     * MeTrainingController) has been removed, and dataset uploads now come
+     * through the worker's own fetch path.
      */
     public function storeDataset(Request $request)
     {
@@ -348,9 +348,9 @@ class TrainingController extends Controller
             'current_epoch' => $job->current_epoch,
             'total_epochs' => $job->total_epochs,
             'progress' => $job->progress(),
-            // Object or null, never an empty array — see the note in
-            // MeTrainingController::serialise(). The admin console parses this
-            // the same way the researcher's does.
+            // Object or null, never an empty array — a job that has reported
+            // nothing yet must not reach the client as a JSON list where a map
+            // is declared. The admin console parses this the same way.
             'metrics' => $job->metrics === null ? null : (object) $job->metrics,
             'worker_label' => $job->worker_label,
             'trainer_url' => $job->trainer_url,

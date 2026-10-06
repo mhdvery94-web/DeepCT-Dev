@@ -35,13 +35,4 @@ return [
         ],
     ],
 
-    'ai_model_server' => [
-        // One FastAPI server can expose any number of models under
-        // /predict/{model_name}; administrators import them from /models.
-        'base_url' => env(
-            'AI_MODEL_SERVER_BASE_URL',
-            'https://nucleus-drone-grueling.ngrok-free.dev'
-        ),
-    ],
-
 ];

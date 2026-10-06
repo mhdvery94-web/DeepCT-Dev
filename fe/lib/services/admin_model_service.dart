@@ -47,31 +47,7 @@ class TestPredictionResult {
   });
 }
 
-class ModelSyncResult {
-  final int created;
-  final int updated;
-  final int missing;
-
-  const ModelSyncResult({
-    required this.created,
-    required this.updated,
-    required this.missing,
-  });
-
-  factory ModelSyncResult.fromJson(Map<String, dynamic> json) {
-    int asInt(dynamic value) => value is num
-        ? value.toInt()
-        : int.tryParse(value?.toString() ?? '') ?? 0;
-
-    return ModelSyncResult(
-      created: asInt(json['created']),
-      updated: asInt(json['updated']),
-      missing: asInt(json['missing']),
-    );
-  }
-}
-
-/// Wraps the 8 admin model-management endpoints.
+/// Wraps the admin model-management endpoints.
 class AdminModelService {
   final ApiClient _api = ApiClient.instance;
 
@@ -97,18 +73,6 @@ class AdminModelService {
               Map<String, dynamic>.from(body['pagination'] as Map),
             )
           : const Pagination.empty(),
-    );
-  }
-
-  /// POST /admin/models/sync — imports /models from the configured FastAPI
-  /// server and upserts rows by slug.
-  Future<ModelSyncResult> sync() async {
-    final body = await _api.post(
-      '${ApiConfig.adminModels}/sync',
-      receiveTimeout: const Duration(seconds: 45),
-    );
-    return ModelSyncResult.fromJson(
-      Map<String, dynamic>.from(body['data'] as Map),
     );
   }
 
@@ -217,7 +181,7 @@ class AdminModelService {
   /// Returns a failed result instead of throwing when the model itself errors,
   /// so the UI can show the endpoint's message inline.
   ///
-  /// A real run waits on a remote GPU (measured ~18s on Kaggle), well beyond
+  /// A real run waits on a remote GPU (measured ~18s), well beyond
   /// the default 30s receive timeout once queueing is involved, so this call
   /// gets a much longer budget.
   Future<TestPredictionResult> testPrediction(int id) async {

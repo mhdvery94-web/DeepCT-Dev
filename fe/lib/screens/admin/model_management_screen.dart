@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/model_info.dart';
-import '../../models/training.dart';
 import '../../models/model_status_message.dart';
 import '../../models/pagination.dart';
 import '../../services/admin_model_service.dart';
@@ -10,12 +9,9 @@ import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
-import '../../services/training_service.dart';
 import '../../widgets/pagination_bar.dart';
-import '../../widgets/register_model_form.dart';
 import '../../widgets/model_status_strip.dart';
 import '../../widgets/status_badge.dart';
-import '../../widgets/training_handoff_panel.dart';
 
 /// Admin screen for managing remotely deployed inference models.
 ///
@@ -32,20 +28,9 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
   final AdminModelService _service = AdminModelService();
 
   List<ModelInfo> _models = [];
-
-  final TrainingService _training = TrainingService();
-
-  /// Finished runs whose weights are not a model yet.
-  ///
-  /// This screen inherited the job when the admin Training tab was deleted:
-  /// registering weights *is* creating a model version, and models live here.
-  /// It was the one thing that tab could do that nothing else could — without
-  /// it a finished run has no way out of the training pipeline at all.
-  List<TrainingJob> _finishedJobs = const [];
   Pagination _pagination = const Pagination.empty();
 
   bool _isLoading = true;
-  bool _isSyncing = false;
   String? _error;
   int _page = 1;
   String? _statusFilter;
@@ -73,8 +58,6 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
         _pagination = result.pagination;
         _isLoading = false;
       });
-
-      await _loadFinishedJobs();
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -84,65 +67,10 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
     }
   }
 
+
   /// Failures here are silent on purpose: this is a secondary panel, and a
   /// training service that is unreachable must not take the model list with
   /// it.
-  Future<void> _loadFinishedJobs() async {
-    try {
-      final result = await _training.jobs(status: 'completed');
-      if (!mounted) return;
-      setState(() {
-        _finishedJobs = result.page.items
-            .where((j) => j.resultingModelId == null)
-            .toList();
-      });
-    } on ApiException {
-      if (mounted) setState(() => _finishedJobs = const []);
-    }
-  }
-
-  Future<void> _registerModel(TrainingJob job) async {
-    final message = await showAppDialog<String>(
-      context: context,
-      maxWidth: 480,
-      builder: (_) => RegisterModelForm(job: job),
-    );
-
-    if (message == null) return;
-
-    _showMessage(message);
-    await _load();
-  }
-
-  Future<void> _deleteTrainingJob(TrainingJob job) async {
-    final confirmed = await showAppAlertDialog<bool>(
-      context: context,
-      title: 'Delete training run',
-      content: Text('Delete "${job.name}"? This cannot be undone.'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('CANCEL'),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('DELETE'),
-        ),
-      ],
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      await _training.deleteJob(job.id);
-      _showMessage('Training run deleted.');
-      await _load();
-    } on ApiException catch (e) {
-      _showMessage(e.message, isError: true);
-    }
-  }
-
   void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -167,25 +95,6 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
     if (saved == true) {
       if (existing == null) _page = 1;
       _load();
-    }
-  }
-
-  Future<void> _syncModels() async {
-    setState(() => _isSyncing = true);
-
-    try {
-      final result = await _service.sync();
-      _showMessage(
-        'Model sync complete: ${result.created} added, '
-        '${result.updated} updated, ${result.missing} missing.',
-        isError: result.missing > 0,
-      );
-      _page = 1;
-      await _load();
-    } on ApiException catch (e) {
-      _showMessage(e.message, isError: true);
-    } finally {
-      if (mounted) setState(() => _isSyncing = false);
     }
   }
 
@@ -296,11 +205,6 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
           ModelStatusStrip(onChanged: (_) => _load()),
           const SizedBox(height: 16),
           Expanded(child: _buildContent()),
-          TrainingHandoffPanel(
-            jobs: _finishedJobs,
-            onRegister: _registerModel,
-            onDelete: _deleteTrainingJob,
-          ),
           PaginationBar(
             pagination: _pagination,
             onPageChanged: (p) {
@@ -351,17 +255,6 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
           onPressed: _isLoading ? null : _load,
           icon: const Icon(Icons.refresh, size: 16),
           label: const Text('REFRESH'),
-        ),
-        OutlinedButton.icon(
-          onPressed: _isLoading || _isSyncing ? null : _syncModels,
-          icon: _isSyncing
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.sync, size: 16),
-          label: const Text('SYNC MODELS'),
         ),
         ElevatedButton.icon(
           onPressed: () => _openModelDialog(),
@@ -537,7 +430,7 @@ class _ModelCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           // The checker's own words, kept only here. The
-                          // administrator is the one who restarts the Kaggle
+                          // administrator is the one who restarts the worker
                           // session, and ERR_NGROK_3200 is the only thing
                           // that says which failure this is.
                           Text(
@@ -685,15 +578,6 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
   bool _isSaving = false;
   String? _error;
 
-  /// `inference` answers POST /predict; `trainer` answers POST /train. One
-  /// registry holds both, so a trainer is registered, switched on and
-  /// health-checked here exactly like a model — which is what makes training
-  /// something an administrator turns on rather than a second system.
-  ///
-  /// Creation only: changing an endpoint's kind afterwards would silently
-  /// repoint every job that referenced it.
-  String _kind = 'inference';
-
   bool get _isEdit => widget.existing != null;
 
   @override
@@ -749,7 +633,6 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
         await widget.service.create(
           name: _name.text.trim(),
           version: _version.text.trim(),
-          kind: _kind,
           endpointUrl: _endpoint.text.trim(),
           description: _description.text.trim(),
           authToken: _authToken.text.trim(),
@@ -824,40 +707,12 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
                       ? 'Version is required'
                       : null,
                 ),
-                // Only when creating. An endpoint that changed kind after jobs
-                // had referenced it would repoint them silently.
-                if (!_isEdit) ...[
-                  const SizedBox(height: 16),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                        value: 'inference',
-                        label: Text('PREDICTION'),
-                      ),
-                      ButtonSegment(value: 'trainer', label: Text('TRAINING')),
-                    ],
-                    selected: {_kind},
-                    onSelectionChanged: (s) => setState(() => _kind = s.first),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _kind == 'trainer'
-                        ? 'Answers POST /train. Researchers can start training '
-                              'runs while at least one of these is active.'
-                        : 'Answers POST /predict. This is what a researcher '
-                              'picks when interpolating frames.',
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
-                ],
-
                 const SizedBox(height: 16),
-                TextFormField(
+                  TextFormField(
                   controller: _endpoint,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'ENDPOINT URL',
-                    helperText: _kind == 'trainer'
-                        ? 'Kaggle / Colab trainer URL, e.g. .../train'
-                        : 'Kaggle / Colab inference URL, e.g. .../predict',
+                    helperText: 'Inference URL, e.g. .../predict',
                   ),
                   validator: (v) {
                     final value = v?.trim() ?? '';

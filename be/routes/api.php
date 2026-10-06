@@ -3,12 +3,10 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AccessRequestController;
-use App\Http\Controllers\API\AdminQueueController;
 use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\AvatarController;
 use App\Http\Controllers\API\MeController;
-use App\Http\Controllers\API\MeTrainingController;
 use App\Http\Controllers\API\MessageController;
 use App\Http\Controllers\API\NewsController;
 use App\Http\Controllers\API\TrainingController;
@@ -102,33 +100,6 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         // Own password. Without this the only way to change one is an admin
         // reset to the shared default, which every admin then knows.
         Route::post('/password', [AuthController::class, 'changePassword'])->name('api.me.password');
-
-        // Training, from the researcher's side. The same shape as prediction:
-        // upload an archive, a job is queued, a remote GPU does the work. Only
-        // the result differs — numbers rather than frames.
-        Route::prefix('training')->group(function () {
-            Route::get('/jobs', [MeTrainingController::class, 'index'])->name('api.me.training.jobs');
-            Route::post('/jobs', [MeTrainingController::class, 'store'])->name('api.me.training.jobs.store');
-            Route::get('/jobs/{id}', [MeTrainingController::class, 'show'])->name('api.me.training.jobs.show');
-            Route::post('/jobs/{id}/cancel', [MeTrainingController::class, 'cancel'])->name('api.me.training.jobs.cancel');
-            Route::get('/jobs/{id}/samples', [MeTrainingController::class, 'samples'])->name('api.me.training.samples');
-            Route::get('/jobs/{id}/samples/{epoch}', [MeTrainingController::class, 'sampleImage'])->name('api.me.training.samples.show');
-            Route::get('/jobs/{id}/dataset/frames', [MeTrainingController::class, 'datasetFrames'])->name('api.me.training.dataset.frames');
-            // `{name}` has to span slashes. The listing beside it hands out
-            // entry names straight from the archive, and real datasets keep
-            // their frames in a folder — `input/HONDA_Used_0051.tif`. Without
-            // this, the client's `Uri.encodeComponent` produced `%2F`, which
-            // Symfony decodes back to a separator before matching, so the URL
-            // named two segments where the route expected one and matched
-            // nothing at all. Every frame in a foldered dataset answered 404.
-            //
-            // Safe because the controller checks the name against the
-            // archive's own listing rather than sanitising it: a name that is
-            // not an entry is refused whatever it looks like.
-            Route::get('/jobs/{id}/dataset/frames/{name}/preview', [MeTrainingController::class, 'datasetFramePreview'])
-                ->where('name', '.*')
-                ->name('api.me.training.dataset.preview');
-        });
     });
 
     // Serving a photo is authenticated rather than public: avatars appear
@@ -157,7 +128,6 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         // Model management
         Route::get('/models', [ModelController::class, 'index'])->name('api.admin.models.index');
         Route::post('/models', [ModelController::class, 'store'])->name('api.admin.models.store');
-        Route::post('/models/sync', [ModelController::class, 'sync'])->name('api.admin.models.sync');
         Route::get('/models/{id}', [ModelController::class, 'show'])->name('api.admin.models.show');
         Route::put('/models/{id}', [ModelController::class, 'update'])->name('api.admin.models.update');
         Route::delete('/models/{id}', [ModelController::class, 'destroy'])->name('api.admin.models.destroy');
@@ -181,7 +151,7 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         Route::delete('/news/{id}', [NewsController::class, 'destroy'])->name('api.admin.news.destroy');
 
         // Managed model training. The platform records what should be trained
-        // and what came back; the GPU lives on Kaggle and talks to the worker
+        // and what came back; the GPU lives on a remote worker and talks to the worker
         // routes below, outside this group.
         Route::get('/training/datasets', [TrainingController::class, 'datasets'])->name('api.admin.training.datasets');
         Route::post('/training/datasets', [TrainingController::class, 'storeDataset'])->name('api.admin.training.datasets.store');
@@ -211,11 +181,6 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         Route::get('/activities', [UserActivityController::class, 'index'])->name('api.admin.activities.index');
         Route::get('/activities/types', [UserActivityController::class, 'getTypes'])->name('api.admin.activities.types');
         Route::get('/users/{id}/activities', [UserActivityController::class, 'userActivities'])->name('api.admin.activities.user');
-
-        // Who is on the model right now, and who is waiting behind them. Live
-        // state only — "who has ever used it" is the prediction history and
-        // the audit trail, and is a different question.
-        Route::get('/queue', [AdminQueueController::class, 'index'])->name('api.admin.queue');
 
         // Free space on the results volume, and how much of what is used the
         // retention sweep will hand back on its own.
