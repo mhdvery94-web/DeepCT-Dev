@@ -6,11 +6,26 @@ berjalan — centang diisi hanya setelah **diverifikasi**, bukan setelah ditulis
 Ini bukan dokumen status. Jangan buat `*_PLAN.md` atau `*_SUMMARY.md` baru;
 perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
-**Terakhir diperbarui:** 1 Oktober 2026
+**Terakhir diperbarui:** 7 Oktober 2026
 
 ---
 
 ## Diketahui, belum dikerjakan
+
+- [ ] **Migrasikan frontend web ke Next.js di `fe_web`.** Fondasi pertama sudah
+      dibuat pada cabang `develop`: landing page responsif, research news dengan
+      satu media stage untuk foto/video, login Sanctum dalam cookie `HttpOnly`,
+      BFF same-origin, guard admin/user, dashboard dan route seluruh modul.
+      `npm run check`, production build 21 route, dan smoke test HTTP lokal sudah
+      lulus. Yang belum boleh disebut selesai: tabel/form CRUD tiap modul,
+      prediksi/training lengkap, URL unduhan besar bertanda tangan, staging API
+      yang terpisah dari database produksi, proyek Vercel Next.js, dan UAT.
+
+- [ ] **Terapkan promosi branch `develop` → `staging` → `main`.** Ketiga branch
+      sudah dibuat lokal dan workflow `web-next.yml` memetakan preview/staging
+      serta production. Setelah didorong, aktifkan branch protection dan wajibkan
+      pull request/check sebelum promosi. `main` tetap satu-satunya branch yang
+      boleh men-deploy backend ke Raspberry Pi.
 
 - [ ] **Selesaikan perpindahan produksi dari VPS ke Raspberry Pi.** Source
       backend sudah berada di `/var/www/deepct-ai`; `deepct-app` dan

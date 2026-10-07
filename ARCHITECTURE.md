@@ -707,8 +707,10 @@ notebook training yang belum ada. Karena itu ia dijadwalkan terakhir, dan
 
 ## 8. Deployment: Raspberry Pi + ngrok + Vercel
 
-Topologi produksi aktif sejak 1 Oktober 2026 adalah frontend statis di Vercel,
-backend persisten pada Raspberry Pi 5, dan worker model di Kaggle/Colab. Kedua
+Topologi produksi aktif sejak 1 Oktober 2026 adalah frontend Flutter statis di
+Vercel, backend persisten pada Raspberry Pi 5, dan worker model di Kaggle/Colab.
+Frontend web Next.js di `fe_web` sedang disiapkan sebagai proyek Vercel kedua;
+Flutter tetap menjadi klien mobile. Kedua
 server persisten/berumur sesi itu diterbitkan lewat tunnel ngrok yang berbeda;
 Vercel tidak menjalankan PHP maupun model.
 
@@ -733,6 +735,21 @@ Output lokal ada di `fe/build/web`. Project Vercel menggunakan Root Directory
 auto-build Git, sedangkan GitHub Actions membentuk `.vercel/output` dari
 artifact Flutter lalu menjalankan `vercel deploy --prebuilt`. Alamat produksi
 yang telah diuji adalah `https://deep-ct-ai-prod.vercel.app`.
+
+Next.js memakai proyek Vercel terpisah karena artifact, runtime, dan project ID
+berbeda dari Flutter. Root repository-nya `fe_web`; token dan organization ID
+boleh sama, tetapi project ID harus `DEEPCT_WEB_VERCEL_PROJECT_ID`. Next.js
+bertindak sebagai **backend-for-frontend**, bukan backend domain: Route Handler
+login menukar kredensial ke Laravel, menyimpan token Sanctum sebagai cookie
+`HttpOnly`, dan proxy same-origin menambahkan bearer token ketika browser
+memanggil Laravel. `proxy.ts` hanya melakukan redirect optimistis; `/user` dan
+setiap endpoint Laravel tetap menjadi pemeriksaan autentikasi/otorisasi yang
+menentukan.
+
+Permintaan JSON, potongan upload, foto, dan video dapat melewati BFF. Hasil
+prediksi sampai sekitar 1,5 GB tidak boleh bergantung selamanya pada fungsi
+Vercel; rancangan lanjutannya adalah URL unduhan Laravel yang singkat umur dan
+bertanda tangan agar byte besar mengalir langsung dari penyimpanan backend.
 
 ### Backend di Vercel — **tidak bisa**, dan bukan soal konfigurasi
 
@@ -998,6 +1015,13 @@ Runner dipasang sebagai service
 variable `RASPI_API_BASE_URL` diperlukan untuk build klien. Vercel memerlukan
 `VERCEL_TOKEN`, `VERCEL_ORG_ID`, dan `VERCEL_PROJECT_ID`; ketiganya berasal dari
 akun/proyek Vercel baru, bukan dari Pi.
+
+Workflow Next.js terpisah berada di `.github/workflows/web-next.yml`: push ke
+`develop` dan `staging` menghasilkan Vercel preview, sedangkan hanya `main`
+yang memakai `--prod`. `DEVELOP_API_BASE_URL` dan `STAGING_API_BASE_URL` harus
+menunjuk instance nonproduksi; pengujian CRUD admin pada staging tidak boleh
+menulis database Raspberry Pi produksi. Promosi yang dimaksud adalah pull
+request `develop` → `staging` → `main`, bukan deploy backend dari ketiga branch.
 
 Urutannya, dan alasan tiap langkah ada:
 

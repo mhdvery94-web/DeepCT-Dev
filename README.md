@@ -18,9 +18,9 @@ frame_001.tif  frame_005.tif          frame_001 … 002 003 004 … frame_005
 ## Architecture
 
 ```
-Flutter (web + Android + iOS)
-          │  HTTPS
-          ▼
+Flutter (Android + iOS)       Next.js (website + admin/user portal)
+             └──────────── HTTPS ────────────┘
+                              ▼
 Laravel 12 + Octane/RoadRunner  ──►  MySQL 8
           │
           │  HTTPS
@@ -89,7 +89,7 @@ Full component and schema documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 | PHP | 8.2+ |
 | MySQL | 8.0+ |
 | Flutter | 3.44+ |
-| Node.js | 18+ (Octane tooling only) |
+| Node.js | 22+ (Next.js 16 and Octane tooling) |
 
 ---
 
@@ -117,7 +117,7 @@ npm run serve:all
 The seeder creates the first administrator. Set `SEED_ADMIN_PASSWORD` in `.env`
 beforehand, or it generates one and prints it once.
 
-### Frontend
+### Flutter client
 
 ```bash
 cd fe
@@ -127,6 +127,20 @@ flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000/api
 
 The API address is a build-time constant, so every target is selected with
 `--dart-define` rather than by editing a file. See [fe/README.md](fe/README.md).
+
+### Next.js website
+
+```bash
+cd fe_web
+cp .env.example .env.local
+npm ci
+npm run dev
+```
+
+Set `LARAVEL_API_BASE_URL=http://127.0.0.1:8000/api`. Laravel remains the only
+backend and authorization authority; Next.js keeps its Sanctum token in an
+`HttpOnly` cookie and presents a same-origin BFF to the browser. See
+[fe_web/README.md](fe_web/README.md).
 
 ### Inference worker
 
@@ -149,6 +163,8 @@ body type is still checked.
 cd be && php artisan test        # 385 tests, 1,536 assertions
 cd fe && flutter analyze         # must be clean
 cd fe && flutter test            # 276 tests across 33 files
+cd fe_web && npm run check       # ESLint + TypeScript
+cd fe_web && npm run build       # production Next.js build
 ```
 
 The backend suite runs against MySQL rather than SQLite: several migrations use
@@ -176,7 +192,10 @@ Pushing a `v*` tag runs all three in CI and publishes the artifacts — see
 
 ## Deployment
 
-The web client is a static bundle and deploys to any static host or CDN.
+The existing Flutter web client is a static bundle. The new `fe_web` client is
+a Next.js application with server-side Route Handlers, deployed as a separate
+Vercel project. Flutter remains the mobile client; both clients use the same
+Laravel API and database.
 
 **The backend requires a persistent server**, not a serverless platform. Octane
 is a long-lived process, the queue worker and scheduler are long-lived
@@ -198,8 +217,9 @@ self-hosted GitHub runner is online and the production deployment from commit
 `c6f4f1f` completed successfully. A manual, secret-backed bootstrap created and
 verified both administrator and researcher accounts; production login, role
 separation, logout and token revocation passed 12 of 12 black-box checks. The
-Flutter site is live at `https://deep-ct-ai-prod.vercel.app` through the new
-Vercel project.
+Flutter site is live at `https://deep-ct-ai-prod.vercel.app`. The Next.js
+project is being introduced separately under repository root `fe_web`; it is
+not a replacement for the Laravel backend.
 
 The application cutover is complete, but the old VPS's historical database and
 `storage/` contents have **not** been copied. The production model catalogue is
@@ -210,8 +230,10 @@ inside the word “migrated”.
 The release workflow now targets a self-hosted ARM64 runner labelled
 `deepct-raspi`; the Pi is private behind NetBird, so a GitHub-hosted runner
 cannot SSH into it. `RASPI_API_BASE_URL` is the one build-time API address and
-has no fallback to the retired VPS. Vercel still uses `VERCEL_TOKEN`,
-`VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` to receive the prebuilt web artifact.
+has no fallback to the retired VPS. The Flutter deployment keeps its current
+Vercel project ID. Next.js requires a separate
+`DEEPCT_WEB_VERCEL_PROJECT_ID`; the token and organization may be shared
+because both projects can belong to the same Vercel account.
 
 The one-time provisioning script retains its historical filename,
 [`be/scripts/provision-vps.sh`](be/scripts/provision-vps.sh), but now also
@@ -233,6 +255,7 @@ pre-deployment checklist.
 | [API.md](API.md) | Complete endpoint reference (105 endpoints) |
 | [be/README.md](be/README.md) | Backend setup, operations, troubleshooting |
 | [fe/README.md](fe/README.md) | Frontend structure, breakpoints, platform notes |
+| [fe_web/README.md](fe_web/README.md) | Next.js website, BFF/auth boundary, development and deployment |
 | [ROADMAP.md](ROADMAP.md) | Planned work, and what was deliberately not built |
 | [CHANGELOG.md](CHANGELOG.md) | What changed and why |
 | [CLAUDE.md](CLAUDE.md) | Working agreements, and the traps that cost time here |

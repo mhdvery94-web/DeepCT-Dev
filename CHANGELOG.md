@@ -18,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Add the first Next.js 16 web-client slice under `fe_web`: a responsive BRIN
+  landing page, a desktop/tablet research-news media stage that switches image
+  and video without stacking oversized players, a Sanctum login held in an
+  `HttpOnly` cookie, a same-origin Laravel BFF, secure server-side user/role
+  checks, forced-password-change flow, portal shell and module routes. ESLint,
+  TypeScript, a 21-route production build and local HTTP smoke checks pass.
+- Establish the intended `develop` → `staging` → `main` promotion path and add
+  an isolated Next.js Vercel workflow. The new web project reuses the Vercel
+  account/token if desired but requires its own
+  `DEEPCT_WEB_VERCEL_PROJECT_ID`; `main` remains the only branch allowed to
+  deploy Laravel to the Raspberry Pi.
 - Complete the application cutover to the new Vercel project and Raspberry Pi
   backend. Release run `36853332173` built every supported target, deployed the
   backend locally on the ARM64 runner, and published the prebuilt Flutter web
