@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * A shared secret for the inference worker, and a say over TLS.
  *
- * The worker has never had any authentication. On Kaggle behind a randomly
+ * The worker has never had any authentication. Behind a randomly
  * named ngrok tunnel that was security by obscurity, and it held — nobody
  * guesses `reaffirm-bullwhip-subzero`. On a workstation sitting on the lab
  * network at a fixed address it holds nothing at all: anyone on that network
@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * `verify_tls` defaults to **false**, which is exactly what the code did
  * before this migration — `withoutVerifying()` was hardcoded in all five
- * places that call a worker, for ngrok and Colab certificates. Defaulting to
+ * places that call a worker, for ngrok and self-signed certificates. Defaulting to
  * true here would have switched TLS verification on for a live endpoint
  * nobody had tested it against. The admin form offers it checked for *new*
  * models instead, so the decision is made where someone can see it.

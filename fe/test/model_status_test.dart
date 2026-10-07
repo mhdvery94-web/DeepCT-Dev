@@ -71,7 +71,7 @@ void main() {
   testWidgets('a slow worker is amber and is not called offline', (
     tester,
   ) async {
-    // The GPU sits in a Kaggle session behind a tunnel, so a probe past five
+    // The GPU sits in a worker session behind a tunnel, so a probe past five
     // seconds is ordinary. Painting it red said the model was dead when it
     // was answering.
     ModelStatusStrip.debugLoader = () async => [

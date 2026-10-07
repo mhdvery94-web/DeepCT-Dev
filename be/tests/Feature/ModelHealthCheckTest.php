@@ -59,7 +59,7 @@ class ModelHealthCheckTest extends TestCase
         $this->assertSame('offline', $model->status);
         $this->assertSame('tunnel_down', $model->health_check_reason);
         // The raw words survive, because the administrator is the one who
-        // restarts Kaggle and this code is what says which failure it was.
+        // restarts the worker and this code is what says which failure it was.
         $this->assertStringContainsString(
             'ERR_NGROK_3200',
             $model->health_check_error
@@ -123,5 +123,43 @@ class ModelHealthCheckTest extends TestCase
         $model->refresh();
         $this->assertSame('online', $model->status);
         $this->assertTrue($model->worker_active);
+    }
+
+    public function test_a_busy_model_is_not_probed(): void
+    {
+        // A model running a job cannot answer a probe — the worker is
+        // single-threaded and the GPU is busy. Probing it would mark it
+        // offline for something that is plainly working.
+        Http::fake(fn () => throw new \Exception('Should not be called'));
+
+        $model = $this->model([
+            'status' => 'online',
+            'current_jobs_count' => 1,
+        ]);
+
+        $result = (new ModelHealthChecker())->check($model);
+
+        $model->refresh();
+        $this->assertSame('online', $model->status);
+        $this->assertArrayHasKey('skipped', $result);
+        $this->assertTrue($result['skipped']);
+    }
+
+    public function test_a_busy_model_in_a_pool_is_not_probed(): void
+    {
+        Http::fake(fn () => throw new \Exception('Should not be called'));
+
+        $model = $this->model([
+            'status' => 'online',
+            'current_jobs_count' => 1,
+        ]);
+
+        $results = (new ModelHealthChecker())->checkMany(
+            collect([$model])
+        );
+
+        $model->refresh();
+        $this->assertSame('online', $model->status);
+        $this->assertTrue($results[$model->id]['skipped'] ?? false);
     }
 }

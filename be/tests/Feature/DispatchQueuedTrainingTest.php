@@ -36,7 +36,7 @@ class DispatchQueuedTrainingTest extends TestCase
     private function trainer(): Model
     {
         return Model::create([
-            'name' => 'Kaggle trainer',
+            'name' => 'Remote trainer',
             'version' => 'v1',
             'kind' => 'trainer',
             'endpoint_url' => 'https://trainer.example/train',

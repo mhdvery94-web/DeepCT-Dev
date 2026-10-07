@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Http;
 /**
  * Determines whether a remotely deployed inference model is reachable.
  *
- * The models run as FastAPI apps on Kaggle / Google Colab, exposed through an
+ * The models run as FastAPI apps on a remote GPU, exposed through an
  * ngrok tunnel. Legacy workers expose one `POST /predict`; multi-model workers
  * expose `GET /models` and one `POST /predict/{model_name}` per catalogue row.
  *
@@ -70,6 +70,20 @@ class ModelHealthChecker
             );
         }
 
+        // A model that is actively running a job is busy on the GPU. The
+        // worker is single-threaded, so a GET probe that arrives while
+        // inference is running gets no response and is reported as a failure
+        // — and a "model offline" notification fires for something that is
+        // plainly working. Skip the probe entirely while a job is in
+        // progress; the status stays what it was, which was "online" (the
+        // gate that allowed the job to start).
+        if ($model->current_jobs_count > 0) {
+            return [
+                'status' => $model->status,
+                'skipped' => true,
+            ];
+        }
+
         try {
             $startTime = microtime(true);
 
@@ -117,6 +131,18 @@ class ModelHealthChecker
                     $model, 'offline', null, 'Endpoint URL is not set',
                     self::REASON_NO_ENDPOINT
                 );
+
+                continue;
+            }
+
+            // Same guard as check(): a model busy with a job cannot answer
+            // a probe, and failing it would send a spurious "offline"
+            // notification for a model that is demonstrably working.
+            if ($model->current_jobs_count > 0) {
+                $results[$model->id] = [
+                    'status' => $model->status,
+                    'skipped' => true,
+                ];
 
                 continue;
             }

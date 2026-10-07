@@ -605,8 +605,9 @@ Requires a running `php artisan schedule:work` — see *Scheduled Commands* abov
   Not used for API auth. Safe to ignore; do **not** drop it without first
   switching `SESSION_DRIVER` to `array`.
 
-18 tables total, counting `migrations`. The schema and the reasoning behind it
-are documented in [../ARCHITECTURE.md](../ARCHITECTURE.md) §3.
+There are **23 tables total**, counting `migrations`: 15 application tables and
+8 framework tables. The authoritative schema and the reasoning behind it are
+documented in [../ARCHITECTURE.md](../ARCHITECTURE.md) §3.
 
 ---
 
@@ -622,6 +623,19 @@ SEED_ADMIN_PASSWORD=            # leave empty and one is generated, printed once
 Nothing is hard-coded — this seeder runs on production too, and a password
 written into a repository is a password everyone has. The sample researcher is
 skipped when `APP_ENV=production`.
+
+Production can deliberately bootstrap one researcher as well:
+
+```env
+SEED_USER_EMAIL=researcher@example.org
+SEED_USER_PASSWORD=choose-a-secret
+```
+
+Both values are required together. The release workflow exposes this only
+through a manual `bootstrap_users` dispatch; passwords come from repository
+secrets, are not cached into Laravel configuration, and are followed by real
+admin/user login smoke tests against the restarted Octane process. Ordinary
+push deployments never seed or reset either account.
 
 Accounts created afterwards (by an administrator, or by approving a landing-page
 request) get `UserController::DEFAULT_PASSWORD` and **cannot reach the console
@@ -652,7 +666,8 @@ curl http://127.0.0.1:8000/api/admin/models \
 php artisan test
 ```
 
-**383 tests, 1,526 assertions.** They run against MySQL, not sqlite: three
+**385 tests, 1,536 assertions** passed in GitHub Actions on 1 October 2026. They
+run against MySQL, not sqlite: three
 migrations use `ALTER TABLE ... MODIFY` and `activity_type` starts as an enum
 the application long outgrew, so a sqlite suite would produce both false passes
 and false failures. Create the database once:
@@ -939,6 +954,8 @@ php artisan migrate
 - [../ARCHITECTURE.md](../ARCHITECTURE.md) - Components, data flow, schema, decisions
 - [../API.md](../API.md) - Complete API reference
 - [../CHANGELOG.md](../CHANGELOG.md) - What changed and why
+- [../WHITE_BOX_TESTING.md](../WHITE_BOX_TESTING.md) - Repeatable internal test scenarios and observed CI evidence
+- [../USER_ACCEPTANCE_TESTING.md](../USER_ACCEPTANCE_TESTING.md) - Production API and web acceptance scenarios
 
 ---
 
@@ -952,11 +969,14 @@ php artisan migrate
 - [x] Run API, queue worker and scheduler through PM2 (`deepct-app`)
 - [x] Run the port-8000 ngrok tunnel through PM2 (`deepct-ngrok`)
 - [x] Enable `pm2-jihyo.service` and save the process list for reboot recovery
+- [x] Bootstrap and verify administrator/researcher login from repository secrets
+- [x] Deploy the prebuilt web client to the new Vercel project
 - [ ] Enable opcache
-- [ ] Configure database backup
+- [x] Create a rotating database dump before every migration
+- [ ] Copy backups off the Raspberry Pi
 - [ ] Setup monitoring (logs, errors)
 - [ ] Configure CORS properly
-- [ ] SSL certificate
+- [x] HTTPS through the reserved ngrok tunnel
 - [ ] Rate limiting tuning
 
 ---
@@ -969,6 +989,6 @@ php artisan migrate
 
 ---
 
-**Last Updated:** August 14, 2026  
+**Last Updated:** October 1, 2026  
 **Laravel Version:** 12.66.0  
-**Status:** Production Ready
+**Status:** Deployed on Raspberry Pi; model catalogue sync and real-worker acceptance remain open

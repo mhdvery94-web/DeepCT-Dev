@@ -534,7 +534,7 @@ class _UploadScreenState extends State<UploadScreen> {
                 const SizedBox(height: 20),
               ],
 
-              // Availability, polled every ten seconds. The Kaggle session
+              // Availability, polled every ten seconds. The worker session
               // behind the model expires on its own, and starting an upload
               // against a model that died four minutes ago wastes the whole
               // archive.

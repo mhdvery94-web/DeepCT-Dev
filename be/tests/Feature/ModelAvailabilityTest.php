@@ -51,7 +51,7 @@ class ModelAvailabilityTest extends TestCase
     /**
      * A worker answering slowly is a working worker.
      *
-     * The GPU sits in a Kaggle session behind an ngrok tunnel, so a probe
+     * The GPU sits in a worker session behind an ngrok tunnel, so a probe
      * crossing five seconds is the ordinary case rather than the exception.
      * Reporting it unavailable took a live model out of the picker entirely.
      */

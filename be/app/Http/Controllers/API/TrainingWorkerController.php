@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
  * [EnsureTrainingWorker] for why.
  *
  * The whole protocol is built around one fact: **the worker will die.** A
- * Kaggle session lasts 9–12 hours and training takes days, so a session ending
+ * A worker session lasts 9–12 hours and training takes days, so a session ending
  * is the normal course of events, not an error. Nothing here treats silence as
  * failure — a job whose worker goes quiet returns to `queued` with its
  * checkpoint intact and the next worker carries on from there.

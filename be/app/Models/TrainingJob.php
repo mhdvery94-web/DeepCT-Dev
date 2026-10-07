@@ -133,7 +133,7 @@ class TrainingJob extends EloquentModel
     /**
      * Held by a worker that has stopped reporting.
      *
-     * Not "failed": the usual cause is a Kaggle session expiring on schedule,
+     * Not "failed": the usual cause is a worker session expiring on schedule,
      * which is what this whole system is built around.
      */
     public function scopeStale(Builder $query): Builder

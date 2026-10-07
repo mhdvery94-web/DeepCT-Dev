@@ -13,7 +13,7 @@ void main() {
         'total_epochs': 200,
         'progress': 0.2,
         'metrics': {'loss': 0.031, 'psnr': 34.2},
-        'worker_label': 'kaggle-t4-1',
+        'worker_label': 'worker-t4-1',
         'dataset': {'id': 1, 'name': 'Balanced-t frames'},
         'has_checkpoint': true,
       });
@@ -22,12 +22,12 @@ void main() {
       expect(job.isFinished, isFalse);
       expect(job.epochLabel, 'epoch 40 / 200');
       expect(job.progress, 0.2);
-      expect(job.workerLabel, 'kaggle-t4-1');
+      expect(job.workerLabel, 'worker-t4-1');
       expect(job.datasetName, 'Balanced-t frames');
     });
 
     test('a job whose worker went quiet reads as stalled', () {
-      // Not an error: a Kaggle session ending is the normal course of events,
+      // Not an error: a worker session ending is the normal course of events,
       // and the platform hands the job back with its checkpoint.
       final job = TrainingJob.fromJson({
         'id': 3,

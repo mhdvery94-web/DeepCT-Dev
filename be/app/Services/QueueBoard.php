@@ -37,7 +37,7 @@ class QueueBoard
      * How many recent runs the estimate averages over.
      *
      * Enough to smooth a single slow run, few enough that a GPU swap or a
-     * Kaggle session that came back slower shows up the same day rather than
+     * Worker session that came back slower shows up the same day rather than
      * being averaged away by months of history.
      */
     private const SAMPLE_SIZE = 20;

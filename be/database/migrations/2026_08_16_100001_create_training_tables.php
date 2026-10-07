@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * The platform **manages** training; it never runs it. Three constraints force
  * that shape and none of them are negotiable: this machine has no GPU and a
- * PHP backend, the Kaggle session that does have a GPU expires every 9–12
+ * PHP backend, the worker session that does have a GPU expires every 9–12
  * hours, and training takes days.
  *
  * So a job is a row that a remote worker claims, reports progress against, and
@@ -30,7 +30,7 @@ return new class extends Migration
             // `upload` puts the archive on this machine — fine for a few
             // hundred megabytes. `url` records where the worker should fetch
             // it from instead, which is what a real dataset wants: making 20 GB
-            // travel up a home ngrok tunnel and back down to Kaggle is absurd
+            // travel up a home ngrok tunnel and back to the worker is absurd
             // when the worker has a fast link and can pull it directly.
             $table->enum('source_type', ['upload', 'url'])->default('upload');
             $table->string('archive_path')->nullable();
@@ -83,13 +83,13 @@ return new class extends Migration
 
             $table->text('error_message')->nullable();
 
-            // Which machine holds it, in the worker's own words ("kaggle-t4-2").
+            // Which machine holds it, in the worker's own words ("worker-t4-2").
             $table->string('worker_label', 100)->nullable();
 
             $table->timestamp('claimed_at')->nullable();
 
             // The heart of the whole design. A worker that stops reporting has
-            // not failed — its Kaggle session expired, which is the normal
+            // not failed — its worker session expired, which is the normal
             // course of events here — so the job returns to `queued` with its
             // checkpoint intact and the next worker carries on.
             $table->timestamp('heartbeat_at')->nullable();

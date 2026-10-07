@@ -66,7 +66,7 @@ return [
     | A hosted dataset travels through this machine, so it has to stay modest.
     | Anything larger belongs on a URL the worker fetches for itself — see the
     | note in the migration about not sending 20 GB up a home tunnel and back
-    | down to Kaggle.
+    | down to the worker.
     |
     */
     'max_dataset_bytes' => (int) env('TRAINING_MAX_DATASET_BYTES', 512 * 1024 * 1024),

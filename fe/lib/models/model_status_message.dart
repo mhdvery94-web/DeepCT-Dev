@@ -3,7 +3,7 @@
 /// The health checker writes two things: its own words in
 /// `health_check_error` — "Tunnel is not running (ERR_NGROK_3200)",
 /// "Endpoint unreachable (HTTP 502)" — and a code in `health_check_reason`.
-/// The words are written for whoever restarts the Kaggle session, which is an
+/// The words are written for whoever restarts the worker session, which is an
 /// administrator; the admin screen still shows them verbatim, because
 /// ERR_NGROK_3200 is the only thing that says which failure this is.
 ///

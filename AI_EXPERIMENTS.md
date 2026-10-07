@@ -5,6 +5,12 @@
 > **mengapa interpolasi selalu t=0.5**: model mengabaikan nilai `time_scalar`
 > lain, sehingga celah besar diisi secara rekursif dari titik tengah.
 > Implementasinya ada di `be/app/Jobs/ProcessDeepLearningImage.php`.
+>
+> **Catatan deployment 1 Oktober 2026:** migrasi web/API dan autentikasi tidak
+> menghasilkan eksperimen model baru. Katalog model pada database Raspberry Pi
+> masih kosong, sehingga tidak ada hasil prediksi produksi yang boleh ditulis
+> sebagai validasi baru. Sinkronisasi `/models` dan uji worker nyata tetap
+> tercatat sebagai pekerjaan terbuka di [ROADMAP.md](ROADMAP.md).
 
 ---
 

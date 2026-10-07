@@ -1,6 +1,6 @@
 /// A deep learning model registered in the platform.
 ///
-/// Models are deployed remotely (Kaggle / Google Colab). Several rows may
+/// Models are deployed remotely (FastAPI worker). Several rows may
 /// share [baseUrl] while each keeps its own [endpoint] prediction path.
 class ModelInfo {
   final int id;
@@ -45,7 +45,7 @@ class ModelInfo {
   ///
   /// False on every worker registered before this existed, which is exactly
   /// what the platform did then: verification was hardcoded off for tunnel
-  /// and Colab certificates.
+  /// and self-signed certificates.
   final bool verifyTls;
 
   const ModelInfo({

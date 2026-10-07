@@ -14,7 +14,7 @@ return new class extends Migration
      * 1. `file_path` was NOT NULL with no default, but ModelController::store()
      *    never sets it. Under STRICT_TRANS_TABLES every insert failed with
      *    "Field 'file_path' doesn't have a default value" (HTTP 500).
-     *    Models are now deployed remotely (Kaggle/Colab) and identified by
+     *    Models are now deployed remotely and identified by
      *    `endpoint_url`, so a local file path is optional.
      *
      * 2. `status` was enum('online','offline','error') but the application

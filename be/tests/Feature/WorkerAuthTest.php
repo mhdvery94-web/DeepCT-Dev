@@ -13,7 +13,7 @@ use Tests\TestCase;
 /**
  * The worker has never had a credential.
  *
- * On Kaggle behind a randomly named tunnel that was security by obscurity and
+ * Behind a randomly named tunnel that was security by obscurity and
  * it held. On a workstation at a fixed address on the lab network it holds
  * nothing: anyone on that network can spend the GPU. These tests are about the
  * secret reaching the worker, never reaching a client, and not being wiped by

@@ -14,6 +14,12 @@
 > disimpan sebagai `uploaded` untuk preview, lalu pengguna menekan START agar
 > masuk antrean. Target iOS dan sejumlah fitur FASE 3 di bawah ini juga sudah
 > berubah status; lihat [API.md](API.md) untuk kontrak yang berlaku.
+> Deployment publik saat ini adalah Flutter web di Vercel, Laravel/Octane di
+> Raspberry Pi melalui ngrok, serta worker model terpisah di Kaggle/Colab.
+> Penerimaan produksi 1 Oktober 2026 ada di
+> [USER_ACCEPTANCE_TESTING.md](USER_ACCEPTANCE_TESTING.md); hasil white box ada
+> di [WHITE_BOX_TESTING.md](WHITE_BOX_TESTING.md). Katalog model produksi masih
+> kosong, sehingga penerimaan tersebut belum mencakup prediksi GPU end-to-end.
 
 ---
 

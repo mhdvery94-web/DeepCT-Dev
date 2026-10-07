@@ -16,7 +16,7 @@ use Tests\TestCase;
 /**
  * Managed model training.
  *
- * The assertions that matter are the ones about a worker **dying**: a Kaggle
+ * The assertions that matter are the ones about a worker **dying**: a worker
  * session lasts 9–12 hours and training takes days, so a worker disappearing
  * mid-run is the normal course of events. A job that failed permanently every
  * time that happened would never finish a multi-day training.
@@ -104,7 +104,7 @@ class TrainingTest extends TestCase
     public function test_an_admin_can_register_a_dataset_by_url(): void
     {
         // The realistic case: a 20 GB dataset should never travel up a home
-        // tunnel and back down to Kaggle.
+        // tunnel and back to the worker.
         $this->apiAs($this->adminToken())
             ->postJson('/api/admin/training/datasets', [
                 'name' => 'Balanced-t frames',
@@ -255,12 +255,12 @@ class TrainingTest extends TestCase
         $this->makeJob(['name' => 'Second']);
 
         $response = $this->asWorker()
-            ->postJson('/api/training/worker/claim', ['worker_label' => 'kaggle-t4-1'])
+            ->postJson('/api/training/worker/claim', ['worker_label' => 'worker-t4-1'])
             ->assertOk();
 
         $this->assertSame($first->id, $response->json('data.id'));
         $this->assertSame('claimed', $first->fresh()->status);
-        $this->assertSame('kaggle-t4-1', $first->fresh()->worker_label);
+        $this->assertSame('worker-t4-1', $first->fresh()->worker_label);
     }
 
     public function test_claiming_an_empty_queue_is_not_an_error(): void
@@ -343,7 +343,7 @@ class TrainingTest extends TestCase
 
     public function test_a_dead_worker_returns_the_job_to_the_queue(): void
     {
-        // The centre of the whole design. A Kaggle session ending is normal,
+        // The centre of the whole design. A worker session ending is normal,
         // not a failure, and the checkpoint is what the next worker resumes
         // from.
         $job = $this->makeJob();

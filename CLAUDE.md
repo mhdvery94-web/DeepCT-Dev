@@ -302,9 +302,9 @@ The PHP guard extends PHPUnit's `TestCase`, not Laravel's, so it uses
 ## Verify your work
 
 ```bash
-cd be && php artisan test          # 368 tests, needs the db_aict_test database
+cd be && php artisan test          # 385 tests, needs the db_aict_test database
 cd fe && flutter analyze           # must be clean
-cd fe && flutter test              # 274 tests
+cd fe && flutter test              # 276 tests
 cd fe && flutter build apk --release
 ```
 
@@ -320,6 +320,11 @@ real worker. A passing build says nothing about whether interpolation works.
 Nothing is hard-coded. `php artisan db:seed` creates the first administrator
 from `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`; leave the password unset and
 the seeder generates one and prints it once.
+
+On production, an explicit `SEED_USER_EMAIL` / `SEED_USER_PASSWORD` pair also
+creates or updates one verified researcher. The release workflow supplies both
+passwords only for a manual `bootstrap_users` dispatch and verifies both roles
+by logging in after Octane is ready; ordinary pushes never reset accounts.
 
 New accounts created by an administrator get the default in
 `UserController::DEFAULT_PASSWORD` and **cannot reach the console** until they

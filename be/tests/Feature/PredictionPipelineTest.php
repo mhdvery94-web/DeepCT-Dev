@@ -23,7 +23,7 @@ use ZipArchive;
 /**
  * Upload through to generated frames.
  *
- * The GPU worker is faked: a real call costs ~20 seconds and Kaggle quota, and
+ * The GPU worker is faked: a real call costs ~20 seconds and GPU quota, and
  * the thing worth testing here is our orchestration, not the model. The fake
  * reproduces the worker's actual contract, including the awkward part — a
  * handled failure comes back as JSON with **HTTP 200**.

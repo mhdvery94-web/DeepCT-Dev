@@ -2,7 +2,7 @@
 ///
 /// Either an archive hosted by the platform, or a URL the GPU worker fetches
 /// for itself — a 20 GB dataset has no business travelling up a home tunnel
-/// and back down to Kaggle.
+/// and back down to the worker.
 /// Which metrics get a column, and in what order.
 ///
 /// The table is built from whatever a notebook reports, so it survives one
@@ -243,7 +243,7 @@ class TrainingJob {
 
   /// True when a worker holds the job but has not reported recently.
   ///
-  /// Not an error: a Kaggle session ending is the normal course of events, and
+  /// Not an error: a worker session ending is the normal course of events, and
   /// the platform will hand the job back to the queue with its checkpoint.
   bool get looksStalled {
     if (!isActive) return false;

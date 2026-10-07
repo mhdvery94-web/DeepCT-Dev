@@ -6,24 +6,24 @@ berjalan — centang diisi hanya setelah **diverifikasi**, bukan setelah ditulis
 Ini bukan dokumen status. Jangan buat `*_PLAN.md` atau `*_SUMMARY.md` baru;
 perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
-**Terakhir diperbarui:** 30 September 2026
+**Terakhir diperbarui:** 1 Oktober 2026
 
 ---
 
 ## Diketahui, belum dikerjakan
 
 - [ ] **Selesaikan perpindahan produksi dari VPS ke Raspberry Pi.** Source
-      backend lokal sudah dipasang langsung ke `/var/www/deepct-ai` dan
-      diverifikasi lagi pada 30 September: seluruh migrasi berstatus `Ran`,
-      `deepct-app` dan `deepct-ngrok` hidup di bawah PM2/systemd,
-      `/api/health` serta `/api/news` menjawab 200 melalui HTTPS ngrok, runner
-      GitHub ARM64 `deepct-raspi` online, dan deploy backend dari Actions sudah
-      berhasil. `RASPI_API_BASE_URL` sudah menunjuk ke tunnel tersebut.
-      Database Pi masih kosong. Yang tersisa: membuat proyek Vercel baru dan
-      memasang tiga secret-nya, uji kompatibilitas MariaDB terhadap suite
-      penuh, pemindahan `APP_KEY`/database/`storage` dari VPS, pengujian
-      ujung-ke-ujung terhadap worker model nyata, masa observasi, lalu
-      penghentian VPS.
+      backend sudah berada di `/var/www/deepct-ai`; `deepct-app` dan
+      `deepct-ngrok` hidup di bawah PM2/systemd; API publik, runner ARM64,
+      deploy otomatis, dan proyek Vercel baru sudah terverifikasi. Workflow
+      manual 1 Oktober juga membuat akun administrator dan researcher dari
+      repository secrets, lalu membuktikan keduanya dapat login pada Octane
+      yang benar-benar berjalan. Suite MySQL lulus 385 test/1.536 asersi,
+      Flutter lulus 276 test, dan 12/12 pengujian black box produksi lulus.
+      Yang tersisa sebelum VPS boleh dimatikan: putuskan apakah data historis
+      dan `storage/` VPS perlu disalin, sinkronkan katalog model produksi,
+      jalankan prediksi ujung-ke-ujung terhadap worker nyata, lakukan masa
+      observasi, siapkan backup di luar Pi, lalu hentikan VPS.
 
 - [x] **`hyperparameters` dikirim sebagai `[]`, bukan `{}`.** *(1.35.0)*
       Ternyata tiga tempat, bukan satu: `MeTrainingController`,
@@ -103,9 +103,11 @@ perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
       Bobotnya ada di `models-ai/generator(Revisi 4 STUNet balanced-t maxgap8).h5`
       dan **tidak dipasang**; sistem memakai bobot dasar.
 
-- [ ] **`ApiConfig.baseUrl` masih default ke terowongan ngrok pribadi.**
-      Dibiarkan atas permintaan, karena masih tahap pengembangan. Harus
-      diganti sebelum ada penyebaran publik.
+- [ ] **`ApiConfig.baseUrl` sumber masih default ke tunnel worker lama.**
+      Build produksi sudah aman karena workflow selalu menyuntikkan
+      `RASPI_API_BASE_URL`, dan bundle Vercel telah diverifikasi memakai API
+      Pi. Default sumber tetap perlu diganti agar build manual tanpa
+      `--dart-define` tidak salah alamat.
 
 ---
 

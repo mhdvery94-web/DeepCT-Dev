@@ -146,7 +146,7 @@ body type is still checked.
 ## Testing
 
 ```bash
-cd be && php artisan test        # 383 tests, 1,526 assertions
+cd be && php artisan test        # 385 tests, 1,536 assertions
 cd fe && flutter analyze         # must be clean
 cd fe && flutter test            # 276 tests across 33 files
 ```
@@ -181,23 +181,31 @@ The web client is a static bundle and deploys to any static host or CDN.
 **The backend requires a persistent server**, not a serverless platform. Octane
 is a long-lived process, the queue worker and scheduler are long-lived
 processes, the health check runs on a one-minute interval, a prediction job may
-run for up to two hours, and results reach ~1.5 GB on disk. Production is being
+run for up to two hours, and results reach ~1.5 GB on disk. Production has been
 moved from the VPS to a Raspberry Pi 5 with nginx, PM2 and RoadRunner; the
 public API is exposed by an ngrok HTTPS tunnel on port 8000. The Flutter web bundle is
 built by GitHub Actions and sent to Vercel as prebuilt output, so Vercel never
 runs Laravel.
 
-**Migration state observed on 30 September 2026:** the backend is installed at
+**Migration state observed on 1 October 2026:** the backend is installed at
 `/var/www/deepct-ai` on the Pi. PHP 8.2, MariaDB 10.11, nginx and ARM64
 RoadRunner are installed. PM2 keeps `deepct-app` (`npm run serve:all`) and
 `deepct-ngrok` online, and the enabled `pm2-jihyo.service` restores both after a
 reboot. Every migration reports `Ran`; `/api/health` and the database-backed
 `/api/news` both answer 200 locally and at
 `https://zestfully-usable-pledge.ngrok-free.dev`. The `deepct-raspi`
-self-hosted GitHub runner is online and a backend deploy from commit `a0f2ec7`
-completed successfully. The Pi database is still deliberately fresh and empty.
-VPS data and storage, the new Vercel project, and a real model-worker
-end-to-end run have **not** been migrated yet, so this is not the final cutover.
+self-hosted GitHub runner is online and the production deployment from commit
+`c6f4f1f` completed successfully. A manual, secret-backed bootstrap created and
+verified both administrator and researcher accounts; production login, role
+separation, logout and token revocation passed 12 of 12 black-box checks. The
+Flutter site is live at `https://deep-ct-ai-prod.vercel.app` through the new
+Vercel project.
+
+The application cutover is complete, but the old VPS's historical database and
+`storage/` contents have **not** been copied. The production model catalogue is
+also still empty, so a real prediction against the GPU worker has not yet been
+accepted on the new deployment. Those are explicit follow-up items, not hidden
+inside the word “migrated”.
 
 The release workflow now targets a self-hosted ARM64 runner labelled
 `deepct-raspi`; the Pi is private behind NetBird, so a GitHub-hosted runner
@@ -222,12 +230,14 @@ pre-deployment checklist.
 | File | Contents |
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Components, data flow, database schema, technical decisions, deployment |
-| [API.md](API.md) | Complete endpoint reference (104 endpoints) |
+| [API.md](API.md) | Complete endpoint reference (105 endpoints) |
 | [be/README.md](be/README.md) | Backend setup, operations, troubleshooting |
 | [fe/README.md](fe/README.md) | Frontend structure, breakpoints, platform notes |
 | [ROADMAP.md](ROADMAP.md) | Planned work, and what was deliberately not built |
 | [CHANGELOG.md](CHANGELOG.md) | What changed and why |
 | [CLAUDE.md](CLAUDE.md) | Working agreements, and the traps that cost time here |
+| [WHITE_BOX_TESTING.md](WHITE_BOX_TESTING.md) | Repeatable unit, integration and build scenarios with observed CI results |
+| [USER_ACCEPTANCE_TESTING.md](USER_ACCEPTANCE_TESTING.md) | Production black-box and user acceptance scenarios with observed results |
 | [PRD.md](PRD.md) · [DESIGN.md](DESIGN.md) · [AI_EXPERIMENTS.md](AI_EXPERIMENTS.md) | Product intent, visual system, model research journal |
 
 ---

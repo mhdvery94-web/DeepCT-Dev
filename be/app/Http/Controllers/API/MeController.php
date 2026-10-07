@@ -92,7 +92,7 @@ class MeController extends Controller
                 // `trouble` means the worker answered, only slowly. It is a
                 // live endpoint, and refusing it took a working model out of
                 // the picker for the most ordinary condition this platform
-                // has: a Kaggle GPU behind a tunnel.
+                // has: a remote GPU behind a tunnel.
                 'is_available' => in_array($m->status, ['online', 'trouble'], true),
                 // The client polls this every 10 seconds and shows how fresh
                 // the answer is. Without the timestamp a stale scheduler looks

@@ -11,7 +11,6 @@ import '../../theme/app_theme.dart';
 import '../landing/landing_page.dart';
 import '../messages/message_thread_screen.dart';
 import 'prediction_history_screen.dart';
-import 'training_screen.dart';
 import 'upload_screen.dart';
 import 'user_activity_screen.dart';
 import 'user_home_screen.dart';
@@ -24,7 +23,6 @@ enum UserSection {
   dashboard('Dashboard', Icons.dashboard_outlined),
   analysis('New Analysis', Icons.auto_awesome_outlined),
   history('Results & History', Icons.folder_outlined),
-  training('Model Training', Icons.model_training_outlined),
   activity('My Activity', Icons.history),
   messages('Messages', Icons.forum_outlined);
 
@@ -113,8 +111,6 @@ class _UserShellState extends State<UserShell> {
         // The key forces a fresh State when arriving from a new upload, so the
         // list reloads instead of showing the previous page's cached items.
         return PredictionHistoryScreen(key: UniqueKey());
-      case UserSection.training:
-        return const TrainingScreen();
       case UserSection.messages:
         return MessageThreadScreen(
           // Opening the thread reads it, so the badge should go with it

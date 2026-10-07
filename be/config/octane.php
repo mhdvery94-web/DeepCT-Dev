@@ -221,7 +221,7 @@ return [
 
     // Becomes RoadRunner's `http.pool.supervisor.exec_ttl`. The default of 30s
     // killed worker processes mid-request during a model test prediction, which
-    // waits on a remote Kaggle GPU (~15s, and slower for larger frames).
+    // waits on a remote GPU (~15s, and slower for larger frames).
     // Kept in sync with `max_execution_time` in php.ini.
     'max_execution_time' => 300,
 

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * `health_check_error` holds the checker's own words — "Tunnel is not running
  * (ERR_NGROK_3200)", "Endpoint unreachable (HTTP 502)". Those are the right
- * words for the administrator who has to go and restart the Kaggle session,
+ * words for the administrator who has to go and restart the worker session,
  * and the wrong words for a researcher who only wants to know whether they can
  * upload. The client cannot tell one failure from another by parsing that
  * string, so it cannot say anything better than the string itself.

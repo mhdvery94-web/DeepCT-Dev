@@ -1,11 +1,17 @@
 # Referensi API
 
 105 route di bawah `/api`, **termasuk** `GET /api/health`. Dihitung dari
-`php artisan route:list --path=api` per 30 September 2026 — jalankan perintah itu
+`php artisan route:list --path=api` per 1 Oktober 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
 
-**Base URL:** `http://127.0.0.1:8000/api` (atau domain ngrok yang mem-forward ke
-sana).
+**Base URL lokal:** `http://127.0.0.1:8000/api`. Produksi yang diverifikasi pada
+1 Oktober 2026 memakai
+`https://zestfully-usable-pledge.ngrok-free.dev/api`, yang meneruskan HTTPS ke
+Octane port 8000 pada Raspberry Pi.
+
+Kontrak login, otorisasi peran dan pencabutan token pada API produksi dicatat di
+[USER_ACCEPTANCE_TESTING.md](USER_ACCEPTANCE_TESTING.md); cabang internal dan
+suite otomatisnya dicatat di [WHITE_BOX_TESTING.md](WHITE_BOX_TESTING.md).
 
 **Autentikasi:** `Authorization: Bearer {token}` untuk route akun. `/login`,
 `/health`, `/access-requests`, `/messages/public`, dan berita terbit adalah

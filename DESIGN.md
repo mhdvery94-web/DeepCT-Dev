@@ -5,6 +5,10 @@
 > `fe/lib/theme/app_theme.dart`; kalau keduanya berbeda, kode yang menang.
 > Breakpoint responsif yang aktual didokumentasikan di
 > [fe/README.md](fe/README.md).
+> Tampilan web produksi pada Vercel telah diterima pada 1 Oktober 2026 untuk
+> landing page, login, dashboard researcher, pembatasan navigasi berdasarkan
+> peran, dan sign-out. Skenario serta hasil pengamatan ada di
+> [USER_ACCEPTANCE_TESTING.md](USER_ACCEPTANCE_TESTING.md).
 
 ---
 

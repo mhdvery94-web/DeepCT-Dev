@@ -181,8 +181,10 @@ flutter pub get
 
 2. **Configure API Endpoint**
 
-`lib/config/api_config.dart` points at the ngrok tunnel while the platform is
-in testing:
+`lib/config/api_config.dart` still carries a development fallback. Production
+does **not** use that fallback: GitHub Actions compiles
+`RASPI_API_BASE_URL=https://zestfully-usable-pledge.ngrok-free.dev/api` into all
+release clients.
 
 ```dart
 static const String baseUrl = String.fromEnvironment(
@@ -191,15 +193,14 @@ static const String baseUrl = String.fromEnvironment(
 );
 ```
 
-It is a *reserved* ngrok domain, so it survives tunnel restarts — but it only
-reaches anything while `ngrok http 8000` is running on the machine hosting
-Octane.
+The source fallback is the model-worker tunnel and must not be confused with
+the Raspberry Pi API tunnel. It remains a roadmap item because a manual build
+without `--dart-define` can still point at the wrong service.
 
-The production address `https://api.brin.fajrianhost.my.id/api` was the
-default for a while and had to be reverted: the `api.brin` subdomain has no
-DNS record yet, so every build made without an override could not connect, on
-web and Android alike. Make it the default again once that record exists and
-the backend is deployed behind it.
+A custom address `https://api.brin.fajrianhost.my.id/api` was the intended
+default for a while and had to be reverted because the subdomain has no DNS
+record. Production therefore uses the verified Pi ngrok address through the
+workflow override until a custom API domain is provisioned.
 
 Point it somewhere else per build — **no file edit needed**:
 
@@ -555,11 +556,17 @@ flutter run
 
 ```bash
 # Build for production
-flutter build web --release
+flutter build web --release \
+  --dart-define=API_BASE_URL=https://zestfully-usable-pledge.ngrok-free.dev/api
 
 # Output: build/web/
-# Deploy to any static hosting (Netlify, Vercel, etc.)
 ```
+
+The live site is `https://deep-ct-ai-prod.vercel.app`. Vercel does not run this
+command itself: GitHub Actions uploads the already-built `web-dist` artifact,
+forms `.vercel/output`, and calls `vercel deploy --prebuilt`. The project Root
+Directory is `./`; root `vercel.json` disables Vercel's automatic Git build so
+it cannot mistake the Laravel/Vite files for the web product.
 
 ### Android Release
 
@@ -582,6 +589,8 @@ flutter build appbundle --release
 - [../CLAUDE.md](../CLAUDE.md) - Working agreement and the traps that cost time
 - [../API.md](../API.md) - Backend API reference
 - [../DESIGN.md](../DESIGN.md) - Design system & UI guidelines
+- [../WHITE_BOX_TESTING.md](../WHITE_BOX_TESTING.md) - Unit/widget and release-build scenarios
+- [../USER_ACCEPTANCE_TESTING.md](../USER_ACCEPTANCE_TESTING.md) - Production web acceptance scenarios
 
 ---
 
@@ -600,7 +609,7 @@ flutter build appbundle --release
 - ✅ Activity logs screen (+ CSV export)
 - ✅ Error handling
 - ✅ `flutter analyze` — 0 issues
-- ✅ `flutter test` — passing (276 tests as of 30 September 2026)
+- ✅ `flutter test` — passing (276 tests as of 1 October 2026)
 - ✅ Landing page made responsive (was a fixed desktop layout)
 - ✅ Status bar no longer covered on Android
 
@@ -625,7 +634,8 @@ flutter build appbundle --release
 
 ### Testing
 The suite is **276 tests across 33 files**, and `flutter analyze` is clean.
-Both were last run on 30 September 2026.
+Both were last run on 1 October 2026 in release run `36853332173`; web,
+Android, Linux and unsigned Apple builds also completed successfully.
 
 The file was Flutter's counter-app scaffold until 15 August 2026, and it
 *failed*. The "23/23 contract tests" quoted in older notes were a manual `curl`
@@ -712,6 +722,6 @@ server-side previews, and both upload and download report progress.
 
 ---
 
-**Last Updated:** 4 September 2026  
+**Last Updated:** 1 October 2026  
 **Flutter Version:** 3.44+  
 **Status:** Active development. `flutter analyze` clean, 276 tests passing.

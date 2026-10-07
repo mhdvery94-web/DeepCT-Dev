@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Storage;
 /**
  * Fills the gaps between uploaded boundary frames by recursive interpolation.
  *
- * The worker is a FastAPI app on Kaggle/Colab behind an ngrok tunnel. A model
+ * The worker is a FastAPI app behind an ngrok tunnel. A model
  * row supplies its own `POST /predict/{model_name}` URL; every route takes the
  * same multipart `file_t0`, `file_t2` and `time_scalar` body and streams a TIFF
  * back. A handled legacy failure may still be JSON with HTTP 200.
@@ -193,7 +193,7 @@ class ProcessDeepLearningImage implements ShouldQueue
      * refused" is a machine that is asleep, rebooting, or being used for
      * something else, and in two minutes it may well be back.
      *
-     * That case did not exist while the worker lived on Kaggle — a hosted
+     * That case did not exist while the worker lived on a hosted platform — a
      * notebook is up or it is gone for the session. It exists now that the GPU
      * is heading for a workstation on the lab network.
      */

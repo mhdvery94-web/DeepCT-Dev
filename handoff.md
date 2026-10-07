@@ -1,4 +1,4 @@
-# Serah terima sesi — 8 September 2026
+# Serah terima sesi — 1 Oktober 2026
 
 Berkas ini untuk sesi berikutnya. Ia menjawab satu pertanyaan: **apa keadaannya
 sekarang, dan apa yang harus dipegang sebelum menyentuh apa pun.**
@@ -12,14 +12,12 @@ ketiganya.
 
 ## 1. Keadaan repositori
 
-**Seluruhnya sudah di-commit dan di-push.** Pada 8 September, 60 commit
-dikirim ke `basiadyanna54-commits/deepCT-AI`, dan `main` lokal sinkron dengan
-`origin/main`. Sebelum itu GitHub berhenti di 18 Agustus, jadi push tersebut
-membawa tiga minggu pekerjaan sekaligus.
-
-Catatan yang penting untuk sesi berikutnya: keadaan "tidak ada yang belum
-di-commit" itu **baru**, dan sebelumnya 124 berkas menumpuk berminggu-minggu.
-Jangan biarkan itu terulang.
+Repository aktif adalah `DeepCT-Dev/DeepCT-AI-PROD`. Commit produksi terakhir
+yang diuji pada sesi ini adalah `c6f4f1f`; workflow dispatch
+`36853332173` menjalankan dua suite test, seluruh build klien, deployment Pi,
+deployment Vercel dan publikasi artifact. Dokumen pengujian dan revisi naskah
+yang dikerjakan setelah commit itu harus diperiksa lewat `git status` sebelum
+commit berikutnya.
 
 Dua direktori sengaja tidak dilacak dan sudah masuk `.gitignore`:
 
@@ -32,36 +30,35 @@ Dua direktori sengaja tidak dilacak dan sudah masuk `.gitignore`:
 
 ## 2. Di mana sistem ini benar-benar berjalan
 
-**Penyiapan di BRIN belum dilakukan.** Arsitektur *hybrid cloud-NAS* yang
-diuraikan pada naskah proposal adalah rancangan sasaran, bukan keadaan hari
-ini. Yang berjalan sekarang:
+Arsitektur *hybrid cloud-NAS* sudah memiliki deployment aplikasi publik, tetapi
+NAS institusi dan worker GPU tetap komponen terpisah. Yang berjalan sekarang:
 
 | Bagian | Tempat |
 |---|---|
-| Orkestrasi, API, basis data, antrean | **VPS** (`brin.fajrianhost.my.id`) |
+| Orkestrasi, API, basis data, antrean | **Raspberry Pi 5**, `/var/www/deepct-ai`, dipublikasikan lewat ngrok |
 | Inferensi dan pelatihan model | **Kaggle** di balik ngrok |
-| Klien web | **Vercel** (`deep-ct-ai.vercel.app`) |
+| Klien web | **Vercel** (`deep-ct-ai-prod.vercel.app`) |
 | Bangun dan sebar | **GitHub Actions** (`.github/workflows/release.yml`) |
 
 Volume NAS belum ada; `StorageGuard` sudah menanganinya tetapi belum pernah
 diuji terhadap perangkat NAS yang sebenarnya.
 
-**Satu hal yang sedang membingungkan, dan sebabnya bukan yang terlihat.**
-Landing page di Vercel tampil tanpa berita dan tanpa video. Bundelnya mutakhir
-— `main.dart.js` tertanggal 8 September 04:52 GMT, dua jam sesudah push — dan
-ia menunjuk `cesspool-barricade-widget.ngrok-free.dev`, yaitu **VPS**, yang
-memang sasaran yang benar.
+API publik adalah
+`https://zestfully-usable-pledge.ngrok-free.dev/api`. PM2 menjaga
+`deepct-app` (`npm run serve:all`) dan `deepct-ngrok`, sementara
+`pm2-jihyo.service` memulihkannya setelah reboot. Akun admin dan researcher
+sudah dibuat dari repository secrets dan dibuktikan login melalui API yang
+berjalan. UAT web researcher juga sudah diterima.
 
-Yang kosong adalah basis data VPS-nya: `/api/health` menjawab dengan benar,
-tetapi `/api/news` mengembalikan nol baris. Jadi halaman itu bekerja
-sebagaimana mestinya dan menampilkan apa adanya, yaitu tidak ada apa-apa.
-Perbaikannya ada di sisi VPS — jalankan migrasi dan isi datanya — bukan
-mengganti alamatnya.
+Alamat API tetap merupakan konstanta waktu-build. Workflow hanya membaca
+`RASPI_API_BASE_URL`; mengubah variable itu tidak berpengaruh sampai klien
+dibangun dan diterbitkan ulang. Root `vercel.json` mematikan auto-build Git;
+Vercel hanya menerima output Flutter yang sudah dibangun Actions.
 
-Alamat API **tidak** diatur dari dasbor Vercel. Ia ditentukan variabel
-repositori GitHub dengan urutan `NGROK_BE_VPS` → `NGROK_BE` → `API_BASE_URL` →
-bawaan, dibaca `.github/workflows/release.yml`, lalu **dikompilasi ke dalam
-bundel**. Mengubah variabelnya tidak berpengaruh sampai ada build baru.
+Yang belum ikut pindah adalah database historis dan `storage/` VPS. Database Pi
+bukan lagi kosong—ia memiliki dua akun bootstrap—tetapi katalog model masih
+kosong. Karena itu autentikasi produksi sudah diterima, sedangkan prediksi
+ujung-ke-ujung terhadap worker nyata belum boleh disebut selesai.
 
 ---
 
@@ -135,35 +132,37 @@ sebelumnya meleset jauh di dua arah berlawanan.
 
 ## 5. Yang berikutnya
 
-**Untuk naskah** — dua dokumen ada di `proposal/`: seminar proposal tiga bab
-(69 halaman) dan naskah skripsi lima bab. Yang menunggu pemiliknya: 21 gambar
-(11 diagram digambar sendiri, 10 tangkapan layar BAB IV), tabulasi kuesioner
-4.3.4 yang sengaja dibiarkan kosong, dan tebal halaman pada penutup abstrak.
+**Untuk naskah** — `proposal/Proposal Skripsi done.docx` sedang diselaraskan
+dengan deployment Pi/Vercel, hasil pengujian terbaru dan pedoman UNPAM. Sumber
+gambar eksternal yang pernah diekstrak ke `proposal/gambar/` sedang hilang dari
+working tree; jangan memulihkannya atau memasukkannya ke commit tanpa memastikan
+apakah penghapusan itu memang dikehendaki pemilik.
 
-**Untuk aplikasi** — tiga butir terbuka di ROADMAP, dan tidak satu pun berupa
-kode yang belum ditulis. `ApiConfig.baseUrl` menunggu catatan DNS
-`api.brin.fajrianhost.my.id` yang masih NXDOMAIN; `POST /admin/training/datasets`
-menunggu jalur peneliti terbukti sekali di GPU sungguhan; penyempurnaan bobot
-diserahkan ke BRIN.
+**Untuk aplikasi** — `ApiConfig.baseUrl` sumber masih memakai fallback worker,
+walaupun build produksi aman karena mendapat `RASPI_API_BASE_URL`. Jalur
+prediksi dan training masih perlu dibuktikan sekali terhadap worker GPU
+sungguhan; penyempurnaan bobot tetap diserahkan ke BRIN.
 
-**Untuk penyebaran** — `API_BASE_URL` di Vercel perlu diarahkan ke terowongan
-yang benar, lalu di-*redeploy*. Di sisi VPS, 12 migrasi belum pernah
-dijalankan; dua di antaranya membuang kolom (`username` dari `users`,
-`max_concurrent_jobs` dari `models`), jadi cadangkan basis data lebih dulu.
+**Untuk penyebaran** — sinkronkan katalog model saat worker FastAPI aktif,
+jalankan satu prediksi nyata, tentukan apakah data historis VPS perlu dipindah,
+salin backup ke luar Pi, amati deployment, lalu baru hentikan VPS. Jangan
+menganggap bootstrap dua akun sama dengan migrasi data historis.
 
 ---
 
-## 6. Keadaan terverifikasi, 8 September 2026
+## 6. Keadaan terverifikasi, 1 Oktober 2026
 
 ```
-php artisan test               368 lulus, 1.452 asersi
+php artisan test               385 lulus, 1.536 asersi (MySQL 8 CI)
 flutter analyze                bersih
-flutter test                   274 lulus di 33 berkas
-flutter build web --release    berhasil, 336 detik
-flutter build apk --release    berhasil, 61,9 MB
-git                            main sinkron dengan origin/main
+flutter test                   276 lulus di 33 berkas
+flutter build web/apk/linux    berhasil di workflow 36853332173
+flutter build iOS/macOS        berhasil tanpa signing
+login produksi                admin + researcher lulus
+black box API produksi         12 dari 12 lulus
+web Vercel                     landing, login researcher, dashboard, logout diterima
 ```
 
-Kedua penjaga encoding hijau. Butir C dan D sudah dicoba pemiliknya di
-perangkat dan berfungsi. Sesi Kaggle berakhir sendiri, jadi terowongan yang
-hidup hari ini belum tentu hidup besok.
+Detail skenario ada di [WHITE_BOX_TESTING.md](WHITE_BOX_TESTING.md) dan
+[USER_ACCEPTANCE_TESTING.md](USER_ACCEPTANCE_TESTING.md). Sesi Kaggle berakhir
+sendiri, jadi terowongan worker yang hidup hari ini belum tentu hidup besok.

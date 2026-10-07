@@ -8,7 +8,7 @@ import '../theme/app_theme.dart';
 
 /// Live availability of the deep-learning workers.
 ///
-/// The model runs in a Kaggle session that expires on its own, usually without
+/// The model runs in a session that expires on its own, usually without
 /// anyone noticing until an upload fails. The server now probes it every ten
 /// seconds; this polls that result at the same cadence so the console reads as
 /// a status light rather than a page you have to reload.

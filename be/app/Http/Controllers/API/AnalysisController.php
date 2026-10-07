@@ -107,7 +107,7 @@ class AnalysisController extends Controller
      * same direction teaches people to ignore it.
      *
      * Twenty jobs, because the number that matters is what the worker is
-     * doing lately: a GPU that has been swapped, or a Kaggle session that came
+     * doing lately: a GPU that has been swapped, or a worker session that came
      * back slower, should show up here within a day rather than being averaged
      * away by months of history.
      */

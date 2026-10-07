@@ -10,7 +10,7 @@ use Illuminate\Console\Command;
  * Send the next queued training run to the trainer, when there is room.
  *
  * A run was dispatched exactly once, at the moment it was created. If that
- * attempt failed — no trainer registered yet, the Kaggle session between
+ * attempt failed — no trainer registered yet, the worker session between
  * restarts, a malformed payload — the job sat at `queued` for ever and nothing
  * ever tried again. Six of them accumulated that way during one afternoon of
  * debugging.

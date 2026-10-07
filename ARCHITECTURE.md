@@ -707,7 +707,7 @@ notebook training yang belum ada. Karena itu ia dijadwalkan terakhir, dan
 
 ## 8. Deployment: Raspberry Pi + ngrok + Vercel
 
-Topologi produksi yang sedang dimigrasikan adalah frontend statis di Vercel,
+Topologi produksi aktif sejak 1 Oktober 2026 adalah frontend statis di Vercel,
 backend persisten pada Raspberry Pi 5, dan worker model di Kaggle/Colab. Kedua
 server persisten/berumur sesi itu diterbitkan lewat tunnel ngrok yang berbeda;
 Vercel tidak menjalankan PHP maupun model.
@@ -728,8 +728,11 @@ flutter build web --release \
   --dart-define=API_BASE_URL=https://zestfully-usable-pledge.ngrok-free.dev/api
 ```
 
-Output ada di `fe/build/web`. Di Vercel: framework preset **Other**, output
-directory `build/web`.
+Output lokal ada di `fe/build/web`. Project Vercel menggunakan Root Directory
+`./`, tetapi tidak membangun repository itu sendiri: `vercel.json` melewati
+auto-build Git, sedangkan GitHub Actions membentuk `.vercel/output` dari
+artifact Flutter lalu menjalankan `vercel deploy --prebuilt`. Alamat produksi
+yang telah diuji adalah `https://deep-ct-ai-prod.vercel.app`.
 
 ### Backend di Vercel — **tidak bisa**, dan bukan soal konfigurasi
 
@@ -769,7 +772,7 @@ Supervisor lama dinonaktifkan agar tidak ada Octane, queue worker atau scheduler
 duplikat. Nginx masih tersedia untuk akses lokal/NetBird, tetapi tunnel publik
 yang diminta untuk arsitektur ini menuju port 8000 secara langsung.
 
-Alamat yang diverifikasi pada 30 September 2026 adalah
+Alamat yang diverifikasi kembali pada 1 Oktober 2026 adalah
 `https://zestfully-usable-pledge.ngrok-free.dev/api`: `/api/health` dan
 `/api/news` sama-sama menjawab HTTP 200 dari luar Pi, dan hostname tetap sama
 setelah PM2 diambil alih oleh systemd. Jika akun ngrok tidak mereservasi domain
@@ -797,15 +800,17 @@ perubahan harus diikuti dengan pembaruan `RASPI_API_BASE_URL` dan rebuild web.
    memutus preview Vercel, yang hostname-nya berubah tiap deployment.
 2. **`APP_DEBUG=false`** dan `APP_ENV=production`. Sekarang debug menyala, dan
    stack trace Laravel membocorkan path serta konfigurasi.
-3. **Isi `SEED_ADMIN_PASSWORD`** sebelum `db:seed`. Kalau kosong, seeder
-   membuat password acak dan mencetaknya sekali — jangan sampai terlewat di
-   log CI.
+3. **Simpan password bootstrap di repository secrets**, bukan `.env` hasil
+   deploy. Dispatch manual dengan `bootstrap_users=true` meneruskan
+   `SEED_ADMIN_PASSWORD` dan `SEED_USER_PASSWORD` hanya ke proses seeder,
+   menunggu Octane siap, lalu membuktikan login kedua peran. Push biasa tidak
+   pernah mereset kredensial.
 4. **`TRAINING_WORKER_TOKEN` baru** untuk produksi — token pengembangan sudah
    pernah lewat terminal dan log.
 5. **`script-deepct.py` jangan di-commit.** Berkas itu memuat token otentikasi
    ngrok dalam teks polos. Saat ini belum ter-track; biarkan begitu, atau
    pindahkan tokennya ke variabel lingkungan lebih dulu.
-6. **Backup database.** Tiap deploy otomatis sekarang menulis satu dump
+6. **Backup database.** Tiap deploy otomatis menulis satu dump
    sebelum menjalankan migrasi (lihat di bawah), dan menyimpan tujuh yang
    terakhir. Itu menutup kasus "migrasi merusak sesuatu", **bukan** kasus
    "disknya mati": tujuh berkas itu ada di mesin yang sama dengan
@@ -1019,10 +1024,13 @@ Urutannya, dan alasan tiap langkah ada:
    ini menanyakannya ke proses yang benar-benar berjalan. Endpoint itu dipakai
    karena publik, murah, dan tetap menjawab 200 walau feed-nya kosong.
 
-Yang **tidak** dikerjakan job ini, dan disengaja: ia tidak pernah menulis
-`.env`, tidak pernah menjalankan `db:seed`, dan tidak menyentuh konfigurasi
-nginx. Ketiganya milik server, dan sebuah deploy yang menimpanya akan
-menghapus kredensial produksi pada push berikutnya.
+Yang **tidak** dikerjakan push biasa, dan disengaja: ia tidak pernah menulis
+`.env`, menjalankan `db:seed`, atau menyentuh konfigurasi nginx. Pengecualian
+satu-satunya adalah dispatch manual dengan `bootstrap_users=true`: setelah
+deploy, langkah itu menjalankan `AdminUserSeeder` dengan dua password dari
+repository secrets, menunggu `/api/health`, lalu login sebagai admin dan user.
+Dengan begitu bootstrap dapat diaudit tanpa menjadikan setiap deploy sebuah
+reset password.
 
 
 ---

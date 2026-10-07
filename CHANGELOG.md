@@ -18,6 +18,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Complete the application cutover to the new Vercel project and Raspberry Pi
+  backend. Release run `36853332173` built every supported target, deployed the
+  backend locally on the ARM64 runner, and published the prebuilt Flutter web
+  output to `https://deep-ct-ai-prod.vercel.app`.
+- Add an opt-in `bootstrap_users` workflow dispatch. It reads administrator and
+  researcher passwords from repository secrets, seeds both roles without
+  persisting credentials in Laravel's config cache, waits for Octane's health
+  route after PM2 reload, and verifies each account through a real login.
+- Allow the production seeder to create or update one explicit researcher from
+  `SEED_USER_EMAIL`/`SEED_USER_PASSWORD`, require the pair atomically, and mark
+  both bootstrap roles as verified. Add regression coverage for stale cached
+  config, idempotent updates, production researcher creation and incomplete
+  credentials.
+- Record repeatable white-box and production black-box/UAT scenarios in
+  `WHITE_BOX_TESTING.md` and `USER_ACCEPTANCE_TESTING.md`. On 1 October the
+  backend suite passed 385 tests/1,536 assertions, Flutter passed 276 tests with
+  clean analysis, and the live API passed 12/12 authentication/authorization
+  checks.
 - Disable Vercel's automatic Git deployments at the repository root. The
   connected Vercel project must use Root Directory `./`; GitHub Actions remains
   the only publisher and sends the already-built Flutter bundle with
@@ -49,9 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/var/www/deepct-ai`: PHP 8.2, MariaDB 10.11, nginx, ARM64 RoadRunner and the
   Octane/queue/scheduler Supervisor programs are running. All migrations report
   `Ran`; `/api/health` and database-backed `/api/news` were observed returning
-  200 through nginx and from the development machine over NetBird. This is not
-  the production cutover: the Pi database is empty, and VPS data, static ngrok,
-  GitHub runner and new Vercel project remain outstanding.
+  200 through nginx and from the development machine over NetBird. At this
+  initial bootstrap checkpoint the Pi database was empty and the runner,
+  tunnel, Vercel project and account bootstrap were still outstanding; the
+  later entries above record their completion.
 - Prepare the release workflow for a `deepct-raspi` self-hosted ARM64 runner,
   remove the VPS SSH secrets and hard-coded old API fallback, and select the
   backend solely through `RASPI_API_BASE_URL`.

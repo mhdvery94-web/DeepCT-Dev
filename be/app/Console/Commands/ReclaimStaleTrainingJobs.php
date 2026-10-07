@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 /**
  * Hands back training jobs whose worker has gone quiet.
  *
- * A Kaggle session lasts 9–12 hours and training takes days, so a worker
+ * A worker session lasts 9–12 hours and training takes days, so a worker
  * disappearing mid-run is the normal course of events. The job is **not**
  * failed: it returns to `queued` with its checkpoint intact, and the next
  * worker resumes from the epoch already reached.
