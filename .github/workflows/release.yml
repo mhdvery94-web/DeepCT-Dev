@@ -246,8 +246,11 @@ jobs:
     # which blocked every deployment this project ever made. A deployment made
     # with a token is attributed to the token's owner, so that check never runs.
     env:
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # Keep this deployment isolated from other Vercel projects that use the
+      # legacy generic secret names in the same repository.
+      VERCEL_TOKEN: ${{ secrets.DEEPCT_DEV_VERCEL_TOKEN || secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.DEEPCT_DEV_VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.DEEPCT_DEV_VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
       # Must match the project's **Root Directory** in Vercel → Settings →
       # Build and Deployment, because the CLI resolves that setting against the
       # working directory and refuses to deploy when the result does not exist:
@@ -305,13 +308,18 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ -z "${VERCEL_TOKEN:-}" ] || [ -z "${VERCEL_ORG_ID:-}" ] || [ -z "${VERCEL_PROJECT_ID:-}" ]; then
+            echo "::error::The DeepCT Vercel credentials are incomplete. Set DEEPCT_DEV_VERCEL_TOKEN, DEEPCT_DEV_VERCEL_ORG_ID, and DEEPCT_DEV_VERCEL_PROJECT_ID."
+            exit 1
+          fi
+
           PROD=""
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             PROD="--prod"
           fi
 
           npx --yes vercel@latest deploy --prebuilt $PROD \
-            --token="${{ secrets.VERCEL_TOKEN }}" | tee url.txt
+            --token="$VERCEL_TOKEN" | tee url.txt
 
           URL="$(tail -1 url.txt)"
 
