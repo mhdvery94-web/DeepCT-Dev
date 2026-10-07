@@ -43,6 +43,11 @@ class _NewsSectionState extends State<NewsSection> {
 
   List<NewsPost> _posts = const [];
 
+  /// Editorial content should not become wider just because a monitor does.
+  /// Without this, the featured media stretched to almost 1,850px on a 1080p
+  /// desktop and its height cap turned a photograph into a very wide strip.
+  static const double _contentMaxWidth = 1280;
+
   /// A landing page is a front door, not an archive. One featured item and
   /// five below it is as much as this section should ever grow to; the feed
   /// itself will serve twenty if asked.
@@ -75,19 +80,25 @@ class _NewsSectionState extends State<NewsSection> {
     final isNarrow = MediaQuery.sizeOf(context).width < 700;
     final rest = _posts.skip(1).toList();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _header(context),
-        const SizedBox(height: 18),
+    return Center(
+      child: ConstrainedBox(
+        key: const Key('news-content-frame'),
+        constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _header(context),
+            const SizedBox(height: 18),
 
-        _FeaturedPost(post: _posts.first, isNarrow: isNarrow),
+            _FeaturedPost(post: _posts.first, isNarrow: isNarrow),
 
-        if (rest.isNotEmpty) ...[
-          SizedBox(height: isNarrow ? 20 : 24),
-          _PostList(posts: rest, isNarrow: isNarrow),
-        ],
-      ],
+            if (rest.isNotEmpty) ...[
+              SizedBox(height: isNarrow ? 20 : 24),
+              _PostList(posts: rest, isNarrow: isNarrow),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -130,19 +141,10 @@ class _FeaturedPost extends StatelessWidget {
           bottom: BorderSide(color: AppTheme.border),
         ),
       ),
-      // One layout at every width, media above the text.
-      //
-      // It was media-left/text-right on a wide screen for a while, and that
-      // side-by-side column is what made this card fail. The media half was
-      // 5/11 of the card, and a post carrying both a photograph and a clip had
-      // to split *that* in two — leaving each about 250x210, which is too
-      // small to read a diagram in and too small to work a video scrubber in.
-      // Full width is what lets both be stacked and still be worth looking at,
-      // which is how NewsArticleView has always done it.
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _MediaColumn(post: post),
+          _MediaGallery(post: post, isNarrow: isNarrow),
           _text(context),
         ],
       ),
@@ -158,7 +160,7 @@ class _FeaturedPost extends StatelessWidget {
     // those two needs no button at all.
     final hasMore = hasBody || post.imagePath != null;
 
-    return Padding(
+    final content = Padding(
       padding: EdgeInsets.all(isNarrow ? 20 : 28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -228,76 +230,156 @@ class _FeaturedPost extends StatelessWidget {
         ],
       ),
     );
+
+    // Long copy spanning an entire desktop card is difficult to scan. Mobile
+    // keeps using every pixel; wider layouts get a readable text measure while
+    // remaining aligned with the card's left edge.
+    if (isNarrow) return content;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 920),
+        child: content,
+      ),
+    );
   }
 }
 
-/// The post's media, as **separate blocks stacked in a column**.
+/// Responsive featured media.
 ///
-/// This is the fix the whole redesign was asked for. A clip used to be handed
-/// the photograph as its poster and drawn in the photograph's place, so one
-/// slot carried both and the picture was never visible on a post that had a
-/// video. Here each has its own block and neither covers the other — the same
-/// arrangement [NewsArticleView] already used, which is the one people said
-/// read correctly.
-///
-/// Both blocks sit on the dark panel, so a portrait photograph and a
-/// letterboxed clip letterbox onto the same colour and read as one card.
-class _MediaColumn extends StatelessWidget {
+/// Phones keep the proven full-width stack. Tablet and desktop place a photo
+/// and clip beside one another as proper 16:9 panels. Together with the
+/// section's 1280px maximum width this avoids both failure modes from the old
+/// layout: a 6:1 cropped photo and a page-wide black video letterbox.
+class _MediaGallery extends StatelessWidget {
   final NewsPost post;
+  final bool isNarrow;
 
-  const _MediaColumn({required this.post});
+  const _MediaGallery({required this.post, required this.isNarrow});
 
   @override
   Widget build(BuildContext context) {
     final videoUrl = post.videoUrl;
 
-    final blocks = <Widget>[
+    final blocks = <({String label, IconData icon, Widget child})>[
       if (post.imagePath != null)
-        ColoredBox(
-          color: AppTheme.textPrimary,
-          child: AuthedImage(
-            path: post.imagePath,
-            // `cover` here, `contain` in the opened article. The teaser was
-            // briefly `contain` to rescue a portrait diagram, but that is one
-            // test upload — an ordinary landscape photograph then floated
-            // between two thick black bars on every card. Cropping is the
-            // teaser's job; showing the whole of it is the article's, and that
-            // is the bargain the READ MORE button is for.
-            placeholder: const NewsPhotoFrame(),
+        (
+          label: 'PHOTO',
+          icon: Icons.image_outlined,
+          child: ColoredBox(
+            color: AppTheme.textPrimary,
+            child: AuthedImage(
+              path: post.imagePath,
+              // `cover` here, `contain` in the opened article. Cropping remains
+              // useful for a teaser; the responsive 16:9 frame now keeps that
+              // crop moderate instead of turning it into a panoramic slice.
+              placeholder: const NewsPhotoFrame(),
+            ),
           ),
         ),
       if (post.hasVideo && videoUrl != null)
-        NewsVideoPlayer(
-          key: const Key('news-featured-video'),
-          url: videoUrl,
-          sizeLabel: post.videoSizeLabel,
-          // Web needs the number, not the label: it has to decide whether the
-          // clip is small enough to pull into memory before it starts.
-          sizeBytes: post.videoSizeBytes,
-          // No poster, deliberately. The photograph has a band of its own
-          // directly above this one; handing it over as a backdrop here is
-          // exactly what made the clip look like it had eaten the picture.
+        (
+          label: 'VIDEO',
+          icon: Icons.movie_outlined,
+          child: NewsVideoPlayer(
+            key: const Key('news-featured-video'),
+            url: videoUrl,
+            sizeLabel: post.videoSizeLabel,
+            // Web needs the number, not the label: it has to decide whether the
+            // clip is small enough to pull into memory before it starts.
+            sizeBytes: post.videoSizeBytes,
+            // No poster, deliberately. The photograph has a panel of its own;
+            // reusing it behind the clip would make the two look duplicated.
+          ),
         ),
     ];
 
-    // A post with neither still gets a band, so the card keeps its shape
-    // rather than collapsing to the height of a placeholder icon.
+    // A post with neither still gets a band, so the card keeps its shape.
     if (blocks.isEmpty) return const _MediaBand(child: NewsPhotoFrame());
 
-    // Two bands are each given less, or a post carrying a photograph and a
-    // clip would be 880px of card before its own headline.
-    final cap = blocks.length > 1 ? 240.0 : 340.0;
-
-    // The gap lets the card's own white through, separating two dark panels
-    // with a hairline rather than a border of their own.
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < blocks.length; i++) ...[
-          if (i > 0) const SizedBox(height: 2),
-          _MediaBand(maxHeight: cap, child: blocks[i]),
+    if (isNarrow) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < blocks.length; i++) ...[
+            if (i > 0) const SizedBox(height: 2),
+            _MediaBand(
+              maxHeight: blocks.length > 1 ? 240 : 340,
+              child: blocks[i].child,
+            ),
+          ],
         ],
-      ],
+      );
+    }
+
+    if (blocks.length == 1) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: _WideMediaPanel(item: blocks.first, maxHeight: 520),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < blocks.length; i++) ...[
+            if (i > 0) const SizedBox(width: 16),
+            Expanded(child: _WideMediaPanel(item: blocks[i])),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A labelled media panel used only where there is room for a gallery.
+class _WideMediaPanel extends StatelessWidget {
+  final ({String label, IconData icon, Widget child}) item;
+  final double maxHeight;
+
+  const _WideMediaPanel({required this.item, this.maxHeight = 360});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: Key('news-media-${item.label.toLowerCase()}'),
+      decoration: BoxDecoration(
+        color: AppTheme.textPrimary,
+        border: Border.all(color: AppTheme.borderDark),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: const BoxDecoration(
+              color: AppTheme.background,
+              border: Border(bottom: BorderSide(color: AppTheme.borderDark)),
+            ),
+            child: Row(
+              children: [
+                Icon(item.icon, size: 15, color: AppTheme.textMuted),
+                const SizedBox(width: 8),
+                Text(
+                  item.label,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppTheme.textMuted,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _MediaBand(maxHeight: maxHeight, child: item.child),
+        ],
+      ),
     );
   }
 }
@@ -351,7 +433,8 @@ class _PostList extends StatelessWidget {
       child: Column(
         children: [
           for (var i = 0; i < posts.length; i++) ...[
-            if (i > 0) const Divider(height: 1, thickness: 1, color: AppTheme.border),
+            if (i > 0)
+              const Divider(height: 1, thickness: 1, color: AppTheme.border),
             _PostRow(post: posts[i], isNarrow: isNarrow),
           ],
         ],

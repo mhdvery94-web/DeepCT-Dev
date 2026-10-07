@@ -99,11 +99,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
     }
 
-    NewsPost post(int id, String title) => NewsPost(
-      id: id,
-      title: title,
-      summary: 'Summary of $title.',
-    );
+    NewsPost post(int id, String title) =>
+        NewsPost(id: id, title: title, summary: 'Summary of $title.');
 
     testWidgets('renders nothing when there is no news', (tester) async {
       // A visitor must never meet an error box on the front page over
@@ -194,7 +191,8 @@ void main() {
           NewsPost(
             id: 1,
             title: 'Neutron imaging beamline upgraded after shutdown',
-            summary: 'The detector was replaced and the sample stage is now '
+            summary:
+                'The detector was replaced and the sample stage is now '
                 'motorised, which cuts a full scan from six hours to two.',
             body: 'A longer article body.',
           ),
@@ -219,13 +217,10 @@ void main() {
       videoSizeBytes: 19049369,
     );
 
-    testWidgets('the photograph and the clip get blocks of their own', (
-      tester,
-    ) async {
-      // This is the redesign's whole point. The clip used to be handed the
-      // photograph as its poster and drawn in the photograph's place, so a
-      // post with both showed only the video and the picture was nowhere.
-      surface(tester, const Size(1440, 1024));
+    testWidgets('mobile keeps the photograph above the clip', (tester) async {
+      // The phone layout was already comfortable and must not be changed by
+      // the desktop/tablet gallery redesign.
+      surface(tester, const Size(390, 844));
 
       // Seeded null: "there is no picture", which draws the placeholder and
       // keeps the test off the network.
@@ -236,9 +231,7 @@ void main() {
       await tester.pump();
 
       final photo = tester.getRect(find.byType(AuthedImage));
-      final clip = tester.getRect(
-        find.byKey(const Key('news-featured-video')),
-      );
+      final clip = tester.getRect(find.byKey(const Key('news-featured-video')));
 
       expect(
         photo.overlaps(clip),
@@ -248,16 +241,18 @@ void main() {
       expect(
         clip.top,
         greaterThanOrEqualTo(photo.bottom),
-        reason: 'stacked, in that order — the arrangement of the open article',
+        reason: 'the proven mobile stack stays in the same order',
       );
+      expect(find.byKey(const Key('news-media-photo')), findsNothing);
     });
 
-    testWidgets('media runs the full width of the card', (tester) async {
-      // The reason both fit. A media column beside the text was 5/11 of the
-      // card, and splitting that between a photograph and a clip left each
-      // about 250x210 — too small to read a diagram in, too small to work a
-      // scrubber in. Full width is what makes stacking them worth doing.
-      surface(tester, const Size(1440, 1024));
+    testWidgets('desktop uses a bounded two-panel media gallery', (
+      tester,
+    ) async {
+      // The old page stretched each block almost 1850px wide and capped its
+      // height at 240px. The photo became a panoramic crop and a portrait clip
+      // became a page-wide black band. Two real 16:9 panels avoid both.
+      surface(tester, const Size(1920, 1080));
 
       AuthedImageCache.seed('/news/1/image', null);
       NewsSection.debugLoader = () async => [withClip(photo: true)];
@@ -265,18 +260,46 @@ void main() {
       await tester.pumpWidget(_host(const NewsSection()));
       await tester.pump();
 
-      final section = tester.getRect(find.byType(NewsSection));
+      final frame = tester.getRect(find.byKey(const Key('news-content-frame')));
       final photo = tester.getRect(find.byType(AuthedImage));
-      final clip = tester.getRect(
-        find.byKey(const Key('news-featured-video')),
+      final clip = tester.getRect(find.byKey(const Key('news-featured-video')));
+      final photoPanel = tester.getRect(
+        find.byKey(const Key('news-media-photo')),
+      );
+      final videoPanel = tester.getRect(
+        find.byKey(const Key('news-media-video')),
       );
 
-      // Less the card's 4px red edge and its 1px right border.
-      expect(photo.width, greaterThan(section.width - 10));
-      expect(clip.width, greaterThan(section.width - 10));
+      expect(frame.width, lessThanOrEqualTo(1280));
+      expect(photoPanel.overlaps(videoPanel), isFalse);
+      expect(videoPanel.left, greaterThan(photoPanel.right));
+      expect(photoPanel.width, closeTo(videoPanel.width, 0.1));
+      expect(photo.width, lessThan(frame.width * 0.55));
+      expect(clip.width, closeTo(photo.width, 0.1));
+      expect(photo.height / photo.width, closeTo(9 / 16, 0.01));
+    });
 
-      // And capped, or 16:9 across 1440px would be 810px of photograph.
-      expect(photo.height, lessThanOrEqualTo(340));
+    testWidgets('tablet also uses the compact two-panel gallery', (
+      tester,
+    ) async {
+      surface(tester, const Size(768, 1024));
+
+      AuthedImageCache.seed('/news/1/image', null);
+      NewsSection.debugLoader = () async => [withClip(photo: true)];
+
+      await tester.pumpWidget(_host(const NewsSection()));
+      await tester.pump();
+
+      final photoPanel = tester.getRect(
+        find.byKey(const Key('news-media-photo')),
+      );
+      final videoPanel = tester.getRect(
+        find.byKey(const Key('news-media-video')),
+      );
+
+      expect(photoPanel.overlaps(videoPanel), isFalse);
+      expect(videoPanel.left, greaterThan(photoPanel.right));
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('the teaser crops the photograph; the article does not', (
@@ -291,8 +314,10 @@ void main() {
       await tester.pumpWidget(_host(const NewsSection()));
       await tester.pump();
 
-      expect(tester.widget<AuthedImage>(find.byType(AuthedImage)).fit,
-          BoxFit.cover);
+      expect(
+        tester.widget<AuthedImage>(find.byType(AuthedImage)).fit,
+        BoxFit.cover,
+      );
     });
 
     testWidgets('the clip is not given the photograph as a backdrop', (
@@ -346,7 +371,9 @@ void main() {
       expect(find.text('READ MORE'), findsOneWidget);
     });
 
-    testWidgets('the whole clip is not pulled down before play', (tester) async {
+    testWidgets('the whole clip is not pulled down before play', (
+      tester,
+    ) async {
       // The player opens the file by itself now, to take a first frame off it,
       // but that reads a header and one frame — not the file. The landing page
       // must still cost a photograph to look at, not tens of megabytes of
@@ -421,12 +448,7 @@ void main() {
       surface(tester, const Size(1440, 1024));
 
       NewsSection.debugLoader = () async => [
-        NewsPost(
-          id: 1,
-          title: 'Story 1',
-          summary: 'S',
-          body: 'The article.',
-        ),
+        NewsPost(id: 1, title: 'Story 1', summary: 'S', body: 'The article.'),
       ];
 
       await tester.pumpWidget(_host(const NewsSection()));
@@ -456,7 +478,8 @@ void main() {
     NewsPost full() => NewsPost(
       id: 1,
       title: 'Beamline in motion',
-      summary: 'The detector was replaced and the sample stage is now '
+      summary:
+          'The detector was replaced and the sample stage is now '
           'motorised, which cuts a full scan from six hours to two.',
       body: 'A much longer article than the slide has room for.',
       hasImage: true,
@@ -502,7 +525,10 @@ void main() {
 
       expect(inside(find.text('10 AUG 2026')), findsOneWidget);
       expect(inside(find.text('Beamline in motion')), findsOneWidget);
-      expect(inside(find.byKey(const Key('news-article-summary'))), findsOneWidget);
+      expect(
+        inside(find.byKey(const Key('news-article-summary'))),
+        findsOneWidget,
+      );
       expect(
         inside(find.text('A much longer article than the slide has room for.')),
         findsOneWidget,
