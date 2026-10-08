@@ -195,9 +195,7 @@ jobs:
         run: |
           PROD=""
           if [ "${{ github.ref_name }}" = main ]; then PROD="--prod"; fi
-          npx --yes vercel@latest build $PROD \
-            --build-env LARAVEL_API_BASE_URL="$LARAVEL_API_BASE_URL" \
-            --token="$VERCEL_TOKEN"
+          npx --yes vercel@latest build $PROD --token="$VERCEL_TOKEN"
 
       - name: Deploy prebuilt output
         if: steps.deployment-config.outputs.enabled == 'true'
