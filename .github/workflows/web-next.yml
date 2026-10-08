@@ -84,14 +84,33 @@ jobs:
           set -euo pipefail
 
           PROJECT_REF="${VERCEL_PROJECT_ID:-$VERCEL_PROJECT_NAME}"
-          PROJECT_JSON="$(curl -fsS --get \
+          PROJECT_RESPONSE="$(curl -sS -w $'\n%{http_code}' --get \
             -H "Authorization: Bearer $VERCEL_TOKEN" \
             --data-urlencode "teamId=$VERCEL_ORG_ID" \
             "https://api.vercel.com/v9/projects/$PROJECT_REF")"
-          PROJECT_ID="$(jq -r '.id // empty' <<< "$PROJECT_JSON")"
+          PROJECT_STATUS="${PROJECT_RESPONSE##*$'\n'}"
+          PROJECT_JSON="${PROJECT_RESPONSE%$'\n'*}"
+          PROJECT_API_QUERY="?teamId=$VERCEL_ORG_ID"
 
-          if [ -z "$PROJECT_ID" ]; then
-            echo "::error::Vercel project '$VERCEL_PROJECT_NAME' was not found in the configured organization."
+          if [ "$PROJECT_STATUS" = 404 ]; then
+            PROJECT_RESPONSE="$(curl -sS -w $'\n%{http_code}' \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v9/projects/$PROJECT_REF")"
+            PROJECT_STATUS="${PROJECT_RESPONSE##*$'\n'}"
+            PROJECT_JSON="${PROJECT_RESPONSE%$'\n'*}"
+            PROJECT_API_QUERY=""
+          fi
+
+          if [ "$PROJECT_STATUS" != 200 ]; then
+            echo "::error::Vercel project lookup failed with HTTP $PROJECT_STATUS."
+            exit 1
+          fi
+
+          PROJECT_ID="$(jq -r '.id // empty' <<< "$PROJECT_JSON")"
+          PROJECT_ACCOUNT_ID="$(jq -r '.accountId // empty' <<< "$PROJECT_JSON")"
+
+          if [ -z "$PROJECT_ID" ] || [ -z "$PROJECT_ACCOUNT_ID" ]; then
+            echo "::error::Vercel project '$VERCEL_PROJECT_NAME' returned incomplete identity data."
             exit 1
           fi
 
@@ -102,7 +121,7 @@ jobs:
               -H "Authorization: Bearer $VERCEL_TOKEN" \
               -H 'Content-Type: application/json' \
               --data '{"rootDirectory":"fe_web","framework":"nextjs"}' \
-              "https://api.vercel.com/v9/projects/$PROJECT_ID?teamId=$VERCEL_ORG_ID")"
+              "https://api.vercel.com/v9/projects/$PROJECT_ID$PROJECT_API_QUERY")"
 
             if [ "$(jq -r '.rootDirectory // empty' <<< "$UPDATED_PROJECT")" != fe_web ] \
               || [ "$(jq -r '.framework // empty' <<< "$UPDATED_PROJECT")" != nextjs ]; then
@@ -112,6 +131,7 @@ jobs:
           fi
 
           echo "VERCEL_PROJECT_ID=$PROJECT_ID" >> "$GITHUB_ENV"
+          echo "VERCEL_ORG_ID=$PROJECT_ACCOUNT_ID" >> "$GITHUB_ENV"
 
       - name: Validate deployment configuration
         id: deployment-config
