@@ -101,8 +101,19 @@ jobs:
             PROJECT_API_QUERY=""
           fi
 
+          if [ "$PROJECT_STATUS" = 404 ] && [ -z "${VERCEL_PROJECT_ID:-}" ]; then
+            PROJECT_RESPONSE="$(curl -sS -w $'\n%{http_code}' -X POST \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              -H 'Content-Type: application/json' \
+              --data '{"name":"deepct-web","rootDirectory":"fe_web","framework":"nextjs"}' \
+              "https://api.vercel.com/v11/projects?teamId=$VERCEL_ORG_ID")"
+            PROJECT_STATUS="${PROJECT_RESPONSE##*$'\n'}"
+            PROJECT_JSON="${PROJECT_RESPONSE%$'\n'*}"
+            PROJECT_API_QUERY="?teamId=$VERCEL_ORG_ID"
+          fi
+
           if [ "$PROJECT_STATUS" != 200 ]; then
-            echo "::error::Vercel project lookup failed with HTTP $PROJECT_STATUS."
+            echo "::error::Vercel project lookup or creation failed with HTTP $PROJECT_STATUS."
             exit 1
           fi
 

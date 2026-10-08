@@ -18,8 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Let the Next.js deployment workflow resolve the dedicated `deepct-web`
-  project by name when its project-ID secret has not been added yet, then
+- Let the Next.js deployment workflow resolve—or create—the dedicated
+  `deepct-web` project when its project-ID secret has not been added yet, then
   enforce Vercel Root Directory `fe_web` and the Next.js framework through the
   authenticated Vercel API before building. Development previews may reuse the
   existing Raspberry Pi API variable until a separate development endpoint is
