@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Allow the staging Next.js deployment to reuse the configured Raspberry Pi API
+  when a dedicated `STAGING_API_BASE_URL` is unavailable. This is an explicit
+  temporary deployment choice: staging logins and admin mutations use the same
+  production database until a separate staging backend is configured.
 - Refresh the Next.js landing page and authenticated dashboard around the BRIN
   visual system, using the supplied gradient-landing and flat-dashboard files
   as compositional references. The new interface adds a CSS-rendered CT command

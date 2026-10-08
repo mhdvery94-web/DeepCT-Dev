@@ -64,5 +64,7 @@ Branch promotion:
 2. `staging` — acceptance testing against a staging Laravel/API instance.
 3. `main` — production.
 
-Do not point `staging` at the production database when testing admin mutations.
-Set `LARAVEL_API_BASE_URL` independently in each Vercel environment.
+Set `LARAVEL_API_BASE_URL` independently in each Vercel environment whenever a
+separate staging backend is available. Until then, the workflow intentionally
+falls back from `STAGING_API_BASE_URL` to the Raspberry Pi production API, so
+admin mutations performed from staging affect the same production database.
