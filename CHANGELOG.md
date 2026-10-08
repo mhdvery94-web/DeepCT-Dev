@@ -39,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pass 51 browser checks against the running isolated Laravel API: five public
   viewport sizes, both role dashboards/modules, full articles, public forms,
   removed routes, independent news media and prediction upload/preview/start.
+- Push implementation `49da8eb` directly to main and deploy to Pi/Vercel.
+  Confirm the pre-migration MySQL backup, schema retirement and scoped file
+  cleanup; 39 restarted-Pi API checks and 25 public HTTPS checks pass.
+  GitHub CI also passes 227 Flutter tests and clean analysis.
+- Both workflows finish successfully, including Android, Linux, unsigned
+  iOS/macOS, web deployments and release artifact publication. Final checkpoint
+  documentation is committed separately with CI skipped; production code is unchanged.
 
 ## [2026-10-08] — Portal implementation before prediction-only retirement
 

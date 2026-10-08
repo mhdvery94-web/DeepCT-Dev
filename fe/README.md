@@ -12,8 +12,8 @@ retired datasets. The default API points at the Raspberry Pi reserved tunnel;
 deployment can override it using `API_BASE_URL`.
 
 Flutter validation runs in GitHub Actions because the local host has no Flutter
-SDK. Historical test totals below remain dated observations; current workflow
-results are recorded in the root checkpoint after verification.
+SDK. Release `37828069000` for commit `49da8eb` confirms clean `flutter analyze`
+and **227 passing tests**. Older totals below remain dated historical observations.
 
 Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** dan **Android**.
 
@@ -635,7 +635,8 @@ flutter build appbundle --release
   still hold source bytes in memory
 
 ### Testing
-The suite is **276 tests across 33 files**, and `flutter analyze` is clean.
+The current suite has **227 passing tests**, and `flutter analyze` is clean
+(GitHub CI, 9 October 2026). The 1 October totals above describe the prior release.
 Both were last run on 1 October 2026 in release run `36853332173`; web,
 Android, Linux and unsigned Apple builds also completed successfully.
 

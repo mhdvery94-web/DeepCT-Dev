@@ -11,7 +11,13 @@ halaman/endpoint yang dipensiunkan, editor artikel tanpa input media, upload
 gambar/video independen, pemutaran video, penghapusan gambar yang mempertahankan
 video, serta tata letak media mobile. **51 pemeriksaan lulus**, termasuk upload,
 preview dan start prediksi, kedua role, form publik dan lima ukuran viewport.
-Hasil deployment dicatat di [checkpoint](handoff.md) setelah diamati. Uji ini tidak
+Commit `49da8eb` sudah di-deploy ke `https://deepct-web.vercel.app` dan Pi.
+**39 smoke check API Pi** memastikan skema lama hilang, route lama 404 bagi
+kedua peran, API aktif berfungsi dan researcher tidak dapat melakukan cleanup
+admin. **25 check HTTPS publik** lulus, termasuk route worker lama 404,
+form login/request/reset, batas sesi/role, serta artikel penuh 2.560 karakter
+dengan 13 paragraf. Backup/migrasi/cleanup sukses pada workflow Release
+`37828069000`; Next.js `37828069039` selesai sukses. Uji ini tidak
 menggantikan UAT ilmiah prediksi terhadap worker GPU nyata.
 
 ## Catatan historis — 1 Oktober 2026

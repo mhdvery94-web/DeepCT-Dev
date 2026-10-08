@@ -36,8 +36,11 @@ Local validation: **329 backend tests / 1,381 assertions**, five web proxy tests
 lint/TypeScript, Docker production build and zero production dependency audit
 findings. **51 browser checks pass** against the isolated running API, covering
 independent media, removed routes, responsive layouts and prediction upload.
-Deployment results are recorded in the existing
-[checkpoint](handoff.md) and testing documents as they finish.
+Commit `49da8eb` is deployed to Raspberry Pi and Vercel. Database backup,
+retirement migration and file cleanup succeed; **39 Pi API smoke checks** and
+**25 public HTTPS checks** pass. CI also passes clean Flutter analysis and
+**227 Flutter tests**. Final workflow details remain in the existing
+[checkpoint](handoff.md) and testing documents.
 
 ## Architecture
 

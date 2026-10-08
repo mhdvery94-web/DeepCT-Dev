@@ -22,9 +22,10 @@ perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 - [x] **Pisahkan editor berita dari media dan lunakkan kontrol web.** Dua kartu
       gambar/video memiliki picker, preview, upload/hapus sendiri dan tersusun
       vertikal di mobile. Lint/TypeScript, build produksi dan audit lulus.
-- [ ] **Validasi deployment perubahan 9 Oktober.** Push langsung `main` diminta
-      pengguna. Catat workflow, smoke Pi, validasi browser dan commit yang sudah
-      diamati di checkpoint. Entri bertanggal lebih lama di bawah adalah riwayat,
+- [x] **Validasi deployment perubahan 9 Oktober.** Commit `49da8eb` dipush main,
+      web/API produksi diperbarui. Backup, migrasi, cleanup dan 39 smoke check
+      Pi berhasil; 25 check HTTP publik lulus. CI backend 329/1.381 dan Flutter
+      227 tes/analisis bersih lulus. Entri lebih lama di bawah adalah riwayat,
       bukan instruksi untuk mengaktifkan training kembali.
 
 - [ ] **Selesaikan migrasi frontend web ke Next.js di `fe_web`.** Landing,

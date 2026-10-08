@@ -12,9 +12,15 @@ seluruh peran, cleanup hanya menghapus berkas fitur lama serta menolak mount/ske
 yang belum siap. Uploader menolak tujuan yang telah dihapus dengan 422.
 
 Next.js: lint/TypeScript, build produksi Docker, lima tes origin BFF dan audit
-dependensi produksi (nol temuan) lulus. Validasi Flutter dan deployment terbaru
-dicatat setelah output workflow GitHub benar-benar tersedia; SDK Flutter tidak
-tersedia di host pengujian lokal ini.
+dependensi produksi (nol temuan) lulus. Release workflow
+[37828069000](https://github.com/mhdvery94-web/DeepCT-Dev/actions/runs/37828069000)
+pada commit `49da8eb` mengonfirmasi **329/1.381** untuk backend, analisis Flutter
+tanpa masalah dan **227 tes Flutter** lulus. SDK Flutter tidak tersedia di host
+lokal; angka Flutter berasal dari job GitHub yang selesai.
+
+Next.js `37828069039` dan Release `37828069000` selesai sukses seluruhnya.
+Build web, Android, Linux, iOS/macOS, deployment Pi/Vercel dan publikasi artifact
+berhasil. Produksi melewati 39 smoke check API Pi dan 25 check HTTPS publik.
 
 ## Hasil historis — 1 Oktober 2026
 
