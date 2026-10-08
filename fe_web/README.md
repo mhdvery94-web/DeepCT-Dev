@@ -27,6 +27,18 @@ npm run build
 npm audit --omit=dev
 ```
 
+## UI and motion
+
+The landing page and portal share the BRIN red/navy visual system. Motion uses
+`gsap` with `@gsap/react`: animations are scoped to their owning component,
+cleaned up on unmount or route change, and disabled when the visitor requests
+reduced motion. Keep API calls and authorization in Server Components or Route
+Handlers; client-side motion wrappers receive already-rendered content.
+
+The original Freepik landing/dashboard archives were used as layout references,
+not shipped as page artwork. Keep the attribution link in the public footer if
+those references continue to inform the design.
+
 ## Authentication boundary
 
 - `src/proxy.ts` performs only an optimistic cookie-presence redirect.

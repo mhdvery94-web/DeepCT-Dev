@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Refresh the Next.js landing page and authenticated dashboard around the BRIN
+  visual system, using the supplied gradient-landing and flat-dashboard files
+  as compositional references. The new interface adds a CSS-rendered CT command
+  console, stronger research-news and onboarding layouts, icon-led navigation,
+  live API-backed dashboard KPIs, analysis distribution, model-readiness state,
+  and responsive workflow panels. GSAP powers scoped, self-cleaning hero,
+  scroll and route transitions with a reduced-motion fallback. Desktop, tablet
+  and mobile browser checks found no horizontal overflow or console errors; the
+  Freepik attribution required by the reference archives is retained in the
+  landing footer.
 - Let the Next.js deployment workflow resolve—or create—the dedicated
   `deepct-web` project when its project-ID secret has not been added yet, then
   enforce Vercel Root Directory `fe_web` and the Next.js framework through the

@@ -3,28 +3,35 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { Brand } from "@/components/brand";
+import { UiIcon, type IconName } from "@/components/ui-icon";
 import type { DeepCtUser } from "@/lib/types";
 
-const adminNavigation = [
-  ["/dashboard", "00", "Dashboard"],
-  ["/admin/users", "01", "User management"],
-  ["/admin/access-requests", "02", "Access requests"],
-  ["/admin/messages", "03", "Messages"],
-  ["/admin/news", "04", "Research news"],
-  ["/admin/models", "05", "Model management"],
-  ["/admin/activity", "06", "Activity logs"],
-] as const;
+gsap.registerPlugin(useGSAP);
 
-const userNavigation = [
-  ["/dashboard", "00", "Dashboard"],
-  ["/workspace/predictions", "01", "Predictions"],
-  ["/workspace/models", "02", "Available models"],
-  ["/workspace/training", "03", "Model training"],
-  ["/workspace/messages", "04", "Messages"],
-  ["/workspace/activity", "05", "My activity"],
-] as const;
+type NavigationItem = readonly [string, IconName, string];
+
+const adminNavigation: readonly NavigationItem[] = [
+  ["/dashboard", "dashboard", "Dashboard"],
+  ["/admin/users", "users", "User management"],
+  ["/admin/access-requests", "request", "Access requests"],
+  ["/admin/messages", "message", "Messages"],
+  ["/admin/news", "news", "Research news"],
+  ["/admin/models", "model", "Model management"],
+  ["/admin/activity", "activity", "Activity logs"],
+];
+
+const userNavigation: readonly NavigationItem[] = [
+  ["/dashboard", "dashboard", "Dashboard"],
+  ["/workspace/predictions", "prediction", "Predictions"],
+  ["/workspace/models", "model", "Available models"],
+  ["/workspace/training", "training", "Model training"],
+  ["/workspace/messages", "message", "Messages"],
+  ["/workspace/activity", "activity", "My activity"],
+];
 
 function initials(name: string): string {
   return name
@@ -39,7 +46,33 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const main = useRef<HTMLDivElement>(null);
   const navigation = user.role === "admin" ? adminNavigation : userNavigation;
+  const currentLabel = navigation.find(([href]) => pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`)))?.[2] ?? "Workspace";
+
+  useEffect(() => {
+    document.body.classList.toggle("menu-open", open);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.classList.remove("menu-open");
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  useGSAP(
+    () => {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      gsap.fromTo(
+        ".portal-content",
+        { autoAlpha: 0, y: 16 },
+        { autoAlpha: 1, y: 0, duration: 0.45, ease: "power3.out" },
+      );
+    },
+    { scope: main, dependencies: [pathname], revertOnUpdate: true },
+  );
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
@@ -49,7 +82,7 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
 
   return (
     <div className="portal">
-      <aside className={`portal-sidebar${open ? " is-open" : ""}`}>
+      <aside id="portal-navigation" className={`portal-sidebar${open ? " is-open" : ""}`}>
         <div className="portal-sidebar__brand">
           <Brand />
         </div>
@@ -57,7 +90,7 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
           {user.role === "admin" ? "Administration" : "Research workspace"}
         </span>
         <nav className="portal-nav" aria-label="Portal navigation">
-          {navigation.map(([href, number, label]) => {
+          {navigation.map(([href, icon, label]) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
             return (
               <Link
@@ -66,7 +99,7 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
                 className={active ? "is-active" : ""}
                 onClick={() => setOpen(false)}
               >
-                <span>{number}</span>
+                <span className="portal-nav__icon"><UiIcon name={icon} size={18} /></span>
                 <span>{label}</span>
               </Link>
             );
@@ -79,23 +112,36 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
             <span>{user.email}</span>
           </span>
           <button className="logout-button" type="button" title="Logout" onClick={logout}>
-            ↗
+            <UiIcon name="logout" size={17} />
           </button>
         </div>
       </aside>
-      <div className="portal-main">
+      <button
+        className={`portal-backdrop${open ? " is-open" : ""}`}
+        type="button"
+        tabIndex={open ? 0 : -1}
+        aria-label="Close navigation"
+        onClick={() => setOpen(false)}
+      />
+      <div className="portal-main" ref={main}>
         <header className="portal-topbar">
-          <button
-            className="portal-menu-button"
-            type="button"
-            aria-label="Toggle navigation"
-            aria-expanded={open}
-            onClick={() => setOpen((value) => !value)}
-          >
-            ☰
-          </button>
-          <strong>Neutron CT Platform</strong>
-          <span>{user.role === "admin" ? "Administrator" : "Researcher"}</span>
+          <div className="portal-topbar__title">
+            <button
+              className="portal-menu-button"
+              type="button"
+              aria-label="Toggle navigation"
+              aria-controls="portal-navigation"
+              aria-expanded={open}
+              onClick={() => setOpen((value) => !value)}
+            >
+              <UiIcon name="menu" size={20} />
+            </button>
+            <span><small>Workspace</small><strong>{currentLabel}</strong></span>
+          </div>
+          <div className="portal-topbar__status">
+            <span><i aria-hidden="true" /> Secure session</span>
+            <strong>{user.role === "admin" ? "Administrator" : "Researcher"}</strong>
+          </div>
         </header>
         {children}
       </div>
