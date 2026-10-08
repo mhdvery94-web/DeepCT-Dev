@@ -217,9 +217,12 @@ self-hosted GitHub runner is online and the production deployment from commit
 `c6f4f1f` completed successfully. A manual, secret-backed bootstrap created and
 verified both administrator and researcher accounts; production login, role
 separation, logout and token revocation passed 12 of 12 black-box checks. The
-Flutter site is live at `https://deep-ct-ai-prod.vercel.app`. The Next.js
-project is being introduced separately under repository root `fe_web`; it is
-not a replacement for the Laravel backend.
+Flutter site is live at `https://deep-ct-ai-prod.vercel.app`. The separate
+Next.js project is live at `https://deepct-web.vercel.app` with Vercel Root
+Directory `fe_web`; it is not a replacement for the Laravel backend. Its first
+bootstrap deployment came from `develop` because Vercel assigns a new
+project's first deployment to production automatically. Subsequent `develop`
+deployments are previews, and the workflow passes `--prod` only for `main`.
 
 The application cutover is complete, but the old VPS's historical database and
 `storage/` contents have **not** been copied. The production model catalogue is

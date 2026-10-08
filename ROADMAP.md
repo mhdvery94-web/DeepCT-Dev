@@ -6,7 +6,7 @@ berjalan — centang diisi hanya setelah **diverifikasi**, bukan setelah ditulis
 Ini bukan dokumen status. Jangan buat `*_PLAN.md` atau `*_SUMMARY.md` baru;
 perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
-**Terakhir diperbarui:** 7 Oktober 2026
+**Terakhir diperbarui:** 8 Oktober 2026
 
 ---
 
@@ -19,13 +19,16 @@ perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
       `npm run check`, production build 21 route, dan smoke test HTTP lokal sudah
       lulus. Yang belum boleh disebut selesai: tabel/form CRUD tiap modul,
       prediksi/training lengkap, URL unduhan besar bertanda tangan, staging API
-      yang terpisah dari database produksi, proyek Vercel Next.js, dan UAT.
+      yang terpisah dari database produksi, dan UAT. Proyek Vercel Next.js
+      terpisah dengan Root Directory `fe_web` sudah dibuat dan bootstrap
+      deployment-nya lulus pada run `37706342986`; landing page publik hidup di
+      `https://deepct-web.vercel.app`.
 
 - [ ] **Terapkan promosi branch `develop` → `staging` → `main`.** Ketiga branch
-      sudah dibuat lokal dan workflow `web-next.yml` memetakan preview/staging
-      serta production. Setelah didorong, aktifkan branch protection dan wajibkan
-      pull request/check sebelum promosi. `main` tetap satu-satunya branch yang
-      boleh men-deploy backend ke Raspberry Pi.
+      sudah ada di GitHub dan workflow `web-next.yml` memetakan preview/staging
+      serta production. Berikutnya aktifkan branch protection dan wajibkan pull
+      request/check sebelum promosi. `main` tetap satu-satunya branch yang boleh
+      men-deploy backend ke Raspberry Pi.
 
 - [ ] **Selesaikan perpindahan produksi dari VPS ke Raspberry Pi.** Source
       backend sudah berada di `/var/www/deepct-ai`; `deepct-app` dan
