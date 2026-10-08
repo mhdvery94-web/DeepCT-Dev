@@ -45,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   audit and 30 running-API smoke checks. All 48 browser checks pass, covering
   five viewport sizes, full articles, public forms, admin modules, researcher
   modules, TIFF upload/preview/start, training submission/cancellation and roles.
+- Deploy commit `998df0f` from `main` to production on 8 October 2026. Next.js
+  workflow `37819384528` succeeded; release `37819384429` backed up the Pi database,
+  refreshed caches and restarted its API. All 30 post-restart portal API/role
+  checks and 20 public web/API HTTP checks passed. The live article contains
+  13 paragraphs. Laptop SSH remains blocked by missing executor VPN/TCP setup;
+  real GPU prediction/training acceptance is still pending.
 
 ### Changed
 - Rebuild the Next.js landing around the supplied Bootslander template: compact

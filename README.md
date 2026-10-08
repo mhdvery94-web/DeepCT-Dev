@@ -225,10 +225,23 @@ bootstrap deployment came from `develop` because Vercel assigns a new
 project's first deployment to production automatically. Subsequent `develop`
 deployments are previews, and the workflow passes `--prod` only for `main`.
 
+**Portal deployment observed on 8 October 2026:** commit `998df0f` on `main`
+passed Next.js verification and deployed to `https://deepct-web.vercel.app`.
+The Raspberry Pi deploy backed up its database, refreshed caches and restarted
+the API; all 30 authenticated/public endpoint and role smoke checks passed.
+Another 20 public HTTP checks passed against the deployed web and API, including
+the full research article, request/reset pages, proxy-origin checks and anonymous
+portal guards. Local validation passed 396 Laravel tests/1,593 assertions and
+48 browser checks. The portal now exposes admin/user operations, training,
+application disk cleanup and signed artifact downloads. Laptop synchronization
+is still blocked: this executor has no configured VPN or TCP grant, and SSH to
+`100.85.5.67:22` cannot connect. Live GPU prediction/training acceptance remains
+an outstanding research validation step.
+
 The application cutover is complete, but the old VPS's historical database and
-`storage/` contents have **not** been copied. The production model catalogue is
-also still empty, so a real prediction against the GPU worker has not yet been
-accepted on the new deployment. Those are explicit follow-up items, not hidden
+`storage/` contents have **not** been copied. At the 1 October cutover the production
+model catalogue was empty. A real prediction against the GPU worker has not yet
+been accepted on the new deployment. Those are explicit follow-up items, not hidden
 inside the word “migrated”.
 
 The release workflow now targets a self-hosted ARM64 runner labelled

@@ -19,6 +19,9 @@ perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
       Validasi lokal 8 Oktober: 396 tes Laravel/1.593 asersi, lint/TypeScript,
       build Next.js Docker, 5 tes origin proxy, 30 smoke check API HTTP,
       serta 48 pemeriksaan browser terhadap API lokal berjalan lulus.
+      Commit `998df0f` sudah di-deploy ke produksi: verifikasi Next.js dan backend
+      CI lulus, 30 smoke check API Pi setelah restart serta 20 check HTTP publik
+      terhadap web/API produksi lulus.
       Yang tersisa: UAT penelitian terhadap worker GPU produksi, staging API
       yang terpisah, dan sinkronisasi laptop setelah jalur SSH tersedia.
 
