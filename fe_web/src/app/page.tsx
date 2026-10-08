@@ -95,8 +95,8 @@ export default async function Home() {
         </section>
       </main>
       <footer className="bl-footer">
-        <div className="bl-container bl-footer__main"><div><Brand /><p>A shared space for neutron CT research,<br />deep learning and scientific collaboration.</p></div><nav aria-label="Footer navigation"><a href="#home">Home</a><a href="#about">About</a><a href="#research">Research</a><a href="#join">Join</a><Link href="/login">Login</Link></nav></div>
-        <div className="bl-container bl-footer__bottom"><p>© {new Date().getFullYear()} BRIN · Neutron CT Platform</p><CreatorCredit /><span className="template-credit">Template by <a href="https://bootstrapmade.com/" target="_blank" rel="noreferrer">BootstrapMade</a></span></div>
+        <div className="bl-container bl-footer__main"><div><Brand /><p>A shared space for neutron CT research,<br />deep learning and scientific collaboration.</p></div></div>
+        <div className="bl-container bl-footer__bottom"><p>© {new Date().getFullYear()} BRIN · Neutron CT Platform</p><CreatorCredit /></div>
       </footer>
     </LandingExperience>
   );

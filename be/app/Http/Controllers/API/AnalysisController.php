@@ -645,12 +645,34 @@ class AnalysisController extends Controller
         return $this->downloadZip($id, 'complete');
     }
 
+    public function downloadLink(Request $request, $id)
+    {
+        $request->validate(['kind' => 'required|in:results,complete']);
+        $prediction = $this->findOwned($request, $id);
+        abort_unless($prediction->status === 'completed', 409, 'Prediction is not completed yet.');
+        abort_if($prediction->files_deleted_at, 410, 'Files have been deleted.');
+        $path = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+            'api.downloads.predictions', now()->addMinutes(5),
+            ['id' => $prediction->id, 'kind' => $request->kind, 'owner' => $request->user()->id],
+            absolute: false
+        );
+        return response()->json(['success' => true, 'data' => ['path' => $path]]);
+    }
+
+    /** The signature authorizes this owner and this archive for five minutes. */
+    public function signedDownload(Request $request, $id, string $kind)
+    {
+        $owner = \App\Models\User::findOrFail($request->query('owner'));
+        abort_unless($owner->is_active && !$owner->must_change_password, 403);
+        return $this->downloadZip($id, $kind, $owner);
+    }
+
     /**
      * Create and stream ZIP download
      */
-    private function downloadZip($id, $type = 'results')
+    private function downloadZip($id, $type = 'results', $signedOwner = null)
     {
-        $user = auth()->user();
+        $user = $signedOwner ?? auth()->user();
         
         $prediction = AnalysisRecord::where('id', $id)
             ->where('user_id', $user->id)

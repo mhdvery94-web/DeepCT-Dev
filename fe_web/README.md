@@ -23,6 +23,7 @@ is never placed in browser storage.
 
 ```bash
 npm run check
+npm test
 npm run build
 npm audit --omit=dev
 ```
@@ -47,13 +48,14 @@ Its icon rail, three-panel overview, four statistic tiles and lower module
 panels are implemented as responsive React components. The chart shows actual
 analysis-status counts from Laravel, not a fabricated time series. Calendar
 and download widgets without corresponding application data are omitted.
-Module routes keep their existing functionality; this UI refresh does not add
-missing CRUD or prediction implementations.
+Module routes now load Laravel data and support account/model/news CRUD, access
+review, conversations, activities, notifications, profile photos, prediction
+preview/start/comparison, and training progress/samples. Administrator routes
+also provide the queue board, training oversight, datasets and disk management.
 
-Keep BootstrapMade's attribution in the landing footer and Freepik's in the
-portal footer as required by the supplied template licenses. Both include the
-requested creator credit, `fajriansyah #bocahunpam`. No template vendor scripts
-or extra Bootstrap/AOS bundles are loaded.
+The public footer omits vendor credit and duplicate navigation as requested.
+Creator credit `fajriansyah #bocahunpam` remains. Template provenance remains
+in source comments; no template vendor scripts or Bootstrap/AOS bundles load.
 
 ## Authentication boundary
 
@@ -65,9 +67,20 @@ or extra Bootstrap/AOS bundles are loaded.
   headers and adds the server-held Sanctum token.
 
 The BFF works well for normal JSON calls, chunked uploads, images, and videos.
-Very large prediction-result downloads should eventually use short-lived,
-signed Laravel URLs rather than passing multi-gigabyte files through a Vercel
-function.
+Prediction archives and training weights use five-minute signed Laravel URLs.
+The BFF validates ownership through Laravel and redirects downloads to the
+public Raspberry Pi API, avoiding Vercel response-size limits. Upload parts are
+bounded to 3 MiB and resume by the server offset; tokens remain in the HttpOnly
+cookie. `LARAVEL_API_BASE_URL` is required in production and must use the public
+Pi HTTPS address.
+
+`/request-access` reuses the Join fields. `/reset-password` sends a guest support
+message for identity verification; administrators perform the existing default
+password reset and the next login forces a password change.
+
+Disk management cleans expired files using retention rules or removes the files
+of a selected completed/failed prediction. It preserves records and evidence,
+rejects active/unstarted jobs and never accepts arbitrary filesystem paths.
 
 ## Deployment model
 

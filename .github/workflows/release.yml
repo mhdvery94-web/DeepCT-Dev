@@ -625,6 +625,12 @@ jobs:
             echo "Commit ${{ github.sha }} to $DEPLOY_PATH on the Raspberry Pi."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Verify portal APIs and role separation
+        run: |
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          php scripts/smoke-portal.php http://127.0.0.1:8000/api
+
   android:
     name: Android APK
     needs: preflight

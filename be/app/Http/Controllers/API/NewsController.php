@@ -72,6 +72,14 @@ class NewsController extends Controller
         ]);
     }
 
+    /** A stable public article URL; drafts remain private even with a token. */
+    public function publishedShow($id)
+    {
+        $post = NewsPost::published()->findOrFail($id);
+
+        return response()->json(['success' => true, 'data' => $this->serialise($post)]);
+    }
+
     /**
      * GET /api/news/{id}/image — the photo itself.
      *

@@ -17,6 +17,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Connect Next.js portal modules to Raspberry Pi Laravel APIs: account/model/news
+  CRUD, access reviews, messaging, activity export, notifications, profile photos,
+  prediction upload/preview/start/comparison, and training progress/metrics/samples.
+  Restore role-scoped researcher training, optional model catalogue sync, and the
+  administrator queue board with their regression suites.
+- Add administrator disk management with volume totals, application breakdown,
+  retention cleanup and explicit file removal for completed/failed predictions.
+  Preserve history/evidence and reject active work, missing mounts and invalid
+  directories. Exclude pending/processing predictions from scheduled retention.
+- Add public full-article URLs, request-access and password-reset request pages.
+  Password reset requests reach the admin inbox; issued-password replacement and
+  identity review remain enforced. Remove public vendor credit and duplicate footer
+  navigation as requested.
+- Bound web upload chunks to 3 MiB and resume by server offset. Redirect large
+  prediction/weight downloads to five-minute signed API URLs, with ownership and
+  active-account checks, instead of proxying artifacts through Vercel.
+- Add platform-wide admin statistics and a post-deploy read-only API smoke script;
+  temporary test tokens are revoked even on failure. Public section minimum heights
+  track the viewport/header and the portal scrolls inside a bounded main area.
+- Validate proxy origins using the public Host and external scheme. Browser tests
+  found that Next's internal URL hostname rejected legitimate form submissions;
+  regression checks preserve rejection of foreign/malformed origins.
+- Validate against isolated MySQL with 396 Laravel tests/1,593 assertions,
+  5 proxy-origin tests, lint/TypeScript, a Docker production build, dependency
+  audit and 30 running-API smoke checks. All 48 browser checks pass, covering
+  five viewport sizes, full articles, public forms, admin modules, researcher
+  modules, TIFF upload/preview/start, training submission/cancellation and roles.
+
 ### Changed
 - Rebuild the Next.js landing around the supplied Bootslander template: compact
   two-column hero, layered waves, animated SVG CT panels, about/icon boxes,

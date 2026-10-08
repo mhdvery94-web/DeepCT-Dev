@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Model;
 use App\Models\UserActivity;
+use App\Services\ModelCatalogSync;
 use App\Services\ModelHealthChecker;
 use App\Services\WorkerRequest;
 use Illuminate\Http\Client\ConnectionException;
@@ -16,6 +17,7 @@ class ModelController extends Controller
 {
     public function __construct(
         private readonly ModelHealthChecker $healthChecker,
+        private readonly ModelCatalogSync $catalogSync,
     ) {
     }
 
@@ -92,7 +94,7 @@ class ModelController extends Controller
             // behaviour underneath it.
             'verify_tls' => $request->boolean('verify_tls'),
             'description' => $request->description,
-            // Models are deployed remotely and reached via
+            // Models are deployed remotely (Kaggle/Colab) and reached via
             // endpoint_url, so there is no local weights file to reference.
             'file_path' => $request->input('file_path'),
             'model_file' => $request->filled('file_path')
@@ -127,6 +129,71 @@ class ModelController extends Controller
             'message' => 'Model berhasil ditambahkan',
             'data' => $model->fresh(),
         ], 201);
+    }
+
+    /** Import every inference model exposed by one FastAPI server. */
+    public function sync(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'base_url' => 'nullable|url|max:500',
+            'auth_token' => 'nullable|string|max:500',
+            'verify_tls' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $baseUrl = $request->input(
+            'base_url',
+            config('services.ai_model_server.base_url')
+        );
+
+        if (! filled($baseUrl)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'AI model server base URL is not configured.',
+            ], 422);
+        }
+
+        try {
+            $result = $this->catalogSync->sync(
+                $baseUrl,
+                $request->input('auth_token'),
+                $request->has('verify_tls')
+                    ? $request->boolean('verify_tls')
+                    : true
+            );
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Model synchronization failed.',
+                'error' => $e->getMessage(),
+            ], 502);
+        }
+
+        UserActivity::create([
+            'user_id' => auth()->id(),
+            'activity_type' => 'update_model',
+            'description' => "Menyinkronkan model dari server AI: {$baseUrl}",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'metadata' => [
+                'base_url' => $baseUrl,
+                'created' => $result['created'],
+                'updated' => $result['updated'],
+                'missing' => $result['missing'],
+            ],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Models synchronized successfully.',
+            'data' => $result,
+        ]);
     }
 
     /**

@@ -7,6 +7,8 @@ use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\AvatarController;
 use App\Http\Controllers\API\MeController;
+use App\Http\Controllers\API\MeTrainingController;
+use App\Http\Controllers\API\AdminQueueController;
 use App\Http\Controllers\API\MessageController;
 use App\Http\Controllers\API\NewsController;
 use App\Http\Controllers\API\TrainingController;
@@ -53,6 +55,7 @@ Route::post('/messages/public', [MessageController::class, 'storePublic'])
 // the image route serves a draft to an administrator, which is why it resolves
 // the token itself rather than sitting behind auth middleware.
 Route::get('/news', [NewsController::class, 'index'])->name('api.news.index');
+Route::get('/news/{id}', [NewsController::class, 'publishedShow'])->whereNumber('id')->name('api.news.show');
 Route::get('/news/{id}/image', [NewsController::class, 'image'])->name('api.news.image');
 Route::get('/news/{id}/video', [NewsController::class, 'video'])->name('api.news.video');
 
@@ -69,6 +72,9 @@ Route::middleware('training.worker')->prefix('training/worker')->group(function 
     Route::post('/jobs/{id}/complete', [TrainingWorkerController::class, 'complete'])->name('api.training.worker.complete');
     Route::post('/jobs/{id}/fail', [TrainingWorkerController::class, 'fail'])->name('api.training.worker.fail');
 });
+
+Route::get('/downloads/predictions/{id}/{kind}', [AnalysisController::class, 'signedDownload'])->whereIn('kind', ['results', 'complete'])->middleware('signed:relative')->name('api.downloads.predictions');
+Route::get('/downloads/training/{id}/weights', [TrainingController::class, 'signedWeights'])->middleware('signed:relative')->name('api.downloads.weights');
 
 // Protected routes (authentication required)
 Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
@@ -100,6 +106,31 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         // Own password. Without this the only way to change one is an admin
         // reset to the shared default, which every admin then knows.
         Route::post('/password', [AuthController::class, 'changePassword'])->name('api.me.password');
+
+        Route::prefix('training')->group(function () {
+            Route::get('/jobs', [MeTrainingController::class, 'index'])->name('api.me.training.jobs');
+            Route::post('/jobs', [MeTrainingController::class, 'store'])->name('api.me.training.jobs.store');
+            Route::get('/jobs/{id}/weights-link', [TrainingController::class, 'weightsLink'])->name('api.me.training.weights-link');
+            Route::get('/jobs/{id}', [MeTrainingController::class, 'show'])->name('api.me.training.jobs.show');
+            Route::post('/jobs/{id}/cancel', [MeTrainingController::class, 'cancel'])->name('api.me.training.jobs.cancel');
+            Route::get('/jobs/{id}/samples', [MeTrainingController::class, 'samples'])->name('api.me.training.samples');
+            Route::get('/jobs/{id}/samples/{epoch}', [MeTrainingController::class, 'sampleImage'])->name('api.me.training.samples.show');
+            Route::get('/jobs/{id}/dataset/frames', [MeTrainingController::class, 'datasetFrames'])->name('api.me.training.dataset.frames');
+            // `{name}` has to span slashes. The listing beside it hands out
+            // entry names straight from the archive, and real datasets keep
+            // their frames in a folder — `input/HONDA_Used_0051.tif`. Without
+            // this, the client's `Uri.encodeComponent` produced `%2F`, which
+            // Symfony decodes back to a separator before matching, so the URL
+            // named two segments where the route expected one and matched
+            // nothing at all. Every frame in a foldered dataset answered 404.
+            //
+            // Safe because the controller checks the name against the
+            // archive's own listing rather than sanitising it: a name that is
+            // not an entry is refused whatever it looks like.
+            Route::get('/jobs/{id}/dataset/frames/{name}/preview', [MeTrainingController::class, 'datasetFramePreview'])
+                ->where('name', '.*')
+                ->name('api.me.training.dataset.preview');
+        });
     });
 
     // Serving a photo is authenticated rather than public: avatars appear
@@ -111,6 +142,7 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
 
     // Admin routes
     Route::middleware('role:admin')->prefix('admin')->group(function () {
+        Route::get('/stats', [\App\Http\Controllers\API\AdminStatsController::class, 'show'])->name('api.admin.stats');
         // User management
         Route::get('/users', [UserController::class, 'index'])->name('api.admin.users.index');
         Route::post('/users', [UserController::class, 'store'])->name('api.admin.users.store');
@@ -128,6 +160,7 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         // Model management
         Route::get('/models', [ModelController::class, 'index'])->name('api.admin.models.index');
         Route::post('/models', [ModelController::class, 'store'])->name('api.admin.models.store');
+        Route::post('/models/sync', [ModelController::class, 'sync'])->name('api.admin.models.sync');
         Route::get('/models/{id}', [ModelController::class, 'show'])->name('api.admin.models.show');
         Route::put('/models/{id}', [ModelController::class, 'update'])->name('api.admin.models.update');
         Route::delete('/models/{id}', [ModelController::class, 'destroy'])->name('api.admin.models.destroy');
@@ -166,6 +199,7 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         Route::get('/training/jobs/{id}', [TrainingController::class, 'showJob'])->name('api.admin.training.jobs.show');
         Route::post('/training/jobs/{id}/cancel', [TrainingController::class, 'cancelJob'])->name('api.admin.training.jobs.cancel');
         Route::delete('/training/jobs/{id}', [TrainingController::class, 'destroyJob'])->name('api.admin.training.jobs.destroy');
+        Route::get('/training/jobs/{id}/weights-link', [TrainingController::class, 'weightsLink'])->name('api.admin.training.weights-link');
         Route::get('/training/jobs/{id}/weights', [TrainingController::class, 'downloadWeights'])->name('api.admin.training.jobs.weights');
         Route::post('/training/jobs/{id}/register-model', [TrainingController::class, 'registerModel'])->name('api.admin.training.jobs.register');
 
@@ -184,7 +218,10 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
 
         // Free space on the results volume, and how much of what is used the
         // retention sweep will hand back on its own.
+        Route::get('/queue', [AdminQueueController::class, 'index'])->name('api.admin.queue');
         Route::get('/storage', [StorageController::class, 'show'])->name('api.admin.storage');
+        Route::post('/storage/cleanup', [StorageController::class, 'cleanup'])->middleware('throttle:3,1')->name('api.admin.storage.cleanup');
+        Route::post('/storage/predictions/{id}/cleanup', [StorageController::class, 'cleanupPrediction'])->name('api.admin.storage.predictions.cleanup');
     });
     
     // IT support, as messaging. A researcher has exactly one thread, so none
@@ -225,6 +262,7 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         Route::get('/{id}/frames/{name}/preview', [AnalysisController::class, 'framePreview'])->name('api.predictions.frames.preview');
         // Kept thumbnails. Outlive the frames, so no expiry check here.
         Route::get('/{id}/evidence/{name}', [AnalysisController::class, 'evidence'])->name('api.predictions.evidence');
+        Route::get('/{id}/download-link', [AnalysisController::class, 'downloadLink'])->name('api.predictions.download-link');
         Route::get('/{id}/download/results', [AnalysisController::class, 'downloadResults'])->name('api.predictions.download.results');
         Route::get('/{id}/download/complete', [AnalysisController::class, 'downloadComplete'])->name('api.predictions.download.complete');
     });

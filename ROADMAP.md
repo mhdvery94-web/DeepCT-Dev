@@ -12,17 +12,15 @@ perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
 ## Diketahui, belum dikerjakan
 
-- [ ] **Migrasikan frontend web ke Next.js di `fe_web`.** Fondasi pertama sudah
-      dibuat pada cabang `develop`: landing page responsif, research news dengan
-      satu media stage untuk foto/video, login Sanctum dalam cookie `HttpOnly`,
-      BFF same-origin, guard admin/user, dashboard dan route seluruh modul.
-      `npm run check`, production build 21 route, dan smoke test HTTP lokal sudah
-      lulus. Yang belum boleh disebut selesai: tabel/form CRUD tiap modul,
-      prediksi/training lengkap, URL unduhan besar bertanda tangan, staging API
-      yang terpisah dari database produksi, dan UAT. Proyek Vercel Next.js
-      terpisah dengan Root Directory `fe_web` sudah dibuat dan bootstrap
-      deployment-nya lulus pada run `37706342986`; landing page publik hidup di
-      `https://deepct-web.vercel.app`.
+- [ ] **Selesaikan migrasi frontend web ke Next.js di `fe_web`.** Landing,
+      artikel penuh, login/request/reset akses, CRUD admin, dashboard kedua role,
+      prediksi chunked/preview/start/comparison/download, training, pesan,
+      notifikasi, profil, queue dan disk management sudah diimplementasikan.
+      Validasi lokal 8 Oktober: 396 tes Laravel/1.593 asersi, lint/TypeScript,
+      build Next.js Docker, 5 tes origin proxy, 30 smoke check API HTTP,
+      serta 48 pemeriksaan browser terhadap API lokal berjalan lulus.
+      Yang tersisa: UAT penelitian terhadap worker GPU produksi, staging API
+      yang terpisah, dan sinkronisasi laptop setelah jalur SSH tersedia.
 
 - [ ] **Terapkan promosi branch `develop` → `staging` → `main`.** Ketiga branch
       sudah ada di GitHub dan workflow `web-next.yml` memetakan preview/staging

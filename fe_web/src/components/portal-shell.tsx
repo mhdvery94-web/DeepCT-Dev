@@ -22,6 +22,13 @@ const adminNavigation: readonly NavigationItem[] = [
   ["/admin/messages", "message", "Messages"],
   ["/admin/news", "news", "Research news"],
   ["/admin/models", "model", "Model management"],
+  ["/admin/storage", "database", "Disk management"],
+  ["/admin/training", "training", "Training oversight"],
+  ["/admin/datasets", "database", "Training datasets"],
+  ["/admin/queue", "workflow", "Queue monitor"],
+  ["/workspace/predictions", "prediction", "Predictions"],
+  ["/workspace/notifications", "news", "Notifications"],
+  ["/workspace/profile", "shield", "Account settings"],
   ["/admin/activity", "activity", "Activity logs"],
 ];
 
@@ -31,6 +38,8 @@ const userNavigation: readonly NavigationItem[] = [
   ["/workspace/models", "model", "Available models"],
   ["/workspace/training", "training", "Model training"],
   ["/workspace/messages", "message", "Messages"],
+  ["/workspace/notifications", "news", "Notifications"],
+  ["/workspace/profile", "shield", "Account settings"],
   ["/workspace/activity", "activity", "My activity"],
 ];
 
@@ -51,6 +60,11 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
   const toggle = useRef<HTMLButtonElement>(null);
   const navigation = user.role === "admin" ? adminNavigation : userNavigation;
   const currentLabel = navigation.find(([href]) => pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`)))?.[2] ?? "Workspace";
+  const avatar = user.avatar_url
+    // Authenticated media must receive the browser's same-origin session cookie.
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img src={`/api/backend/users/${user.id}/avatar`} alt="" />
+    : initials(user.name);
 
   useEffect(() => {
     document.body.classList.toggle("menu-open", open);
@@ -73,7 +87,7 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
       gsap.fromTo(
         ".portal-content",
         { autoAlpha: 0, y: 16 },
-        { autoAlpha: 1, y: 0, duration: 0.45, ease: "power3.out" },
+        { autoAlpha: 1, y: 0, duration: 0.45, ease: "power3.out", clearProps: "transform,opacity,visibility" },
       );
     },
     { scope: main, dependencies: [pathname], revertOnUpdate: true },
@@ -100,6 +114,7 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
             return (
               <Link
                 href={href}
+                prefetch={false}
                 key={href}
                 className={active ? "is-active" : ""}
                 aria-current={active ? "page" : undefined}
@@ -113,7 +128,7 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
           })}
         </nav>
         <div className="portal-user">
-          <span className="portal-user__avatar" aria-hidden="true">{initials(user.name)}</span>
+          <span className="portal-user__avatar" aria-hidden="true">{avatar}</span>
           <span className="portal-user__copy">
             <strong>{user.name}</strong>
             <span>{user.email}</span>
@@ -147,7 +162,7 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
             <span><small>Workspace</small><strong>{currentLabel}</strong></span>
           </div>
           <div className="portal-topbar__status">
-            <span className="portal-account__avatar" aria-hidden="true">{initials(user.name)}</span>
+            <span className="portal-account__avatar" aria-hidden="true">{avatar}</span>
             <span className="portal-account__copy"><strong>{user.name}</strong><small>{user.role === "admin" ? "Administrator" : "Researcher"}</small></span>
             <Link className="portal-account__security" href="/change-password" aria-label="Change password" title="Change password"><UiIcon name="shield" size={19} /></Link>
           </div>

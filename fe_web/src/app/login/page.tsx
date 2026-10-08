@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/api";
 export const metadata: Metadata = { title: "Login" };
 
 function safeNextPath(value?: string): string {
-  if (!value?.startsWith("/") || value.startsWith("//")) return "/dashboard";
+  if (!value?.startsWith("/") || value.startsWith("//") || /[\\\x00-\x1f]/.test(value)) return "/dashboard";
   return value;
 }
 
@@ -43,8 +43,12 @@ export default async function LoginPage({
           <h2>Welcome back</h2>
           <p>Use the account issued by your administrator.</p>
           <LoginForm nextPath={safeNextPath(params.next)} />
+          <div className="auth-actions">
+            <Link className="button button--secondary button--wide" href="/request-access">Request access</Link>
+            <Link href="/reset-password">Reset password to default</Link>
+          </div>
           <p className="auth-help">
-            Cannot access your account? Return to the website and use the support channel.
+            Password resets are reviewed by an administrator. You will be asked to change the issued password after signing in.
           </p>
         </div>
       </section>

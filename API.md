@@ -44,6 +44,7 @@ login · 403 bukan haknya · 404 tidak ada · 409 konflik · 410 sudah kedaluwar
 | `POST` | `/access-requests` | Formulir Join di landing page. 5/menit/IP. |
 | `POST` | `/messages/public` | Pesan dari halaman login. 5/10 menit/IP. |
 | `GET` | `/news` | Berita riset yang sudah terbit, urut slide. |
+| `GET` | `/news/{id}` | Artikel terbit lengkap, termasuk `body`; draf selalu 404. |
 | `GET` | `/news/{id}/image` | Fotonya. **404 untuk draf**, kecuali pemanggilnya admin. |
 | `GET` | `/news/{id}/video` | Videonya. Aturan yang sama. Menjawab Range, jadi bisa digeser. |
 
@@ -372,6 +373,16 @@ mengantrekan pekerjaannya. Ia menjawab:
 | `GET` | `/predictions/{id}/frames/{name}/preview` | Frame itu sebagai PNG |
 | `GET` | `/predictions/{id}/download/results` | ZIP berisi frame hasil saja |
 | `GET` | `/predictions/{id}/download/complete` | ZIP berisi `input/`, `output/`, `metadata.json`, `manifest.csv` |
+
+### Unduhan besar melalui web
+
+`GET /predictions/{id}/download-link?kind=results|complete` memeriksa pemilik
+dan status completed, lalu mengembalikan `data.path` bertanda tangan relatif
+berumur lima menit. `GET /admin/training/jobs/{id}/weights-link` dan
+`GET /me/training/jobs/{id}/weights-link` melakukan hal yang sama untuk bobot;
+periset hanya dapat meminta bobot run miliknya. Route `/downloads/*` memeriksa
+tanda tangan, expiry, dan status akun kembali sebelum melayani berkas. BFF web
+mengarahkan browser ke API publik Pi agar arsip tidak melewati batas Vercel.
 
 ### Syarat arsip
 
@@ -912,7 +923,10 @@ yang dicabut sementara pekerjaannya masih mengantre meninggalkannya kosong.
 
 | Method | Endpoint |
 |---|---|
-| `GET` | `/admin/storage` — ruang kosong dan rinciannya |
+| `GET` | `/admin/storage` — ruang kosong, rincian aplikasi, dan 100 kandidat prediksi selesai tertua |
+| `POST` | `/admin/storage/cleanup` — jalankan retensi prediksi/dataset serta sapuan temporary; admin saja |
+| `POST` | `/admin/storage/predictions/{id}/cleanup` — hapus berkas prediksi completed/failed; pertahankan rekaman dan evidence |
+| `GET` | `/admin/stats` — statistik seluruh platform; `/me/stats` tetap hanya milik pemanggil |
 
 ```json
 {

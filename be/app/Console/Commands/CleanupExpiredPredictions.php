@@ -29,6 +29,7 @@ class CleanupExpiredPredictions extends Command
 
         $expired = AnalysisRecord::whereNotNull('expires_at')
             ->where('expires_at', '<=', now())
+            ->whereNotIn('status', ['pending', 'processing'])
             ->whereNull('files_deleted_at')
             ->get();
 

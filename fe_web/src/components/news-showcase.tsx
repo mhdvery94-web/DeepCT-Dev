@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { NewsPost } from "@/lib/types";
 
 type MediaKind = "image" | "video";
@@ -107,6 +108,9 @@ export function NewsShowcase({ posts }: { posts: NewsPost[] }) {
             <span className="eyebrow">{formatDate(activePost.published_at)}</span>
             <h3>{activePost.title}</h3>
             <p>{activePost.summary}</p>
+            <Link className="button button--secondary news-read-more" href={`/research/${activePost.id}`}>
+              Read more <span aria-hidden="true">→</span>
+            </Link>
           </div>
           <div className="news-feature__footer">
             <span>

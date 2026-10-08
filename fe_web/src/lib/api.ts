@@ -27,9 +27,11 @@ export function apiBaseUrl(): string {
     process.env.LARAVEL_API_BASE_URL ??
     process.env.RASPI_API_BASE_URL ??
     process.env.NGROK_RASPI ??
-    LOCAL_API;
+    (process.env.NODE_ENV === "production" ? "" : LOCAL_API);
 
-  return configured.trim().replace(/\/+$/, "");
+  if (!configured.trim()) throw new Error("LARAVEL_API_BASE_URL must point to the Raspberry Pi API.");
+  const base = configured.trim().replace(/\/+$/, "");
+  return base.endsWith("/api") ? base : `${base}/api`;
 }
 
 export function apiUrl(path: string): string {
@@ -70,6 +72,7 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
+  headers.set("ngrok-skip-browser-warning", "true");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const response = await fetch(apiUrl(path), {
@@ -135,13 +138,13 @@ export async function requireAdmin(): Promise<DeepCtUser> {
   return user;
 }
 
-export async function getUserStats(): Promise<UserStats | null> {
+export async function getUserStats(role: "admin" | "user" = "user"): Promise<UserStats | null> {
   const token = (await cookies()).get(AUTH_COOKIE_NAME)?.value;
   if (!token) return null;
 
   try {
     const response = await apiRequest<ApiEnvelope<UserStats>>(
-      "/me/stats",
+      role === "admin" ? "/admin/stats" : "/me/stats",
       { cache: "no-store" },
       token,
     );

@@ -3,5 +3,5 @@ import { requireAdmin } from "@/lib/api";
 
 export default async function AdminMessagesPage() {
   await requireAdmin();
-  return <ModulePage eyebrow="Administration" title="Messages" description="Read and reply to authenticated researcher and public support conversations." />;
+  return <ModulePage eyebrow="Administration" title="Support inbox" description="Read and reply to authenticated researcher and public support conversations." />;
 }

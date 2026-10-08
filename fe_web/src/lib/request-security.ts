@@ -5,7 +5,12 @@ export function hasTrustedOrigin(request: Request): boolean {
   try {
     const requestUrl = new URL(request.url);
     const originUrl = new URL(origin);
-    return originUrl.host === requestUrl.host && originUrl.protocol === requestUrl.protocol;
+    // Next may construct request.url with the internal server hostname.
+    // Browsers send the public Host; the proxy supplies the external scheme.
+    const host = request.headers.get("host") ?? requestUrl.host;
+    const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0].trim();
+    const protocol = forwardedProtocol ? `${forwardedProtocol}:` : requestUrl.protocol;
+    return originUrl.host === host && originUrl.protocol === protocol;
   } catch {
     return false;
   }

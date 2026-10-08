@@ -318,6 +318,28 @@ class TrainingController extends Controller
         );
     }
 
+    public function weightsLink(Request $request, $id)
+    {
+        $job = TrainingJob::findOrFail($id);
+        abort_unless($request->user()->role === 'admin' || $job->created_by === $request->user()->id, 404);
+        $path = $job->weights_path ?? $job->checkpoint_path;
+        abort_unless($path && Storage::exists($path), 404, 'No weights available.');
+        $signed = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+            'api.downloads.weights', now()->addMinutes(5),
+            ['id' => $job->id, 'owner' => $request->user()->id], absolute: false
+        );
+        return response()->json(['success' => true, 'data' => ['path' => $signed]]);
+    }
+
+    public function signedWeights(Request $request, $id)
+    {
+        $owner = \App\Models\User::findOrFail($request->query('owner'));
+        $job = TrainingJob::findOrFail($id);
+        abort_unless($owner->is_active && !$owner->must_change_password, 403);
+        abort_unless($owner->role === 'admin' || $job->created_by === $owner->id, 404);
+        return $this->downloadWeights($id);
+    }
+
     // ----------------------------------------------------------- helpers
 
     private function serialiseDataset(TrainingDataset $dataset): array

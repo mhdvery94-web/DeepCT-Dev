@@ -1,3 +1,5 @@
+import { DataModule } from "@/components/data-module";
+
 export function ModulePage({
   eyebrow,
   title,
@@ -16,14 +18,7 @@ export function ModulePage({
           <p>{description}</p>
         </div>
       </header>
-      <section className="section-placeholder">
-        <span className="eyebrow">Next migration slice</span>
-        <h2>Route and authorization are ready</h2>
-        <p>
-          The page is protected by the shared Laravel session. Its full data table and
-          mutations will be migrated from Flutter in the next feature slice.
-        </p>
-      </section>
+      <DataModule title={title} />
     </main>
   );
 }

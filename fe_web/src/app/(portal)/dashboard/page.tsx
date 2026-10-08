@@ -10,7 +10,7 @@ const adminModules: readonly Module[] = [
   ["/admin/users", "users", "User management", "Manage accounts and researcher access."],
   ["/admin/access-requests", "request", "Access requests", "Review requests to join the platform."],
   ["/admin/news", "news", "Research news", "Manage publications and research updates."],
-  ["/admin/models", "model", "Model management", "Organize models available to researchers."],
+  ["/admin/storage", "database", "Disk management", "Monitor disk capacity and free unused application files."],
 ];
 const userModules: readonly Module[] = [
   ["/workspace/predictions", "prediction", "Predictions", "Explore your CT prediction workspace."],
@@ -26,7 +26,8 @@ const workflow: readonly [IconName, string, string][] = [
 ];
 
 export default async function DashboardPage() {
-  const [user, stats] = await Promise.all([requireUser(), getUserStats()]);
+  const user = await requireUser();
+  const stats = await getUserStats(user.role);
   const modules = user.role === "admin" ? adminModules : userModules;
   const statuses = Object.entries(stats?.analyses_by_status ?? {});
   const largestCount = Math.max(1, ...statuses.map(([, count]) => count));
@@ -36,7 +37,7 @@ export default async function DashboardPage() {
   const cards: readonly [IconName, string, number | undefined, string][] = [
     ["activity", "Total activities", stats?.activities_total, "red"],
     ["dashboard", "Activities today", stats?.activities_today, "navy"],
-    ["prediction", "Your analyses", stats?.analyses_total, "rose"],
+    ["prediction", user.role === "admin" ? "Platform analyses" : "Your analyses", stats?.analyses_total, "rose"],
     ["model", "Models online", stats?.models_online, "wine"],
   ];
 
@@ -93,7 +94,7 @@ export default async function DashboardPage() {
               <small>{stats ? "Your analysis statuses will appear here." : "Your data will appear when the API is available."}</small>
             </div>
           )}
-          <p className="dashboard-panel-note">Your recorded analyses · live API summary</p>
+          <p className="dashboard-panel-note">{user.role === "admin" ? "All platform analyses" : "Your recorded analyses"} · live API summary</p>
         </article>
 
         <article className="dashboard-models">
@@ -118,6 +119,7 @@ export default async function DashboardPage() {
         ))}
       </section>
 
+      {user.role === "admin" && <div className="dashboard-admin-summary"><Link href="/admin/users">{stats?.users_total ?? "—"} accounts</Link><Link href="/admin/access-requests">{stats?.pending_requests ?? "—"} pending access requests</Link><Link href="/admin/storage">{stats?.free_bytes == null ? "—" : (stats.free_bytes / 1024 ** 3).toFixed(1) + " GB"} free disk space</Link></div>}
       <div className="dashboard-lower">
         <section className="dashboard-modules">
           <header className="dashboard-section-heading"><div><span className="dashboard-kicker">Everything in reach</span><h2>{user.role === "admin" ? "Administration" : "Research modules"}</h2></div><UiIcon name="dashboard" size={22} /></header>

@@ -1,11 +1,11 @@
 /*
  * Bootslander by BootstrapMade (https://bootstrapmade.com/bootslander-free-bootstrap-landing-page-template/).
  * Selected hero, waves, about/icon boxes and section-title layouts adapted for Next.js and BRIN.
- * Attribution remains in the landing footer. No Bootstrap/AOS scripts are required.
+ * No Bootstrap/AOS scripts are required.
  */
 .bl-container { width: min(100% - 64px, 1160px); margin-inline: auto; }
-.bootslander-page { --heading-color: #172b36; --accent-color: #b91c1c; }
-.bootslander-page .site-header { position: sticky; top: 0; z-index: 50; height: 76px; background: #541e28; color: white; border-bottom: 1px solid #ffffff12; }
+.bootslander-page { --site-header-height: 76px; --heading-color: #172b36; --accent-color: #b91c1c; }
+.bootslander-page .site-header { position: sticky; top: 0; z-index: 50; height: var(--site-header-height); background: #541e28; color: white; border-bottom: 1px solid #ffffff12; }
 .site-header__inner { height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .bootslander-page .site-nav { display: flex; align-items: center; gap: 30px; }
 .site-nav > a:not(.button) { position: relative; display: block; padding-block: 24px; font-size: 14px; color: #efdde0; }
@@ -16,7 +16,7 @@
 .site-nav__login:hover { background: #fff1f2; color: #7f1d1d; }
 .menu-button { display: none; width: 44px; height: 44px; border: 1px solid #ffffff40; background: transparent; padding: 10px; }
 .menu-button span:not(.sr-only) { display: block; height: 2px; margin: 4px 0; background: white; }
-.bl-hero { position: relative; overflow: hidden; color: white; background: radial-gradient(ellipse at 72% 40%, #a43c4240, transparent 65%), linear-gradient(120deg, #541e28 15%, #351e2a 65%, #192b37); }
+.bl-hero { min-height: calc(100dvh - var(--site-header-height)); display: flex; align-items: center; position: relative; overflow: hidden; color: white; background: radial-gradient(ellipse at 72% 40%, #a43c4240, transparent 65%), linear-gradient(120deg, #541e28 15%, #351e2a 65%, #192b37); }
 .bl-hero::before { content: ""; position: absolute; width: 590px; height: 590px; right: -230px; top: -275px; border: 1px solid #ffffff10; border-radius: 50%; }
 .bl-hero__inner { position: relative; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); align-items: center; gap: 56px; padding-block: 52px 92px; }
 .bl-hero__eyebrow { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase; color: #f4bdc1; }
@@ -54,7 +54,7 @@
 .bl-wave--back { opacity: .2; }
 .bl-wave--middle { opacity: .35; }
 .bl-wave--front { opacity: 1; }
-.bl-section { padding-block: 64px; scroll-margin-top: 0; }
+.bl-section { min-height: calc(100dvh - var(--site-header-height)); display: flex; flex-direction: column; justify-content: center; padding-block: clamp(24px, 4dvh, 56px); scroll-margin-top: 0; }
 .bl-about__layout { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 64px; align-items: center; }
 .bl-label { display: inline-block; padding: 7px 12px; color: var(--brin-red); background: #fff1f2; font-size: 12px; font-weight: 600; }
 .bl-about h2 { margin: 18px 0; color: var(--heading-color); font-size: clamp(30px, 3vw, 38px); font-weight: 700; line-height: 1.2; letter-spacing: -.025em; }
@@ -129,7 +129,8 @@
 }
 @media (max-width: 640px) {
   .bl-container { width: calc(100% - 36px); }
-  .bootslander-page .site-header { height: 68px; }
+  .bootslander-page { --site-header-height: 68px; }
+  .bootslander-page .site-header { height: var(--site-header-height); }
   .bootslander-page .site-nav { top: 67px; padding-inline: 18px; }
   .bl-hero__inner { grid-template-columns: 1fr; gap: 25px; padding-block: 30px 67px; }
   .bl-hero__copy { max-width: 500px; }

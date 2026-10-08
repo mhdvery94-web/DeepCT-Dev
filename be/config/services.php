@@ -35,4 +35,5 @@ return [
         ],
     ],
 
+    'ai_model_server' => ['base_url' => env('AI_MODEL_SERVER_BASE_URL')],
 ];

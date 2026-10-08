@@ -23,6 +23,7 @@ const RESPONSE_HEADERS = [
   "content-type",
   "etag",
   "last-modified",
+  "x-checksum-md5",
 ];
 
 function buildPath(segments: string[]): string {
@@ -41,10 +42,10 @@ async function handler(
   }
 
   const { path } = await context.params;
-  const target = new URL(apiUrl(buildPath(path)));
-  target.search = request.nextUrl.search;
 
   const headers = new Headers();
+  headers.set("accept", "application/json");
+  headers.set("ngrok-skip-browser-warning", "true");
   for (const name of REQUEST_HEADERS) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
@@ -66,6 +67,26 @@ async function handler(
   }
 
   try {
+    // Redirect large artifacts to a short-lived Laravel URL instead of
+    // streaming gigabytes through Vercel's function response limit.
+    const resourcePath = buildPath(path);
+    const predictionDownload = resourcePath.match(/^\/predictions\/(\d+)\/download\/(results|complete)$/);
+    const weightsDownload = resourcePath.match(/^\/(admin|me)\/training\/jobs\/(\d+)\/weights$/);
+    if (request.method === "GET" && (predictionDownload || weightsDownload)) {
+      const linkPath = predictionDownload
+        ? `/predictions/${predictionDownload[1]}/download-link?kind=${predictionDownload[2]}`
+        : `/${weightsDownload![1]}/training/jobs/${weightsDownload![2]}/weights-link`;
+      const linkResponse = await fetch(apiUrl(linkPath), { headers, cache: "no-store" });
+      const payload = await linkResponse.json();
+      if (!linkResponse.ok) return NextResponse.json(payload, { status: linkResponse.status });
+      const signedPath = payload?.data?.path;
+      if (typeof signedPath !== "string" || !signedPath.startsWith("/api/downloads/") || signedPath.startsWith("//")) {
+        throw new Error("Invalid download link.");
+      }
+      return NextResponse.redirect(new URL(signedPath, apiUrl("/")), 307);
+    }
+    const target = new URL(apiUrl(buildPath(path)));
+    target.search = request.nextUrl.search;
     const upstream = await fetch(target, init);
     const responseHeaders = new Headers();
     for (const name of RESPONSE_HEADERS) {

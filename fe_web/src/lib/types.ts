@@ -34,6 +34,9 @@ export type UserStats = {
   analyses_by_status: Record<string, number>;
   models_online: number;
   models_total: number;
+  users_total?: number;
+  pending_requests?: number;
+  free_bytes?: number | null;
 };
 
 export type ApiEnvelope<T> = {

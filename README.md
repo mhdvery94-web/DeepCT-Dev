@@ -160,10 +160,11 @@ body type is still checked.
 ## Testing
 
 ```bash
-cd be && php artisan test        # 385 tests, 1,536 assertions
+cd be && php artisan test        # 396 tests, 1,593 assertions (8 October 2026 local validation)
 cd fe && flutter analyze         # must be clean
 cd fe && flutter test            # 276 tests across 33 files
 cd fe_web && npm run check       # ESLint + TypeScript
+cd fe_web && npm test            # same-origin proxy regression checks
 cd fe_web && npm run build       # production Next.js build
 ```
 
