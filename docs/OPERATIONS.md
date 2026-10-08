@@ -61,6 +61,8 @@ lalu aktifkan `STORAGE_REQUIRE_SENTINEL`. Jangan menulis ke mount kosong.
 
 ## Diagnosis singkat
 
+Probe pertama: `curl -fsS https://zestfully-usable-pledge.ngrok-free.dev/api/health`.
+
 - Route tidak sesuai source: `php artisan route:clear`, lalu restart/reload
   worker Octane. route:list sendiri tidak membuktikan proses lama membaca kode baru.
 - Environment tidak berubah: jalankan config:cache lagi dan reload proses.
