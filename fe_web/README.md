@@ -35,9 +35,25 @@ cleaned up on unmount or route change, and disabled when the visitor requests
 reduced motion. Keep API calls and authorization in Server Components or Route
 Handlers; client-side motion wrappers receive already-rendered content.
 
-The original Freepik landing/dashboard archives were used as layout references,
-not shipped as page artwork. Keep the attribution link in the public footer if
-those references continue to inform the design.
+The landing adapts the supplied **Bootslander** template by BootstrapMade:
+two-column hero, layered waves, about/icon boxes and section titles, keeping
+Home, About, Research, Join and Login. Template-only pricing, team, gallery and
+testimonial sections are omitted. BRIN artwork comes from the repository's
+`Images` folder; the hero uses an illustrative SVG CT reconstruction rather
+than unrelated template photography.
+
+The supplied flat-dashboard archive contains AI/EPS/JPG artwork, not HTML.
+Its icon rail, three-panel overview, four statistic tiles and lower module
+panels are implemented as responsive React components. The chart shows actual
+analysis-status counts from Laravel, not a fabricated time series. Calendar
+and download widgets without corresponding application data are omitted.
+Module routes keep their existing functionality; this UI refresh does not add
+missing CRUD or prediction implementations.
+
+Keep BootstrapMade's attribution in the landing footer and Freepik's in the
+portal footer as required by the supplied template licenses. Both include the
+requested creator credit, `fajriansyah #bocahunpam`. No template vendor scripts
+or extra Bootstrap/AOS bundles are loaded.
 
 ## Authentication boundary
 

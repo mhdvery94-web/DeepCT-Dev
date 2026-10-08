@@ -10,8 +10,10 @@ export type IconName =
   | "news"
   | "prediction"
   | "request"
+  | "refresh"
   | "shield"
   | "training"
+  | "upload"
   | "users"
   | "workflow";
 
@@ -29,6 +31,10 @@ export function UiIcon({ name, size = 20 }: { name: IconName; size?: number }) {
   };
 
   switch (name) {
+    case "upload":
+      return <svg {...common}><path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5" /></svg>;
+    case "refresh":
+      return <svg {...common}><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6 7a7 7 0 0 1 11-2l3 3M4 16l3 3a7 7 0 0 0 11-2" /></svg>;
     case "dashboard":
       return <svg {...common}><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="4" /><rect x="14" y="11" width="7" height="10" /><rect x="3" y="14" width="7" height="7" /></svg>;
     case "users":

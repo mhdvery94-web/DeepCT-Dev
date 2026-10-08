@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { PortalShell } from "@/components/portal-shell";
 import { requireUser } from "@/lib/api";
+import "../flat-dashboard.css";
 
 export default async function PortalLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();

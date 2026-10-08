@@ -1,174 +1,148 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import { RefreshButton } from "@/components/refresh-button";
 import { UiIcon, type IconName } from "@/components/ui-icon";
 import { getUserStats, requireUser } from "@/lib/api";
 
-type ModuleDefinition = readonly [string, IconName, string, string];
+type Module = readonly [string, IconName, string, string];
 
-const adminModules: readonly ModuleDefinition[] = [
-  ["/admin/users", "users", "User management", "Manage accounts, roles and activation status."],
-  ["/admin/access-requests", "request", "Access requests", "Review incoming researcher access requests."],
-  ["/admin/news", "news", "Research news", "Publish responsive image and video research stories."],
-  ["/admin/models", "model", "Model management", "Register, probe and maintain inference models."],
+const adminModules: readonly Module[] = [
+  ["/admin/users", "users", "User management", "Manage accounts and researcher access."],
+  ["/admin/access-requests", "request", "Access requests", "Review requests to join the platform."],
+  ["/admin/news", "news", "Research news", "Manage publications and research updates."],
+  ["/admin/models", "model", "Model management", "Organize models available to researchers."],
 ];
-
-const userModules: readonly ModuleDefinition[] = [
-  ["/workspace/predictions", "prediction", "Predictions", "Upload CT datasets and follow the inference queue."],
-  ["/workspace/models", "model", "Available models", "Inspect the models currently available for research."],
-  ["/workspace/training", "training", "Model training", "Create and monitor your own training runs."],
-  ["/workspace/messages", "message", "Messages", "Contact the administrator in one continuous thread."],
+const userModules: readonly Module[] = [
+  ["/workspace/predictions", "prediction", "Predictions", "Explore your CT prediction workspace."],
+  ["/workspace/models", "model", "Available models", "Browse the models for your research."],
+  ["/workspace/training", "training", "Model training", "Open your model training workspace."],
+  ["/workspace/messages", "message", "Messages", "Stay in touch with the research team."],
 ];
-
-function formatStatus(value: string): string {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
-}
+const workflow: readonly [IconName, string, string][] = [
+  ["upload", "Prepare your data", "Keep your CT input frames and metadata together."],
+  ["model", "Choose a model", "Use a model suited to your research task."],
+  ["prediction", "Run an analysis", "Submit a job through the prediction workspace."],
+  ["activity", "Review the result", "Track activity and inspect the output."],
+];
 
 export default async function DashboardPage() {
   const [user, stats] = await Promise.all([requireUser(), getUserStats()]);
   const modules = user.role === "admin" ? adminModules : userModules;
-  const readiness = stats?.models_total
+  const statuses = Object.entries(stats?.analyses_by_status ?? {});
+  const largestCount = Math.max(1, ...statuses.map(([, count]) => count));
+  const onlinePercent = stats && stats.models_total > 0
     ? Math.round((stats.models_online / stats.models_total) * 100)
     : 0;
-  const analysisStatuses = Object.entries(stats?.analyses_by_status ?? {});
-  const largestStatus = Math.max(1, ...analysisStatuses.map(([, count]) => count));
-
-  const statCards: Array<{
-    label: string;
-    value: string | number;
-    detail: string;
-    icon: IconName;
-    tone: string;
-  }> = [
-    {
-      label: "Total activities",
-      value: stats?.activities_total ?? "—",
-      detail: "Recorded events",
-      icon: "activity",
-      tone: "coral",
-    },
-    {
-      label: "Activities today",
-      value: stats?.activities_today ?? "—",
-      detail: "Current day",
-      icon: "workflow",
-      tone: "amber",
-    },
-    {
-      label: "Total analyses",
-      value: stats?.analyses_total ?? "—",
-      detail: "Research runs",
-      icon: "prediction",
-      tone: "blue",
-    },
-    {
-      label: "Models online",
-      value: stats ? `${stats.models_online}/${stats.models_total}` : "—",
-      detail: "Available now",
-      icon: "model",
-      tone: "teal",
-    },
+  const cards: readonly [IconName, string, number | undefined, string][] = [
+    ["activity", "Total activities", stats?.activities_total, "red"],
+    ["dashboard", "Activities today", stats?.activities_today, "navy"],
+    ["prediction", "Your analyses", stats?.analyses_total, "rose"],
+    ["model", "Models online", stats?.models_online, "wine"],
   ];
 
   return (
     <main className="portal-content dashboard-page">
-      <header className="portal-heading">
+      <header className="portal-heading dashboard-heading">
         <div>
-          <span className="eyebrow">Research command center</span>
-          <h1>Welcome, {user.name.split(" ")[0]}.</h1>
-          <p>
-            {user.role === "admin"
-              ? "Monitor the platform and manage access from one administration workspace."
-              : "Continue predictions, training and research collaboration from one workspace."}
-          </p>
+          <span className="eyebrow">BRIN · Research workspace</span>
+          <h1>Hello, {user.name.split(" ")[0]}.</h1>
+          <p>{user.role === "admin" ? "Manage the platform and keep research moving." : "Your data, models, and research activity in one place."}</p>
         </div>
-        <div className="dashboard-heading__badge">
-          <span><i aria-hidden="true" /> Workspace active</span>
-          <small>{user.role === "admin" ? "Administration scope" : "Researcher scope"}</small>
-        </div>
+        <RefreshButton />
       </header>
 
-      <section className="stat-grid" aria-label="Account statistics">
-        {statCards.map((card) => (
-          <article className={`stat-card stat-card--${card.tone}`} key={card.label}>
-            <span className="stat-card__icon"><UiIcon name={card.icon} size={20} /></span>
-            <span className="stat-card__label">{card.label}</span>
-            <strong>{card.value}</strong>
-            <small>{card.detail}</small>
+      {!stats && <p className="dashboard-notice" role="status">Statistics are temporarily unavailable. Refresh to try again.</p>}
+
+      <section className="dashboard-board" aria-label="Workspace overview">
+        <article className="dashboard-tasks">
+          <header className="dashboard-panel-heading">
+            <span className="dashboard-panel-icon"><UiIcon name="request" size={21} /></span>
+            <div><span className="dashboard-kicker">Get started</span><h2>Quick actions</h2></div>
+          </header>
+          <nav aria-label="Quick actions">
+            {modules.slice(0, 3).map(([href, icon, title], index) => (
+              <Link key={href} href={href}>
+                <span className="dashboard-task-number">0{index + 1}</span>
+                <span>{title}</span>
+                <UiIcon name={icon} size={17} />
+              </Link>
+            ))}
+          </nav>
+          <Link className="dashboard-panel-link" href={user.role === "admin" ? "/admin/activity" : "/workspace/activity"}>View activity <UiIcon name="arrow" size={15} /></Link>
+        </article>
+
+        <article className="dashboard-analyses">
+          <header className="dashboard-panel-heading">
+            <div><span className="dashboard-kicker">Analysis overview</span><h2>Jobs by status</h2></div>
+            <span className="dashboard-total"><strong>{stats?.analyses_total.toLocaleString() ?? "—"}</strong><small>Total</small></span>
+          </header>
+          {statuses.length > 0 && statuses.some(([, count]) => count > 0) ? (
+            <div className="dashboard-chart" role="list" aria-label="Analysis counts by status">
+              {statuses.map(([status, count]) => (
+                <div className="dashboard-chart__column" key={status} role="listitem" aria-label={status + ": " + count}>
+                  <strong>{count.toLocaleString()}</strong>
+                  <div className="dashboard-chart__track"><span style={{ height: `${count / largestCount * 100}%` }} /></div>
+                  <small>{status.replaceAll("_", " ")}</small>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="dashboard-chart-empty">
+              <UiIcon name="prediction" size={30} />
+              <p>{stats ? "No analyses recorded yet." : "Waiting for statistics."}</p>
+              <small>{stats ? "Your analysis statuses will appear here." : "Your data will appear when the API is available."}</small>
+            </div>
+          )}
+          <p className="dashboard-panel-note">Your recorded analyses · live API summary</p>
+        </article>
+
+        <article className="dashboard-models">
+          <header className="dashboard-panel-heading">
+            <div><span className="dashboard-kicker">Model availability</span><h2>Ready for research</h2></div>
+            <UiIcon name="model" size={23} />
+          </header>
+          <div className="dashboard-model-ring" style={{ "--model-angle": `${Math.min(100, onlinePercent) * 3.6}deg` } as CSSProperties} aria-label={stats ? stats.models_online + " of " + stats.models_total + " models online" : "Model statistics unavailable"}>
+            <div><strong>{stats ? onlinePercent + "%" : "—"}</strong><small>Online</small></div>
+          </div>
+          <p><strong>{stats?.models_online ?? "—"}</strong> online <span>/ {stats?.models_total ?? "—"} registered</span></p>
+          <Link className="dashboard-panel-link" href={user.role === "admin" ? "/admin/models" : "/workspace/models"}>Explore models <UiIcon name="arrow" size={15} /></Link>
+        </article>
+      </section>
+
+      <section className="dashboard-stats" aria-label="Research statistics">
+        {cards.map(([icon, label, value, tone]) => (
+          <article className={`dashboard-stat dashboard-stat--${tone}`} key={label}>
+            <UiIcon name={icon} size={30} />
+            <div><strong>{value?.toLocaleString() ?? "—"}</strong><span>{label}</span></div>
           </article>
         ))}
       </section>
 
-      <section className="dashboard-overview" aria-label="Platform overview">
-        <article className="workflow-panel">
-          <header className="panel-heading">
-            <div><span>Research workflow</span><h2>From dataset to validated result</h2></div>
-            <span className="panel-heading__tag">Operational path</span>
-          </header>
-          <div className="workflow-map">
-            <div><span><UiIcon name="database" size={20} /></span><strong>Upload</strong><small>Dataset intake</small></div>
-            <i aria-hidden="true" />
-            <div><span><UiIcon name="workflow" size={20} /></span><strong>Queue</strong><small>Managed process</small></div>
-            <i aria-hidden="true" />
-            <div><span><UiIcon name="model" size={20} /></span><strong>Analyze</strong><small>Selected model</small></div>
-            <i aria-hidden="true" />
-            <div><span><UiIcon name="shield" size={20} /></span><strong>Review</strong><small>Auditable result</small></div>
+      <div className="dashboard-lower">
+        <section className="dashboard-modules">
+          <header className="dashboard-section-heading"><div><span className="dashboard-kicker">Everything in reach</span><h2>{user.role === "admin" ? "Administration" : "Research modules"}</h2></div><UiIcon name="dashboard" size={22} /></header>
+          <div className="dashboard-module-list">
+            {modules.map(([href, icon, title, description]) => (
+              <Link href={href} key={href}>
+                <span className="dashboard-module-icon"><UiIcon name={icon} size={21} /></span>
+                <span><strong>{title}</strong><small>{description}</small></span>
+                <UiIcon name="arrow" size={17} />
+              </Link>
+            ))}
           </div>
-          <div className="analysis-status">
-            <span className="analysis-status__title">Analysis distribution</span>
-            {analysisStatuses.length ? (
-              <div className="analysis-status__list">
-                {analysisStatuses.slice(0, 4).map(([status, count]) => (
-                  <div key={status}>
-                    <span>{formatStatus(status)}</span>
-                    <i><b style={{ width: `${Math.max(5, (count / largestStatus) * 100)}%` }} /></i>
-                    <strong>{count}</strong>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p>No analysis status has been recorded yet. New research runs will appear here.</p>
-            )}
-          </div>
-        </article>
-
-        <article className="readiness-panel">
-          <header className="panel-heading">
-            <div><span>System readiness</span><h2>Model availability</h2></div>
-          </header>
-          <div
-            className="readiness-ring"
-            style={{ "--readiness": `${readiness * 3.6}deg` } as CSSProperties}
-            aria-label={`${readiness}% of models online`}
-          >
-            <span><strong>{readiness}%</strong><small>online</small></span>
-          </div>
-          <dl className="readiness-details">
-            <div><dt>Online</dt><dd>{stats?.models_online ?? "—"}</dd></div>
-            <div><dt>Registered</dt><dd>{stats?.models_total ?? "—"}</dd></div>
-          </dl>
-          <p>Availability is calculated from the models currently registered with the platform.</p>
-        </article>
-      </section>
-
-      <section className="dashboard-modules" aria-labelledby="modules-title">
-        <header className="dashboard-modules__heading">
-          <div><span className="eyebrow">Workspace modules</span><h2 id="modules-title">Continue your work</h2></div>
-          <span>{String(modules.length).padStart(2, "0")} available modules</span>
-        </header>
-        <div className="module-grid">
-          {modules.map(([href, icon, title, description], index) => (
-            <article className="module-card" key={href}>
-              <div className="module-card__top">
-                <span className="module-card__icon"><UiIcon name={icon} size={22} /></span>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-              </div>
-              <h2>{title}</h2>
-              <p>{description}</p>
-              <Link href={href}>Open module <UiIcon name="arrow" size={16} /></Link>
-            </article>
-          ))}
-        </div>
-      </section>
+        </section>
+        <section className="dashboard-workflow">
+          <header className="dashboard-section-heading"><div><span className="dashboard-kicker">From input to insight</span><h2>Your research workflow</h2></div><UiIcon name="training" size={22} /></header>
+          <ol>
+            {workflow.map(([icon, title, description]) => (
+              <li key={title}>
+                <span><UiIcon name={icon} size={18} /></span>
+                <div><h3>{title}</h3><p>{description}</p></div>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
     </main>
   );
 }

@@ -85,6 +85,7 @@ export function NewsShowcase({ posts }: { posts: NewsPost[] }) {
               <button
                 className={resolvedMedia === "image" ? "is-active" : ""}
                 type="button"
+                aria-pressed={resolvedMedia === "image"}
                 onClick={() => setMediaKind("image")}
               >
                 Image
@@ -92,6 +93,7 @@ export function NewsShowcase({ posts }: { posts: NewsPost[] }) {
               <button
                 className={resolvedMedia === "video" ? "is-active" : ""}
                 type="button"
+                aria-pressed={resolvedMedia === "video"}
                 onClick={() => setMediaKind("video")}
               >
                 Video
@@ -137,6 +139,7 @@ export function NewsShowcase({ posts }: { posts: NewsPost[] }) {
               key={post.id}
               type="button"
               className={index === activeIndex ? "is-active" : ""}
+              aria-pressed={index === activeIndex}
               onClick={() => selectPost(index)}
             >
               <span>{String(index + 1).padStart(2, "0")}</span>

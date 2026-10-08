@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { LoginForm } from "@/components/login-form";
+import { getCurrentUser } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Login" };
 
@@ -15,6 +17,8 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ next?: string }>;
 }) {
+  const user = await getCurrentUser();
+  if (user) redirect(user.must_change_password ? "/change-password" : "/dashboard");
   const params = await searchParams;
 
   return (

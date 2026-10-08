@@ -16,9 +16,8 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (path === "/login" && hasSession) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
+  // Login redirects are handled after Laravel validates the token.
+  // Cookie presence alone would loop expired sessions between login/dashboard.
 
   return NextResponse.next();
 }

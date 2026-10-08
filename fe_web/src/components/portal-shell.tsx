@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { Brand } from "@/components/brand";
+import { CreatorCredit } from "@/components/creator-credit";
 import { UiIcon, type IconName } from "@/components/ui-icon";
 import type { DeepCtUser } from "@/lib/types";
 
@@ -47,18 +48,22 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const main = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
   const navigation = user.role === "admin" ? adminNavigation : userNavigation;
   const currentLabel = navigation.find(([href]) => pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`)))?.[2] ?? "Workspace";
 
   useEffect(() => {
     document.body.classList.toggle("menu-open", open);
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape" && open) { setOpen(false); toggle.current?.focus(); }
     };
+    const resize = () => { if (window.innerWidth > 800) setOpen(false); };
     window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", resize);
     return () => {
       document.body.classList.remove("menu-open");
       window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", resize);
     };
   }, [open]);
 
@@ -81,10 +86,10 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
   }
 
   return (
-    <div className="portal">
+    <div className="portal flat-portal">
       <aside id="portal-navigation" className={`portal-sidebar${open ? " is-open" : ""}`}>
         <div className="portal-sidebar__brand">
-          <Brand />
+          <Brand compact />
         </div>
         <span className="portal-sidebar__label">
           {user.role === "admin" ? "Administration" : "Research workspace"}
@@ -97,10 +102,12 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
                 href={href}
                 key={href}
                 className={active ? "is-active" : ""}
+                aria-current={active ? "page" : undefined}
+                title={label}
                 onClick={() => setOpen(false)}
               >
                 <span className="portal-nav__icon"><UiIcon name={icon} size={18} /></span>
-                <span>{label}</span>
+                <span className="portal-nav__label">{label}</span>
               </Link>
             );
           })}
@@ -111,7 +118,7 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
             <strong>{user.name}</strong>
             <span>{user.email}</span>
           </span>
-          <button className="logout-button" type="button" title="Logout" onClick={logout}>
+          <button className="logout-button" type="button" title="Logout" aria-label="Logout" onClick={logout}>
             <UiIcon name="logout" size={17} />
           </button>
         </div>
@@ -128,6 +135,7 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
           <div className="portal-topbar__title">
             <button
               className="portal-menu-button"
+              ref={toggle}
               type="button"
               aria-label="Toggle navigation"
               aria-controls="portal-navigation"
@@ -139,11 +147,13 @@ export function PortalShell({ user, children }: { user: DeepCtUser; children: Re
             <span><small>Workspace</small><strong>{currentLabel}</strong></span>
           </div>
           <div className="portal-topbar__status">
-            <span><i aria-hidden="true" /> Secure session</span>
-            <strong>{user.role === "admin" ? "Administrator" : "Researcher"}</strong>
+            <span className="portal-account__avatar" aria-hidden="true">{initials(user.name)}</span>
+            <span className="portal-account__copy"><strong>{user.name}</strong><small>{user.role === "admin" ? "Administrator" : "Researcher"}</small></span>
+            <Link className="portal-account__security" href="/change-password" aria-label="Change password" title="Change password"><UiIcon name="shield" size={19} /></Link>
           </div>
         </header>
         {children}
+        <footer className="portal-footer"><CreatorCredit /><span className="template-credit"><a href="https://www.freepik.com" target="_blank" rel="noreferrer">Designed by Freepik</a></span></footer>
       </div>
     </div>
   );

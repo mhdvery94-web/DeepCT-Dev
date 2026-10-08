@@ -18,6 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Rebuild the Next.js landing around the supplied Bootslander template: compact
+  two-column hero, layered waves, animated SVG CT panels, about/icon boxes,
+  research news and access-request form. Preserve Home, About, Research, Join
+  and Login; omit unrelated template sections. Adapt the supplied Freepik flat
+  dashboard artwork into an icon rail, overview panels, four live statistic
+  tiles and module/workflow lists using BRIN red/navy colors and existing BRIN
+  assets. Keep template attributions and add `fajriansyah #bocahunpam` to both
+  footers. Browser checks of landing and admin/user dashboards at 320, 390,
+  600, 768, 820, 1,024 and 1,440 px found no horizontal overflow or JavaScript
+  errors. Local fixture checks cover stable image/video framing, navigation,
+  forms, login/logout, role guards, empty/unavailable stats and reduced motion;
+  lint, TypeScript, production build and dependency audit pass.
+- Validate existing tokens through Laravel before redirecting away from login,
+  instead of using cookie presence alone, fixing the expired-session redirect
+  loop between login and dashboard without weakening protected-route checks.
 - Tighten the Next.js landing hero after mobile review: remove the viewport-height
   minimum that left a large empty band below navigation, keep the tablet hero in
   a compact two-column composition, and compress mobile actions, metrics and CT

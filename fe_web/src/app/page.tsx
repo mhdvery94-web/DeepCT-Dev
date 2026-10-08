@@ -1,241 +1,102 @@
-import Image from "next/image";
 import Link from "next/link";
+import { CreatorCredit } from "@/components/creator-credit";
+import { CtIllustration } from "@/components/ct-illustration";
 import { JoinForm } from "@/components/join-form";
 import { LandingExperience } from "@/components/landing-experience";
 import { NewsShowcase } from "@/components/news-showcase";
 import { SiteHeader } from "@/components/site-header";
+import { Brand } from "@/components/brand";
 import { UiIcon, type IconName } from "@/components/ui-icon";
 import { getPublishedNews } from "@/lib/api";
+import "./bootslander.css";
 
-const features: Array<{
-  number: string;
-  icon: IconName;
-  title: string;
-  description: string;
-}> = [
-  {
-    number: "01",
-    icon: "model",
-    title: "High-fidelity analysis",
-    description:
-      "Validated neural architectures transform CT datasets into repeatable, reviewable research outputs.",
-  },
-  {
-    number: "02",
-    icon: "shield",
-    title: "Sanctioned environment",
-    description:
-      "Data and model access stay inside institutionally governed infrastructure with a complete activity trail.",
-  },
-  {
-    number: "03",
-    icon: "workflow",
-    title: "Streamlined workflow",
-    description:
-      "Upload, queue, monitor, compare and export results from one focused workspace across desktop and mobile.",
-  },
+const capabilities: Array<{ icon: IconName; title: string; description: string }> = [
+  { icon: "prediction", title: "CT frame prediction", description: "Generate missing frames and keep the origin of every result visible." },
+  { icon: "training", title: "Model training", description: "Bring your datasets into a managed, reproducible training workflow." },
+  { icon: "shield", title: "Governed access", description: "Researcher and administrator tools, with access managed by your institution." },
+  { icon: "activity", title: "Traceable research", description: "Review your activity, compare outputs and preserve the evidence behind a run." },
 ];
 
 export default async function Home() {
   const posts = await getPublishedNews();
-
   return (
     <LandingExperience>
       <SiteHeader />
       <main>
-        <section className="hero" id="home">
-          <div className="hero__glow" aria-hidden="true" />
-          <div className="page-shell hero__inner">
-            <div className="hero__copy">
-              <span className="hero__kicker" data-hero-reveal>
-                <span className="hero__status-dot" aria-hidden="true" />
-                BRIN research infrastructure
-              </span>
-              <h1 data-hero-reveal>
-                Intelligence for the next frame of <em>CT research.</em>
-              </h1>
-              <p data-hero-reveal>
-                A secure workspace for neutron and X-ray CT prediction, model training,
-                and reproducible scientific analysis.
-              </p>
-              <div className="hero__actions" data-hero-reveal>
-                <a className="button button--primary" href="#research">
-                  Explore research <UiIcon name="arrow" size={17} />
-                </a>
-                <Link className="text-link text-link--light" href="/login">
-                  Open workspace <UiIcon name="arrow" size={15} />
-                </Link>
+        <section className="bl-hero" id="home" aria-labelledby="hero-title">
+          <div className="bl-container bl-hero__inner">
+            <div className="bl-hero__copy">
+              <span className="bl-hero__eyebrow" data-hero-reveal>BRIN · Neutron CT Platform</span>
+              <h1 id="hero-title" data-hero-reveal>From CT data to the <span>next discovery.</span></h1>
+              <p data-hero-reveal>A shared workspace for deep learning, neutron imaging and reproducible research. Built for the people behind the science.</p>
+              <div className="bl-hero__actions" data-hero-reveal>
+                <a className="bl-button bl-button--white" href="#research">Explore research <UiIcon name="arrow" size={17} /></a>
+                <Link className="bl-workspace-link" href="/login"><span><UiIcon name="arrow" size={18} /></span> Open workspace</Link>
               </div>
-              <dl className="hero__metrics" data-hero-reveal>
-                <div>
-                  <dt>01</dt>
-                  <dd>Unified research portal</dd>
-                </div>
-                <div>
-                  <dt>24/7</dt>
-                  <dd>Managed inference queue</dd>
-                </div>
-                <div>
-                  <dt>100%</dt>
-                  <dd>Auditable activity</dd>
-                </div>
-              </dl>
+              <div className="bl-hero__tags" data-hero-reveal><span>Neutron & X-ray CT</span><i aria-hidden="true" /><span>Deep learning</span></div>
             </div>
-
-            <div className="hero__visual" data-hero-card aria-label="Neutron CT analysis interface preview">
-              <div className="hero-console">
-                <div className="hero-console__topbar">
-                  <span className="hero-console__dots" aria-hidden="true"><i /><i /><i /></span>
-                  <span>CT / ANALYSIS WORKSPACE</span>
-                  <span className="hero-console__live"><i /> SYSTEM READY</span>
-                </div>
-                <div className="hero-console__body">
-                  <div className="hero-scan">
-                    <div className="hero-scan__orbits" aria-hidden="true">
-                      <i className="hero-scan__orbit hero-scan__orbit--outer" data-scan-orbit />
-                      <i className="hero-scan__orbit hero-scan__orbit--inner" data-scan-orbit />
-                    </div>
-                    <div className="hero-scan__volume" data-scan-volume aria-hidden="true">
-                      <i data-scan-slice /><i data-scan-slice /><i data-scan-slice />
-                      <i data-scan-slice /><i data-scan-slice />
-                      <span data-scan-core><b /></span>
-                    </div>
-                    <div className="hero-scan__grid" aria-hidden="true" />
-                    <div className="hero-scan__line" data-scan-line aria-hidden="true" />
-                    <span className="hero-scan__label">Reconstruction preview / axial</span>
-                    <div className="hero-scan__focus" aria-hidden="true"><i /><i /><i /><i /></div>
-                  </div>
-                  <aside className="hero-console__rail">
-                    <div className="console-panel console-panel--accent">
-                      <span>Pipeline</span>
-                      <strong>Frame interpolation</strong>
-                      <small>Ready for validated datasets</small>
-                    </div>
-                    <div className="console-panel">
-                      <span>Processing path</span>
-                      <div className="console-steps" aria-label="Upload, analyze and review workflow">
-                        <i className="is-complete">01</i><b />
-                        <i className="is-complete">02</i><b />
-                        <i>03</i>
-                      </div>
-                      <small>Upload · Analyze · Review</small>
-                    </div>
-                    <div className="console-panel console-panel--metric">
-                      <UiIcon name="shield" size={19} />
-                      <span><strong>Governed access</strong><small>Role-based workspace</small></span>
-                    </div>
-                  </aside>
-                </div>
-                <div className="hero-console__footer">
-                  <span>NEUTRON / X-RAY</span>
-                  <span>REPRODUCIBLE PIPELINE</span>
-                  <span>BRIN · 2026</span>
-                </div>
-              </div>
-              <div className="hero-float hero-float--model" data-hero-float aria-hidden="true">
-                <span><UiIcon name="model" size={18} /> Model workspace</span>
-                <strong>Validated architecture</strong>
-              </div>
-              <div className="hero-float hero-float--research" data-hero-float aria-hidden="true">
-                <Image src="/assets/BRIN.png" alt="" width={30} height={30} />
-                <span>National research<br />infrastructure</span>
-              </div>
-            </div>
+            <div className="bl-hero__art" data-hero-card><CtIllustration /></div>
           </div>
-          <div className="hero__ticker" aria-hidden="true">
-            <div className="page-shell">
-              <span>NEUTRON CT</span><i />
-              <span>DEEP LEARNING</span><i />
-              <span>SCIENTIFIC GOVERNANCE</span><i />
-              <span>REPRODUCIBLE RESULTS</span>
-            </div>
-          </div>
+          {/* Wave geometry adapted from the supplied Bootslander template. */}
+          <svg className="bl-waves" xmlns="http://www.w3.org/2000/svg" viewBox="0 24 150 28" preserveAspectRatio="none" aria-hidden="true">
+            <defs><path id="brin-wave" d="M-160 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18v44h-352z" /></defs>
+            <g className="bl-wave bl-wave--back"><use href="#brin-wave" x="50" y="3" /></g>
+            <g className="bl-wave bl-wave--middle"><use href="#brin-wave" x="50" y="0" /></g>
+            <g className="bl-wave bl-wave--front"><use href="#brin-wave" x="50" y="9" /></g>
+          </svg>
         </section>
-
-        <section className="section section--capabilities" id="about">
-          <div className="page-shell">
-            <div className="section-heading section-heading--split" data-reveal>
-              <div>
-                <span className="eyebrow">Platform capabilities</span>
-                <h2>One workflow. Every research checkpoint visible.</h2>
-              </div>
-              <p>
-                Access state-of-the-art models vetted for institutional use while
-                keeping every dataset, decision and result traceable.
-              </p>
+        <section className="bl-section bl-about" id="about" aria-labelledby="about-title">
+          <div className="bl-container bl-about__layout">
+            <div className="bl-about__copy" data-reveal>
+              <span className="bl-label">About the platform</span>
+              <h2 id="about-title">Less friction.<br />More room for research.</h2>
+              <p>DeepCT brings CT prediction, model training and research collaboration into one workspace for BRIN researchers and approved academic partners.</p>
+              <p>Move from a dataset to a reviewable result, with the tools and records you need at every step.</p>
+              <a className="bl-button" href="#join">Join the platform <UiIcon name="arrow" size={17} /></a>
             </div>
-            <div className="feature-grid" data-reveal>
-              {features.map((feature) => (
-                <article className="feature-card" key={feature.number}>
-                  <div className="feature-card__top">
-                    <span className="feature-card__icon"><UiIcon name={feature.icon} size={22} /></span>
-                    <span className="feature-card__number">{feature.number}</span>
-                  </div>
-                  <h3>{feature.title}</h3>
-                  <p>{feature.description}</p>
-                  <span className="feature-card__line" aria-hidden="true" />
+            <div className="bl-icon-boxes">
+              {capabilities.map(({ icon, title, description }) => (
+                <article className="bl-icon-box" key={title} data-reveal>
+                  <span className="bl-icon-box__icon"><UiIcon name={icon} size={26} /></span>
+                  <h3>{title}</h3><p>{description}</p>
                 </article>
               ))}
             </div>
           </div>
+          <div className="bl-container bl-feature-strip" aria-label="Research workflow" data-reveal>
+            {([["database", "Upload your dataset"], ["model", "Select a model"], ["workflow", "Follow the queue"], ["shield", "Review the result"]] as const).map(([icon, label], index) => (
+              <div key={label}><UiIcon name={icon} size={21} /><span>{label}</span><small>{String(index + 1).padStart(2, "0")}</small></div>
+            ))}
+          </div>
         </section>
-
-        <section className="section section--research" id="research">
-          <div className="page-shell">
-            <div className="section-heading section-heading--split" data-reveal>
-              <div>
-                <span className="eyebrow">Latest research</span>
-                <h2>Stories from the edge of imaging science.</h2>
-              </div>
-              <p>
-                Image and video share one responsive stage, paired with concise context
-                so every publication is easy to explore on any screen.
-              </p>
-            </div>
+        <section className="bl-section bl-research" id="research" aria-labelledby="research-title">
+          <div className="bl-container">
+            <header className="bl-section-title" data-reveal>
+              <span>Research news</span><h2 id="research-title">Inside the research</h2>
+              <p>Discover the latest projects, ideas and updates from our research community.</p>
+            </header>
             <div data-reveal><NewsShowcase posts={posts} /></div>
           </div>
         </section>
-
-        <section className="section section--dark" id="join">
-          <div className="join-glow" aria-hidden="true" />
-          <div className="page-shell join-layout">
-            <div className="join-copy" data-reveal>
-              <span className="eyebrow eyebrow--light">Join the platform</span>
-              <h2>Turn your next dataset into a reproducible result.</h2>
-              <p>
-                Access is currently available to BRIN researchers, affiliated academic
-                staff and approved graduate students.
-              </p>
-              <div className="join-note">
-                <UiIcon name="shield" size={21} />
-                <span><strong>Governed onboarding</strong><small>Requests are reviewed by the IT administration team.</small></span>
+        <section className="bl-section bl-join" id="join" aria-labelledby="join-title">
+          <div className="bl-container">
+            <header className="bl-section-title" data-reveal><span>Join the platform</span><h2 id="join-title">Your next research starts here</h2></header>
+            <div className="bl-join__layout">
+              <div className="bl-join__copy" data-reveal>
+                <h3>A workspace for your next question.</h3>
+                <p>Access is available to BRIN researchers, affiliated academic staff and approved graduate students. Tell us about your work and our administration team will review your request.</p>
+                <div className="bl-contact-item"><span><UiIcon name="users" size={24} /></span><div><h4>Research community</h4><p>BRIN and approved academic partners</p></div></div>
+                <div className="bl-contact-item"><span><UiIcon name="shield" size={24} /></span><div><h4>Reviewed access</h4><p>Accounts are issued by the administration team</p></div></div>
+                <div className="bl-join__login"><p>Already have an account?</p><Link href="/login">Sign in to your workspace <UiIcon name="arrow" size={16} /></Link></div>
               </div>
-            </div>
-            <div className="join-panel" data-reveal>
-              <div className="join-panel__heading">
-                <span>Access request</span>
-                <strong>Tell us about your research.</strong>
-              </div>
-              <JoinForm />
+              <div className="bl-join__form" data-reveal><h3>Request research access</h3><p>Complete the form below to get started.</p><JoinForm /></div>
             </div>
           </div>
         </section>
       </main>
-
-      <footer className="site-footer">
-        <div className="page-shell site-footer__inner">
-          <div>
-            <strong>BRIN</strong>
-            <span>Neutron CT Platform</span>
-          </div>
-          <p>© 2026 Badan Riset dan Inovasi Nasional.</p>
-          <nav aria-label="Footer">
-            <a href="#about">About</a>
-            <a href="#research">Research</a>
-            <Link href="/login">Support</Link>
-            <a href="https://www.freepik.com" target="_blank" rel="noreferrer">Design references by Freepik</a>
-          </nav>
-        </div>
+      <footer className="bl-footer">
+        <div className="bl-container bl-footer__main"><div><Brand /><p>A shared space for neutron CT research,<br />deep learning and scientific collaboration.</p></div><nav aria-label="Footer navigation"><a href="#home">Home</a><a href="#about">About</a><a href="#research">Research</a><a href="#join">Join</a><Link href="/login">Login</Link></nav></div>
+        <div className="bl-container bl-footer__bottom"><p>© {new Date().getFullYear()} BRIN · Neutron CT Platform</p><CreatorCredit /><span className="template-credit">Template by <a href="https://bootstrapmade.com/" target="_blank" rel="noreferrer">BootstrapMade</a></span></div>
       </footer>
     </LandingExperience>
   );
