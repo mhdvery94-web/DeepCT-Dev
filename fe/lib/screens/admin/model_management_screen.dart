@@ -69,7 +69,7 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
 
 
   /// Failures here are silent on purpose: this is a secondary panel, and a
-  /// training service that is unreachable must not take the model list with
+  /// model worker that is unreachable must not take the model list with
   /// it.
   void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;

@@ -9,11 +9,8 @@ use Illuminate\Support\Facades\Http;
 /**
  * Builds every outgoing call to a model worker, in one place.
  *
- * There were five: the interpolation job, the health check (twice — single
- * and pooled), the trainer dispatcher, and the admin's test prediction. Each
- * repeated the same two lines by hand. Adding a credential to five call sites
- * means five places to forget it, and the one that gets forgotten is the one
- * that leaks — so they all come through here now.
+ * The interpolation job, single/pooled health checks, and administrator test
+ * prediction share credential and TLS settings through this client.
  *
  * Two things a registered worker gets to decide for itself:
  *
@@ -37,12 +34,8 @@ class WorkerRequest
      * app(WorkerRequest::class)->for($model, 600)->attach(...)->post($url);
      * ```
      *
-     * [$model] is nullable because a training run can be dispatched to a URL
-     * that belongs to no registered model — `TRAINING_TRAINER_URL`, or an
-     * address written onto the job itself. There is no row to read a secret
-     * from in that case, so the call goes out as it always did: unverified
-     * and unauthenticated. Registering the trainer is what buys it a
-     * credential, which is the right incentive.
+     * A null model provides the existing unregistered-worker configuration.
+     * Catalogue imports use forServer() with explicit credentials and TLS policy.
      */
     public function for(?Model $model, int $timeoutSeconds): PendingRequest
     {

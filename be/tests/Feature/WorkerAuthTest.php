@@ -95,12 +95,12 @@ class WorkerAuthTest extends TestCase
         );
     }
 
-    /** A trainer reached by config URL has no row to read a secret from. */
+    /** An unregistered worker has no row to read a secret from. */
     public function test_a_null_model_still_produces_a_usable_request(): void
     {
         Http::fake(['worker.example/*' => Http::response('ok', 200)]);
 
-        app(WorkerRequest::class)->for(null, 10)->get('https://worker.example/train');
+        app(WorkerRequest::class)->for(null, 10)->get('https://worker.example/predict');
 
         Http::assertSent(fn($request) => !$request->hasHeader('Authorization'));
     }

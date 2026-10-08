@@ -1,10 +1,7 @@
 /// How much room is left on the results volume, and how much of what is used
 /// will come back on its own.
 ///
-/// The total is the least interesting number here. A volume at 90% mostly
-/// holding prediction output — deleted 24 hours after each job — is a
-/// different situation from one at 90% of training datasets, which nothing
-/// reclaims automatically. [reclaimableBytes] is what tells them apart.
+/// Prediction files expire; retained research evidence remains available.
 class StorageReport {
   /// False when the results volume is not mounted. Uploads are refused in
   /// that state rather than written to whatever is behind the mount point.
@@ -25,10 +22,6 @@ class StorageReport {
   /// Kept for good, and small by design.
   final int evidenceBytes;
 
-  /// Reclaimed by nobody. Up to 2 GB per run, and the only way out is an
-  /// administrator deleting one.
-  final int datasetBytes;
-
   final int temporaryBytes;
 
   const StorageReport({
@@ -38,7 +31,6 @@ class StorageReport {
     this.totalBytes,
     this.predictionBytes = 0,
     this.evidenceBytes = 0,
-    this.datasetBytes = 0,
     this.temporaryBytes = 0,
   });
 
@@ -81,7 +73,6 @@ class StorageReport {
       totalBytes: _toIntOrNull(json['total_bytes']),
       predictionBytes: _toInt(breakdown['predictions']),
       evidenceBytes: _toInt(breakdown['evidence']),
-      datasetBytes: _toInt(breakdown['training_datasets']),
       temporaryBytes: _toInt(breakdown['temporary']),
     );
   }

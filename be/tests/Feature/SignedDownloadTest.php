@@ -31,17 +31,4 @@ class SignedDownloadTest extends TestCase
         $this->apiAs(null)->getJson($link)->assertForbidden();
     }
 
-    public function test_training_weights_use_scoped_signed_downloads(): void
-    {
-        Storage::fake('local');
-        $owner = User::create(['name' => 'Trainer', 'email' => 'trainer@download.test', 'password' => bcrypt('password'), 'role' => 'user', 'is_active' => true]);
-        $other = User::create(['name' => 'Other', 'email' => 'other-trainer@download.test', 'password' => bcrypt('password'), 'role' => 'user', 'is_active' => true]);
-        $dataset = \App\Models\TrainingDataset::create(['name' => 'Dataset', 'source_type' => 'upload', 'archive_path' => 'training/datasets/archive.zip', 'uploaded_by' => $owner->id]);
-        $job = \App\Models\TrainingJob::create(['name' => 'Run', 'training_dataset_id' => $dataset->id, 'created_by' => $owner->id, 'status' => 'completed', 'weights_path' => 'training/weights/finished.h5']);
-        Storage::put($job->weights_path, 'model weights');
-        $this->apiAs($other->createToken('test')->plainTextToken)->getJson("/api/me/training/jobs/{$job->id}/weights-link")->assertNotFound();
-        $link = $this->apiAs($owner->createToken('test')->plainTextToken)->getJson("/api/me/training/jobs/{$job->id}/weights-link")->assertOk()->json('data.path');
-        $this->apiAs(null)->get($link)->assertOk()->assertDownload("job-{$job->id}-finished.h5");
-        $this->apiAs(null)->getJson($link . 'tampered')->assertForbidden();
-    }
 }

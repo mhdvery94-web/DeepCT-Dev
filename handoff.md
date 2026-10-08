@@ -1,4 +1,49 @@
-# Serah terima sesi — 1 Oktober 2026
+# Checkpoint agen — 9 Oktober 2026
+
+## Pekerjaan aktif: aplikasi khusus prediksi
+
+Permintaan terakhir pengguna menggantikan penambahan training pada sesi sebelumnya:
+hapus training di frontend web/Flutter, backend, dan database; pisahkan upload
+gambar/video Research news; lenturkan tampilan field/tombol web; perbarui Markdown
+dan hapus berkas usang; push langsung ke `main`. Pertanyaan integrasi LLM dijawab
+sebagai rancangan, bukan permintaan implementasi LLM.
+
+- Basis kerja: `/workspace/DeepCT-Dev`, branch `main`, awal `8200e06`, bersih.
+- Produksi sesi sebelumnya: kode `998df0f`, Next.js run `37819384528`, release
+  `37819384429`; seluruh workflow berhasil, 30 smoke API dan 20 HTTP publik lulus.
+- Tahap sekarang: implementasi penghapusan training selesai; migrasi upgrade
+  dan cleanup terjaga lulus. Backend 329 tes/1.381 asersi; Next.js lint/TypeScript,
+  build Docker, lima tes origin BFF dan audit (nol temuan) lulus.
+- **39 smoke check HTTP API lokal lulus**, termasuk ketiadaan skema training,
+  route lama 404 kedua role, API prediksi/berita dan batas hak disk cleanup.
+- Panel media berita terpisah selesai. **51 pemeriksaan browser lulus**, termasuk
+  media independen, decode video, preservasi media saat edit/hapus, lima ukuran
+  viewport, 404 training kedua role, serta upload/preview/start prediksi. Log:
+  `/tmp/deepct-prediction-browser.log` (dapat hilang). Uji ulang hanya kegagalan
+  atau perubahan baru; jangan mengulang audit/suite yang sudah lulus tanpa alasan.
+- Dokumentasi (20 Markdown aktif) diperbarui dan 47 berkas usang dihapus.
+  `git diff --check` lulus; main lokal dan remote sama sebelum perubahan.
+  Belum commit/push pada checkpoint ini. Langkah berikut: commit/push main,
+  pantau dua workflow, baca smoke/schema cleanup Pi, update
+  checkpoint dengan hasil yang benar-benar diamati.
+- Hapus runtime training, scheduler, cabang upload, signed weights, model kind
+  trainer, dan berkas Flutter yang tidak dipakai. Migrasi historis yang sudah
+  diterapkan tetap merupakan riwayat skema; migrasi baru menghapus skema/data
+  training dari database akhir. Pertahankan prediksi, akun, berita, dan disk cleanup.
+- Verifikasi: MySQL terisolasi; `route:clear` sebelum suite; jangan jalankan suite
+  backend paralel. Docker lokal tersedia; image PHP `deepct-php:8.2`, MySQL `mysql:8.0`,
+  Node `node:22-bookworm-slim`. Host build Turbopack sebelumnya gagal karena batas
+  binding port, sedangkan build Docker berhasil. Playwright dan Chromium tersedia.
+- `main` memicu deploy otomatis Vercel/Pi. Backup database terjadi sebelum migrasi.
+- SSH laptop bukan tugas baru yang diminta pada sesi ini; sebelumnya terhalang
+  karena snapshot lingkungan `vpn_configured: false` dan grant TCP kosong.
+- Jangan mengulang audit dari nol setelah kompaksi: baca checkpoint ini, `git status`,
+  diff terbaru, lalu lanjutkan langkah yang belum ditandai selesai. Update blok ini
+  setelah implementasi, pengujian, push, dan deployment terverifikasi.
+
+Konteks historis di bawah berasal dari 1 Oktober 2026 dan bukan kontrak fitur aktif.
+
+# Serah terima historis — 1 Oktober 2026
 
 Berkas ini untuk sesi berikutnya. Ia menjawab satu pertanyaan: **apa keadaannya
 sekarang, dan apa yang harus dipegang sebelum menyentuh apa pun.**

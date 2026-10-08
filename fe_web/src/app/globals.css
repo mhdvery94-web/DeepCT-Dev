@@ -34,7 +34,7 @@ a:focus-visible, button:focus-visible { outline: 3px solid #e98282; outline-offs
 .brand__copy small { color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: .04em; }
 .eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--brin-red); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .eyebrow--light { color: #fecaca; }
-.button { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 22px; border: 1px solid transparent; border-radius: 0; font-size: 13px; font-weight: 650; transition: background .2s, color .2s; }
+.button { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 22px; border: 1px solid transparent; border-radius: 12px; font-size: 13px; font-weight: 650; transition: background .2s, color .2s, box-shadow .2s, transform .2s; }
 .button--primary { background: var(--brin-red); color: white; }
 .button--primary:hover { background: var(--brin-red-hover); }
 .button--secondary { border-color: var(--line); background: white; color: var(--ink); }
@@ -52,7 +52,7 @@ a:focus-visible, button:focus-visible { outline: 3px solid #e98282; outline-offs
 .join-form label, .auth-form label, .password-form label { display: grid; gap: 6px; }
 .join-form label > span, .auth-form label > span, .password-form label > span { font-size: 12px; font-weight: 650; }
 .join-form label small { color: var(--muted); font-weight: 400; }
-input, textarea { width: 100%; border: 1px solid #ccd6dc; border-radius: 0; background: white; color: var(--ink); outline: none; }
+input, textarea { width: 100%; border: 1px solid #ccd6dc; border-radius: 12px; background: white; color: var(--ink); outline: none; transition: border-color .2s, box-shadow .2s; }
 input { height: 46px; padding: 0 13px; }
 textarea { min-height: 100px; padding: 11px 13px; resize: vertical; }
 input:focus, textarea:focus { border-color: var(--brin-red); outline: 2px solid #fce6e6; }
@@ -231,4 +231,53 @@ progress { accent-color: var(--brin-red); width: 100%; }
   .news-feature__copy > div > p { -webkit-line-clamp: 1; }
   .news-feature__footer { margin-top: 10px; padding-top: 8px; }
   .news-index { display: none; }
+}
+
+/* Shared web controls: softer edges, clear focus and comfortable hit targets. */
+select { border-radius: 12px; transition: border-color .2s, box-shadow .2s; }
+select:focus-visible, input:focus-visible, textarea:focus-visible { border-color: var(--brin-red); box-shadow: 0 0 0 4px #b91c1c0d; outline: 2px solid #fce6e6; }
+.button--primary { box-shadow: 0 4px 12px #b91c1c16; }
+.button:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 6px 16px #132b3c12; }
+.button:not(:disabled):active { transform: translateY(0); }
+.button--secondary { background: #fff; }
+.auth-card, .module-panel, .module-dialog { border-radius: 18px; }
+.module-panel { box-shadow: 0 4px 20px #18394c05; }
+.module-form { gap: 18px; }
+.module-form label > span, .auth-form label > span, .join-form label > span { line-height: 1.6; }
+.module-table-wrap { border-radius: 14px; }
+.row-actions { gap: 8px; }
+.row-actions button, .row-actions a { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 7px 11px; border: 1px solid #ecdfe0; border-radius: 9px; background: #fff9f9; text-decoration: none; transition: background .2s, border-color .2s; }
+.row-actions button:hover, .row-actions a:hover { border-color: #d59b9b; background: #fff0f0; }
+.row-actions .danger-action { color: #a32020; }
+.news-controls button { border-radius: 50%; }
+.news-index button { border-radius: 12px; }
+.issued-password { border-radius: 12px; }
+.media-manager__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.media-manager__header h2 { margin: 8px 0; }
+.media-manager__header p { overflow-wrap: anywhere; font-size: 13px; color: var(--muted); }
+.news-media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 22px; }
+.news-media-card { min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 20px; border: 1px solid #e4e8ec; border-radius: 16px; background: #fcfcfd; }
+.news-media-card h3 { margin: 8px 0 6px; font-size: 18px; }
+.news-media-card p { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.media-step { color: var(--brin-red); font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+.news-media-card__preview { display: grid; place-items: center; aspect-ratio: 16 / 10; overflow: hidden; border: 1px solid #e3e7eb; border-radius: 12px; background: #f1f4f6; text-align: center; }
+.news-media-card__preview img, .news-media-card__preview video { width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.news-media-card__preview small { display: inline-block; max-width: 220px; padding: 4px 12px; }
+.media-file-picker { min-width: 0; }
+.media-file-picker input { width: 100%; min-width: 0; padding: 10px; border-style: dashed; background: white; font-size: 12px; }
+input[type="file"]::file-selector-button { margin-right: 10px; padding: 8px 12px; border: 0; border-radius: 8px; color: #8f1717; background: #fff0f0; font: inherit; cursor: pointer; }
+.media-file-summary { color: var(--muted); overflow-wrap: anywhere; }
+.media-upload-progress { display: grid; gap: 8px; color: var(--muted); font-size: 12px; }
+.news-media-card .module-form { margin-top: auto; }
+.news-media-card .module-actions { gap: 10px; }
+@media (max-width: 640px) {
+  .news-media-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .news-media-card { padding: 16px; }
+  .media-manager__header { gap: 10px; }
+  .media-manager__header .button { padding-inline: 14px; }
+  .row-actions button, .row-actions a { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .button, input, select, textarea, .row-actions button, .row-actions a { transition: none; }
+  .button:not(:disabled):hover { transform: none; }
 }

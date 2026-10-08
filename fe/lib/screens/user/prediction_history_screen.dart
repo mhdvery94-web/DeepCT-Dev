@@ -421,7 +421,7 @@ class _PredictionCard extends StatelessWidget {
           //
           // The numbers themselves are not gone: `_comparison` still uses them
           // to rank two runs over the same frames, which is where an error
-          // figure earns its place, and the training screen reports the same
+          // figure earns its place, and the prediction details report the same
           // family of metrics per epoch.
           _comparison(context, prediction),
           _evidence(context, prediction),

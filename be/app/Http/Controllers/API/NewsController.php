@@ -254,6 +254,13 @@ class NewsController extends Controller
             $post->image_mime = null;
         }
 
+        if ($request->boolean('remove_video')) {
+            $this->deleteVideo($post);
+            $post->video_path = null;
+            $post->video_mime = null;
+            $post->video_size_bytes = null;
+        }
+
         $post->save();
 
         return response()->json([
@@ -304,6 +311,7 @@ class NewsController extends Controller
             'sort_order' => 'nullable|integer|min:0|max:9999',
             'is_published' => 'nullable|boolean',
             'remove_image' => 'nullable|boolean',
+            'remove_video' => 'nullable|boolean',
             'image' => [
                 'nullable',
                 'file',

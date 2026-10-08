@@ -82,7 +82,7 @@ class ModelCatalogSync
                 $seen[] = $slug;
 
                 $model = Model::where('slug', $slug)->first()
-                    ?? Model::where('kind', 'inference')
+                    ?? Model::query()
                         ->where('endpoint_url', $fullEndpointUrl)
                         ->first();
 
@@ -95,7 +95,6 @@ class ModelCatalogSync
                         : $model->name,
                     'slug' => $slug,
                     'version' => $entry['version'] ?? ($model->version ?: 'remote'),
-                    'kind' => 'inference',
                     'base_url' => $baseUrl,
                     'endpoint' => $endpoint,
                     'full_endpoint_url' => $fullEndpointUrl,
@@ -128,7 +127,7 @@ class ModelCatalogSync
                 $models[] = $model->fresh();
             }
 
-            $missingQuery = Model::inference()->where('base_url', $baseUrl);
+            $missingQuery = Model::query()->where('base_url', $baseUrl);
             if ($seen !== []) {
                 $missingQuery->whereNotIn('slug', $seen);
             }

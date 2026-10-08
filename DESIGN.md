@@ -1,5 +1,8 @@
 # 🎨 Design System & UI/UX Guidelines
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](handoff.md).
+
 > **Status: panduan design system.** Token warna, tipografi dan komponen di
 > sini adalah acuan. Nilai yang benar-benar dipakai ada di
 > `fe/lib/theme/app_theme.dart`; kalau keduanya berbeda, kode yang menang.
@@ -18,6 +21,19 @@ Dokumentasi lengkap design system untuk Platform Analisis Citra Neutron CT BRIN.
 ---
 
 ## 🎯 Design Philosophy
+
+### Web update — 9 October 2026
+
+Web buttons and inputs use 12 px corner radii, comfortable padding, visible
+focus rings and restrained hover movement. Row actions have rounded hit areas;
+motion is disabled when the user requests reduced motion. Flutter retains its
+existing visual theme.
+
+Research news separates content from media: save the article, open **Manage
+media**, then choose **Article image** or **Research video**. Two cards appear
+side by side on desktop and stack on phones. Each has its own picker, preview,
+upload and removal control. Video supports pause/resume; busy operations prevent
+closing the dialog. This keeps media changes independent of article editing.
 
 Platform ini dirancang dengan prinsip **Institutional Excellence** - kombinasi antara rigor akademis formal dengan estetika modern data science. Design mencerminkan:
 

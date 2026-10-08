@@ -371,7 +371,7 @@ jobs:
       # a catastrophe and for the binaries it would be a puzzle:
       #
       #   .env         the server's own configuration, never ours to overwrite
-      #   storage/     uploads, results and training datasets. The data.
+      #   storage/     uploads and prediction results. The data.
       #   vendor/      installed on the server, against the server's own PHP
       #   rr, .rr.yaml RoadRunner itself. `octane:install` downloads the binary
       #                once during provisioning and it is gitignored, so
@@ -421,7 +421,7 @@ jobs:
           # never arrive by any other route.
           #
           # `storage/` is excluded from the rsync above — it holds the uploads,
-          # the results and the training datasets, and a deploy has no business
+          # the prediction results, and a deploy has no business
           # touching those. But the same exclusion means the *empty* directories
           # Laravel needs at run time never arrive either. They exist in the
           # repository as folders holding nothing but a .gitignore, and rsync
@@ -476,6 +476,9 @@ jobs:
 
           echo "--- Migrate"
           php artisan migrate --force
+
+          echo "--- Retired application files"
+          php artisan app:cleanup-retired-data
 
           echo "--- Caches"
           php artisan config:cache

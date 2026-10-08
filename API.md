@@ -1,5 +1,8 @@
 # Referensi API
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](handoff.md).
+
 105 route di bawah `/api`, **termasuk** `GET /api/health`. Dihitung dari
 `php artisan route:list --path=api` per 1 Oktober 2026 — jalankan perintah itu
 kalau ragu, ia selalu lebih benar daripada dokumen.
@@ -15,7 +18,7 @@ suite otomatisnya dicatat di [WHITE_BOX_TESTING.md](WHITE_BOX_TESTING.md).
 
 **Autentikasi:** `Authorization: Bearer {token}` untuk route akun. `/login`,
 `/health`, `/access-requests`, `/messages/public`, dan berita terbit adalah
-publik; `/training/worker/*` memakai token worker tersendiri. Akun nonaktif
+publik. Akun nonaktif
 ditolak pada setiap request. Akun yang wajib mengganti password hanya dapat
 mengakses `/user`, `/me/password`, dan `/logout` sampai password diubah.
 
@@ -96,86 +99,6 @@ Urutan slide: `sort_order` menaik, lalu `published_at` menurun.
 
 **`GET /news/{id}/image`** — foto apa adanya beserta mime type aslinya.
 
-### Training: melihat dataset sebelum melatihnya
-
-| Metode | Rute | Untuk apa |
-|---|---|---|
-| `GET` | `/me/training/jobs/{id}/dataset/frames` | Nama entri `.tif` di dalam arsip, terurut |
-| `GET` | `/me/training/jobs/{id}/dataset/frames/{name}/preview` | Entri itu, dirender jadi PNG |
-
-**Arsipnya tidak pernah diekstrak.** Sebuah dataset adalah hal terbesar yang
-disimpan platform ini, dan menggandakannya di disk hanya untuk dilihat akan
-absurd. `ZipArchive` membaca direktori pusat di akhir berkas, jadi mendaftar
-isinya berbiaya sebanyak jumlah entri dan bukan ukurannya; `getFromName()`
-menarik satu entri saat sebuah frame benar-benar diminta.
-
-**Nama entri divalidasi terhadap daftar isi arsip**, bukan sekadar
-di-`basename()`. Sebuah nama yang lolos ke `getFromName()` tanpa diperiksa akan
-membaca apa pun yang ditunjuknya.
-
-**Placeholder `{name}` sengaja dilepas dari batas segmennya** dengan
-`->where('name', '.*')`. Frame di dalam arsip lazimnya berada di dalam subfolder
-— `Sample Contrast/0001.tif` — dan sebuah placeholder Laravel yang normal tidak
-merentang garis miring, sehingga nama seperti itu **tidak cocok dengan rute mana
-pun** dan dijawab 404 tanpa satu pun petunjuk bahwa yang bermasalah adalah
-routing, bukan arsipnya. Daftar frame mengembalikan nama entri lengkap, jadi
-klien cukup mengirim balik persis apa yang ia terima.
-
-**Daftar kosong punya dua arti, dan respons ini membedakannya.** Arsip yang
-sudah disapu `training:cleanup` membuat daftar frame mengembalikan koleksi
-kosong — terbaca sama persis dengan arsip yang memang tidak berisi `.tif`.
-Karena itu daftarnya membawa `meta`:
-
-```json
-{ "success": true, "data": [],
-  "meta": { "archive_deleted": true,
-            "archive_deleted_at": "2026-09-03T03:10:00+07:00" } }
-```
-
-Angka hasil latihnya masih ada; frame di baliknya tidak. Jendela retensinya
-dijelaskan di [be/README.md](be/README.md).
-
-Hasil render di-cache di samping dataset-nya, sama seperti preview frame
-prediksi, sehingga menggeser bolak-balik tidak membuka ulang ZIP setiap kali.
-
-### Training: sampel per epoch
-
-| Metode | Rute | Untuk apa |
-|---|---|---|
-| `POST` | `/training/worker/jobs/{id}/sample` | Worker mengirim satu PNG untuk sebuah epoch |
-| `GET` | `/me/training/jobs/{id}/samples` | Epoch mana saja yang punya gambar |
-| `GET` | `/me/training/jobs/{id}/samples/{epoch}` | PNG-nya |
-
-Yang pertama berada di grup `training.worker`, di luar `auth:sanctum`, dengan
-header `X-Worker-Token`. Batasnya 4 MB per sampel. Mengirim ulang sebuah epoch
-**menimpa** yang lama beserta berkasnya — worker yang mengulang setelah
-kehilangan sesi Kaggle adalah keadaan normal di sini, bukan pengecualian.
-
-Dua sisanya dibatasi pemilik job dan menjawab 404 untuk orang lain.
-
-**`POST /admin/training/jobs/{id}/dispatch` sudah tidak ada.** Ia lahir ketika
-admin yang memulai run; sekarang periset yang memulai, dan job antre diklaim
-worker lewat `POST /training/worker/claim`. Dua jalur menuju hal yang sama yang
-bedanya cuma siapa yang menekan bukanlah pengawasan.
-
-**`GET /news/{id}/video`** — video apa adanya, MP4 atau WebM. Dilayani
-`BinaryFileResponse`, yang menjawab `Range` sendiri: sebuah permintaan
-`Range: bytes=0-99` dijawab `206` dengan `Content-Range`, dan itulah yang
-membuat pemutar bisa menggeser tanpa mengunduh seluruh berkas.
-
-Mengunggahnya **bukan** lewat endpoint ini melainkan lewat
-`POST /predictions/uploads` dengan `purpose: news_video` dan
-`news_post_id`. Rutenya terbuka untuk setiap pengguna terautentikasi —
-mengunggah prediksi memang pekerjaan periset — tetapi tujuan `news_video`
-khusus admin, dan ditolak 403 untuk yang lain baik saat `start` maupun
-saat `finalize`. Batasnya 50 MB, diperiksa sebelum satu byte pun dikirim,
-dan tipe berkasnya dibaca dari byte hasil rakitan, bukan dari namanya.
-Draf **404** kecuali request-nya membawa token admin yang akunnya masih aktif
-dan sudah mengganti password awal. Hasil riset yang belum diumumkan tidak bisa
-ditemukan dengan menebak id atau memakai sesi akun yang dinonaktifkan.
-
----
-
 ## Terautentikasi — semua peran
 
 | Method | Path | Keterangan |
@@ -186,10 +109,6 @@ ditemukan dengan menebak id atau memakai sesi akun yang dinonaktifkan.
 | `GET` | `/me/activities` | Jejak audit milik sendiri, berpaginasi |
 | `GET` | `/me/models` | Model yang boleh dipakai |
 | `POST` | `/me/models/refresh` | Sama, tapi **memprobe endpoint-nya dulu**. Throttle 10/menit |
-| `GET` | `/me/training/jobs` | Training run milik sendiri |
-| `POST` | `/me/training/jobs` | Mulai training — multipart `archive` (ZIP), `name`, `total_epochs`. Untuk berkas besar pakai jalur chunked di bawah |
-| `GET` | `/me/training/jobs/{id}` | Detail + **riwayat metrik per epoch** |
-| `POST` | `/me/training/jobs/{id}/cancel` | Batalkan run sendiri |
 | `POST` | `/me/avatar` | Pasang foto profil sendiri (multipart `avatar`) |
 | `DELETE` | `/me/avatar` | Hapus foto profil sendiri |
 | `GET` | `/users/{id}/avatar` | Foto profil siapa pun. **Butuh login.** |
@@ -209,12 +128,6 @@ tidak ada jalan membaca data akun lain.
 **`GET /me/models`** mengembalikan `id`, `name`, `version`, `status`,
 `description`, `accuracy`, `is_available`. **Tidak pernah `endpoint_url`** —
 lihat ARCHITECTURE.md §3.
-
-**Dataset besar naik lewat sesi chunked yang sama dengan unggahan prediksi**,
-bukan lewat `POST /me/training/jobs`: `POST /predictions/uploads` dengan
-`purpose: training`, `name`, dan `total_epochs`, lalu potongan-potongannya,
-lalu `finalize` — yang mengembalikan run yang sudah diantrekan alih-alih
-prediksi. Multipart sekali-kirim di atas hanya masuk akal untuk dataset kecil.
 
 **`POST /me/models/refresh`** mengembalikan payload yang sama persis, tapi
 memprobe endpoint-nya lebih dulu alih-alih membaca hasil terakhir scheduler.
@@ -378,9 +291,7 @@ mengantrekan pekerjaannya. Ia menjawab:
 
 `GET /predictions/{id}/download-link?kind=results|complete` memeriksa pemilik
 dan status completed, lalu mengembalikan `data.path` bertanda tangan relatif
-berumur lima menit. `GET /admin/training/jobs/{id}/weights-link` dan
-`GET /me/training/jobs/{id}/weights-link` melakukan hal yang sama untuk bobot;
-periset hanya dapat meminta bobot run miliknya. Route `/downloads/*` memeriksa
+berumur lima menit. Route `/downloads/predictions/*` memeriksa
 tanda tangan, expiry, dan status akun kembali sebelum melayani berkas. BFF web
 mengarahkan browser ke API publik Pi agar arsip tidak melewati batas Vercel.
 
@@ -587,12 +498,10 @@ Untuk arsip besar. Lihat ARCHITECTURE.md §4 soal alasannya.
   "received": 0, "total_size": 4194750 }
 ```
 
-`purpose` boleh dihilangkan dan artinya `prediction`. `model_id` **wajib
-kecuali** `purpose: training` — menyebut `prediction` secara eksplisit tanpa
-`model_id` menjawab **422** dengan `model_id` di daftar errornya, sama seperti
-menghilangkan keduanya. (Sampai 18 Agustus 2026 kombinasi itu menjawab 500:
-aturannya `required_without:purpose`, yang menanyakan apakah field-nya *dikirim*
-alih-alih apa isinya.)
+`purpose` boleh dihilangkan dan artinya `prediction`. Sesi prediksi wajib
+menyertakan `model_id`; ketiadaannya menjawab **422**. Satu tujuan tambahan,
+`news_video`, hanya untuk administrator, wajib `news_post_id`, dan tidak
+memerlukan model. Tujuan selain keduanya ditolak **422**.
 
 `chunk_size` **dihitung server** dari batas PHP-nya sendiri. Pakai angka yang
 diberikan, jangan hard-code.
@@ -630,7 +539,7 @@ Peneliti yang memanggil salah satunya mendapat **403**.
 Password default `user12345678` dikembalikan sebagai `default_password`.
 Admin tidak bisa menghapus atau menonaktifkan akunnya sendiri (403).
 Menonaktifkan atau mereset password mencabut token akun tersebut. Penghapusan
-akun dengan prediksi/training aktif ditolak (409); penghapusan yang berhasil
+akun dengan prediksi aktif ditolak (409); penghapusan yang berhasil
 membersihkan arsip prediksi, bukti, dan unggahan sementara miliknya.
 
 Ditambah dua route foto: `POST` dan `DELETE /admin/users/{id}/avatar`.
@@ -712,12 +621,17 @@ dan permintaan itu jadi catatan mati.
 | `GET` | `/admin/news` — filter `status` (`published`/`draft`), `search` |
 | `POST` | `/admin/news` — **multipart**, boleh membawa `image` |
 | `GET` | `/admin/news/{id}` |
-| `POST` | `/admin/news/{id}` — ubah; kirim `remove_image=1` untuk menghapus foto |
+| `POST` | `/admin/news/{id}` — ubah; `remove_image=1` atau `remove_video=1` menghapus media masing-masing |
 | `PATCH` | `/admin/news/{id}/toggle` — sakelar terbit |
-| `DELETE` | `/admin/news/{id}` — beserta fotonya |
+| `DELETE` | `/admin/news/{id}` — beserta gambar dan videonya |
 
 Field: `title` (≤200), `summary` (≤500), `body` (opsional, ≤20000),
-`sort_order`, `is_published`, `image`.
+`sort_order`, `is_published`, `image`, `remove_image`, `remove_video`.
+
+Editor artikel web hanya mengubah teks dan publikasi. **Manage media** menyediakan
+upload gambar serta upload video chunked secara terpisah, dengan preview dan
+penghapusan masing-masing. Mengubah satu media mempertahankan artikel dan media
+lain. Upload web membatasi gambar ke 3 MB; video MP4/WebM ke 50 MB.
 
 **Ubah memakai POST, bukan PUT.** Foto datang sebagai multipart dan PHP tidak
 mengisi `$_FILES` untuk body PUT, jadi route PUT tidak akan pernah menerimanya.
@@ -749,83 +663,6 @@ sekilas terlihat mana yang masih menunggu jawaban.
 Percakapan tamu ditandai `is_guest: true` dengan `guest_email` terisi dan
 `user: null`. Arsip **bukan** hapus: percakapan yang diarsipkan keluar dari
 inbox tapi tetap ada, dan pesan baru dari orangnya menariknya kembali.
-
-### Pelatihan model (11)
-
-| Method | Path |
-|---|---|
-| `GET` | `/admin/training/datasets` |
-| `POST` | `/admin/training/datasets` — **URL saja**, bukan unggahan |
-| `DELETE` | `/admin/training/datasets/{id}` — **409** kalau masih dipakai job |
-| `GET` | `/admin/training/jobs` — filter `status` |
-| `GET` | `/admin/training/jobs/{id}` |
-| `POST` | `/admin/training/jobs/{id}/cancel` |
-| `DELETE` | `/admin/training/jobs/{id}` |
-| `GET` | `/admin/training/jobs/{id}/weights` |
-| `POST` | `/admin/training/jobs/{id}/register-model` |
-
-`meta.worker_configured` di daftar job memberitahu apakah `TRAINING_WORKER_TOKEN`
-sudah diisi. Kalau `false`, tidak akan ada yang berjalan — itu hal pertama yang
-perlu dicek saat job "diam saja".
-
-**Dataset punya dua bentuk.** `source_type: upload` mengirim arsip lewat server
-ini; `source_type: url` cuma mencatat alamat yang nanti diambil sendiri oleh
-worker. Yang kedua itulah yang benar untuk dataset besar — mengirim 20 GB naik
-ke server lalu turun lagi ke Kaggle memboroskan dua-duanya.
-
-**`POST /admin/training/jobs/{id}/dispatch` telah dicabut** pada 23 Agustus
-2026. Ia mendorong job ke GPU dengan bentuk yang persis seperti prediksi
-didorong ke endpoint model, dan ia ada karena dulu admin yang memulai run.
-
-Sekarang periset yang memulai, dan job antre diklaim worker sendiri lewat
-`POST /training/worker/claim` — mekanisme yang memang dirancang untuk itu, dan
-yang membuat sebuah run bertahan melewati sesi Kaggle yang mati. Dua jalur
-menuju hal yang sama yang bedanya cuma siapa yang menekan bukanlah pengawasan.
-
-Yang dikirim ke trainer tidak berubah: id job, epoch, hyperparameter, sumber
-dataset, **dan `callback`** berisi `base_url` + `worker_token`. Tanpa dua yang
-terakhir, trainer bisa melatih dengan sempurna lalu tidak punya tempat menaruh
-hasilnya.
-
-
-Job **tetap `queued`** setelah berhasil dikirim. Trainer bilang ia *menerima*;
-yang membuktikan ia *mulai* adalah heartbeat pertama. Menandainya `running` di
-sini membuat job yang tidak pernah jalan terlihat sehat selamanya.
-
-**`register-model` sengaja langkah terpisah.** Bobot itu berkas; "model" di
-platform ini adalah worker FastAPI yang hidup dan punya URL. Tidak ada apa pun
-di sini yang bisa men-deploy `.h5` ke GPU, jadi model baru dibuat dengan
-`is_active: false` dan tanpa endpoint sampai ada yang men-deploy-nya.
-
-### Pekerja GPU — token khusus, bukan token user
-
-Tujuh route di bawah `/api/training/worker/*`, di luar `auth:sanctum`. Autentikasi
-lewat `Authorization: Bearer {TRAINING_WORKER_TOKEN}` — worker itu mesin, bukan
-orang: kredensialnya tinggal berminggu-minggu di notebook, tidak butuh akun, dan
-tidak boleh menyentuh apa pun selain tujuh route ini.
-
-| Method | Path | Untuk |
-|---|---|---|
-| `POST` | `/training/worker/claim` | Ambil job antrean tertua |
-| `GET` | `/training/worker/jobs/{id}/dataset` | Unduh arsip dataset |
-| `POST` | `/training/worker/jobs/{id}/heartbeat` | "Masih hidup" + epoch/metrik |
-| `POST` | `/training/worker/jobs/{id}/checkpoint` | Bobot sementara |
-| `POST` | `/training/worker/jobs/{id}/sample` | Satu PNG sampel per epoch |
-| `POST` | `/training/worker/jobs/{id}/complete` | Bobot final |
-| `POST` | `/training/worker/jobs/{id}/fail` | Melapor gagal |
-
-Token kosong → **503** di semua route itu, bukan 401: deployment yang setengah
-jadi harus menolak, bukan menerima siapa saja.
-
-**Balasan heartbeat memuat `continue`.** Kalau admin membatalkan job,
-`continue: false` — worker berhenti alih-alih membakar berjam-jam GPU untuk
-pekerjaan yang tidak diinginkan siapa pun.
-
-**Worker yang diam bukan worker yang gagal.** `training:reclaim` mengembalikan
-job yang heartbeat-nya lewat 15 menit ke `queued` **beserta checkpoint-nya**, dan
-`claim` berikutnya menerima `resume_from_epoch`. Sesi Kaggle mati tiap 9–12 jam
-sementara training butuh berhari-hari; kalau tiap sesi mati berarti job gagal,
-tidak akan pernah ada training yang selesai.
 
 ### Activity log (3)
 
@@ -940,7 +777,6 @@ yang dicabut sementara pekerjaannya masih mengantre meninggalkannya kosong.
   "breakdown": {
     "predictions": 3221225472,
     "evidence": 1048576,
-    "training_datasets": 2147483648,
     "temporary": 0
   }
 }
@@ -948,8 +784,7 @@ yang dicabut sementara pekerjaannya masih mengantre meninggalkannya kosong.
 
 Yang penting **bukan** totalnya. Volume di 90% yang sebagian besar berisi
 `predictions` baik-baik saja — sapuan retensi mengembalikannya dalam sehari.
-Volume di 90% berisi `training_datasets` tidak, karena tidak ada yang
-mengambilnya kembali. Satu angka "terpakai" tidak bisa membedakan keduanya.
+
 
 `mounted` bernilai false ketika volume hasil tidak ter-mount. Dalam keadaan itu
 unggahan ditolak alih-alih ditulis ke apa pun yang ada di balik mount point —
@@ -957,14 +792,13 @@ lihat di bawah.
 
 ### Unggahan yang ditolak sebelum berjalan
 
-Jalur unggah prediksi dan training langsung memeriksa ruang lebih dulu dan
+Jalur unggah prediksi langsung/chunked memeriksa ruang lebih dulu dan
 menjawab **507 Insufficient Storage** ketika tidak ada tempat:
 
 - **`POST /predictions/uploads`** memeriksa `total_size` yang dideklarasikan,
   sebelum satu byte pun bergerak.
 - **`POST /predictions`** memeriksa ukuran arsip yang sudah di disk, sebelum
   ekstraksi — titik ketika satu berkas menjadi banyak.
-- **`POST /me/training/jobs`** memeriksa ukuran arsip langsung sebelum disimpan.
 
 Prediksi memeriksa direktori ZIP sebelum ekstraksi: maksimal 50 MB per frame,
 1000 frame input, dan 2 GB total TIFF setelah diekstrak. Nama frame yang sama

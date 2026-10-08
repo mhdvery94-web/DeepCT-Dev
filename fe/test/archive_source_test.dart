@@ -8,7 +8,7 @@ import 'package:fe/utils/file_archive.dart';
 
 /// Where the bytes of an upload come from.
 ///
-/// `training_screen.dart` asked the picker for `withData: true`, which loads
+/// The old upload screen asked the picker for `withData: true`, which loads
 /// the whole archive into the Dart heap, and then the chunk loop sliced a
 /// `Uint8List` that was already there in one piece. Chunking saved the
 /// *transport* and nothing else: a phone or a browser tab dies long before

@@ -79,10 +79,6 @@ class AdminModelService {
   /// POST /admin/models — the backend runs a health check straight after
   /// creating the record, so the returned model already has a live status.
   ///
-  /// [kind] is `inference` for an endpoint that answers `POST /predict`, and
-  /// `trainer` for one that answers `POST /train`. One registry serves both:
-  /// a trainer is switched on and health-checked exactly like a model, and a
-  /// second screen for it would have been the same screen twice.
   /// [authToken] is the shared secret the worker expects as
   /// `Authorization: Bearer`. It is write-only: no endpoint ever returns it,
   /// and [ModelInfo.hasAuthToken] is all the registry will say afterwards.
@@ -90,7 +86,6 @@ class AdminModelService {
     required String name,
     required String version,
     required String endpointUrl,
-    String kind = 'inference',
     String? description,
     String? authToken,
     bool verifyTls = true,
@@ -100,7 +95,6 @@ class AdminModelService {
       data: {
         'name': name,
         'version': version,
-        'kind': kind,
         'endpoint_url': endpointUrl,
         if (authToken != null && authToken.isNotEmpty) 'auth_token': authToken,
         'verify_tls': verifyTls,

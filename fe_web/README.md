@@ -1,5 +1,8 @@
 # DeepCT Web
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](../handoff.md).
+
 Next.js frontend for the BRIN Neutron CT Platform. Laravel in `../be` remains
 the source of truth for users, roles, predictions, models, news, messages, and
 all authorization decisions. Flutter in `../fe` remains the mobile client.
@@ -50,8 +53,15 @@ analysis-status counts from Laravel, not a fabricated time series. Calendar
 and download widgets without corresponding application data are omitted.
 Module routes now load Laravel data and support account/model/news CRUD, access
 review, conversations, activities, notifications, profile photos, prediction
-preview/start/comparison, and training progress/samples. Administrator routes
-also provide the queue board, training oversight, datasets and disk management.
+preview/start/comparison. Administrator routes also provide the queue board and
+disk management. Managed training has been removed from both roles.
+
+Research news uses **Create/Edit article** for text and publication fields, then
+**Manage media** for separate image/video cards. Each has an independent picker,
+preview, upload and removal action. Images are limited to 3 MB for the web BFF;
+MP4/WebM videos to 50 MB with resumable chunks. Editing article content preserves
+media. The cards stack on small screens; inputs and buttons have rounded corners,
+spacing and focus feedback.
 
 The public footer omits vendor credit and duplicate navigation as requested.
 Creator credit `fajriansyah #bocahunpam` remains. Template provenance remains
@@ -67,7 +77,7 @@ in source comments; no template vendor scripts or Bootstrap/AOS bundles load.
   headers and adds the server-held Sanctum token.
 
 The BFF works well for normal JSON calls, chunked uploads, images, and videos.
-Prediction archives and training weights use five-minute signed Laravel URLs.
+Prediction archives use five-minute signed Laravel URLs.
 The BFF validates ownership through Laravel and redirects downloads to the
 public Raspberry Pi API, avoiding Vercel response-size limits. Upload parts are
 bounded to 3 MiB and resume by the server offset; tokens remain in the HttpOnly

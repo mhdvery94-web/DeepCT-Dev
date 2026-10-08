@@ -1,7 +1,25 @@
 # Skenario dan Hasil Pengujian White Box
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](handoff.md).
+
+## Verifikasi lokal — 9 Oktober 2026
+
+MySQL 8 terisolasi dan PHP 8.2: **329 tes / 1.381 asersi** lulus. Suite
+`PredictionOnlyTest` membuktikan database baru tanpa tabel training/kolom kind,
+upgrade database lama mempertahankan inference dan prediksi, route lama 404 untuk
+seluruh peran, cleanup hanya menghapus berkas fitur lama serta menolak mount/skema
+yang belum siap. Uploader menolak tujuan yang telah dihapus dengan 422.
+
+Next.js: lint/TypeScript, build produksi Docker, lima tes origin BFF dan audit
+dependensi produksi (nol temuan) lulus. Validasi Flutter dan deployment terbaru
+dicatat setelah output workflow GitHub benar-benar tersedia; SDK Flutter tidak
+tersedia di host pengujian lokal ini.
+
+## Hasil historis — 1 Oktober 2026
+
 Dokumen ini adalah spesifikasi pengujian internal yang dapat diulang. Ia bukan
-ringkasan status proyek. Hasil di bawah diamati pada **1 Oktober 2026** terhadap
+ringkasan status proyek. Hasil berikut diamati pada **1 Oktober 2026** terhadap
 commit `c6f4f1f` melalui GitHub Actions
 [Release #11](https://github.com/DeepCT-Dev/DeepCT-AI-PROD/actions/runs/36853332173).
 

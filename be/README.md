@@ -1,5 +1,22 @@
 # 🔬 Backend - Platform Analisis Citra Neutron CT
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](../handoff.md).
+
+## Prediction-only upgrade — 9 October 2026
+
+Training routes, controllers, scheduler commands and upload purposes are removed.
+Migration `2026_10_09_010000_remove_managed_training` retires training tables,
+trainer registry entries, model kind and training activities. Applied historical
+migrations remain for upgrades. Back up MySQL before `migrate --force`; afterward
+run `php artisan app:cleanup-retired-data` to remove only retired application
+files. Recovery requires the backup and prior release.
+
+The isolated MySQL 8 suite passes **329 tests / 1,381 assertions** locally.
+`PredictionOnlyTest` exercises fresh schema, legacy upgrades, preserved inference
+data, removed routes for all roles and guarded file cleanup. Earlier test counts
+below are dated historical observations.
+
 Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis citra Neutron CT.
 
 ---
@@ -18,7 +35,7 @@ Backend API RESTful berbasis **Laravel 12 + Octane** untuk platform analisis cit
 
 ## 📦 Features
 
-### API Endpoints (104 Total, Including Health)
+### API Endpoints — prediction-only, including health
 
 The count includes the unauthenticated `GET /api/health` liveness probe, declared in
 `routes/web.php` (not `routes/api.php`). Laravel's own health endpoint is at
@@ -174,93 +191,6 @@ about what "no photo" looks like. Every payload carrying a user now carries
 `avatar_url` (null when there is none); `avatar_path` and `avatar_mime` are
 hidden, since where the file sits on disk is nobody's business.
 
-#### Model Training (17)
-
-Managed training. The platform **never trains anything** — it records what
-should be trained and what came back. Three constraints force that: this
-machine has no GPU and a PHP backend, the Kaggle session that does have a GPU
-expires every 9–12 hours, and training takes days.
-
-Admin (11):
-- `GET|POST /api/admin/training/datasets`, `DELETE .../{id}`
-- `GET|POST /api/admin/training/jobs`, `GET|DELETE .../{id}`
-- `POST /api/admin/training/jobs/{id}/dispatch` — push the job to a trainer URL
-- `POST /api/admin/training/jobs/{id}/cancel`
-- `GET /api/admin/training/jobs/{id}/weights`
-- `POST /api/admin/training/jobs/{id}/register-model`
-
-Worker (7), under `/api/training/worker/*`: `claim`, `jobs/{id}/dataset`,
-`heartbeat`, `checkpoint`, `sample`, `complete`, `fail`.
-
-**The worker authenticates with a shared secret**, not a Sanctum token — it is
-a machine, not a person, its credential lives in a notebook for weeks, and it
-must reach nothing but these seven routes. Generate one with
-`php artisan training:token`, put it in `TRAINING_WORKER_TOKEN`. With no token
-set, every worker route answers **503**: a half-configured deployment fails
-closed.
-
-**`TRAINING_CALLBACK_URL` must be an address the GPU host can reach**, and on a
-development machine it is not set, so it falls back to `APP_URL` — which is
-`http://localhost` almost everywhere. `TrainerDispatcher` refuses to dispatch in
-that state on purpose: without it the trainer would accept the job and then have
-every callback fail silently, leaving the run at `queued` for ever with nothing
-to say why.
-
-A Tailscale address does not work here. That is a private network, and Kaggle is
-not on it. Use the ngrok tunnel that already fronts the API:
-
-```bash
-TRAINING_CALLBACK_URL=https://<your-tunnel>.ngrok-free.dev
-```
-
-Then restart Octane — config is read once per process, so an edited `.env` does
-nothing until it comes back (`npm run octane:reset && npm run octane`).
-
-**Register the trainer URL with or without `/train`.** The notebook prints its
-tunnel root and asks you to paste that; the inference notebook prints the full
-`…/predict`. Both conventions therefore live in the registry, and
-`TrainerDispatcher::trainEndpoint()` appends `/train` only when no path was
-given. Before it did, a bare root produced **405 Method Not Allowed**, which
-reads like the trainer refusing the job.
-
-**A worker going quiet is not a failure.** A Kaggle session ending is the
-normal course of events, so `training:reclaim` (scheduled every 5 minutes)
-returns a job whose heartbeat is older than 15 minutes to `queued` **with its
-checkpoint intact**, and the next worker resumes from the epoch already
-reached. Without that, every expired session would strand a job forever and a
-multi-day training could never finish.
-
-**The queue moves on its own.** `training:dispatch-queued` (scheduled every
-minute) sends the oldest waiting run whenever no run is in progress. Before it,
-a job was dispatched exactly once — at creation — so a single failed attempt
-left it at `queued` for ever, and the position shown to its owner was a promise
-nothing could keep. One at a time, because the trainer holds a single GPU and
-refuses a second job; `created_at` order, the same ordering the researcher is
-shown, so the two can never disagree.
-
-A run that cannot be sent records the reason on its own row rather than only in
-the log, and the command still exits zero: a trainer that is down is an ordinary
-state here, not something the scheduler should raise an alarm about.
-
-**A job can be pushed as well as pulled.** `dispatch` posts the job to a URL on
-the GPU host — the same shape as a prediction posted to a model endpoint — so an
-administrator presses a button instead of going to start a poller. The payload
-carries the callback base and worker token, so the trainer reports back through
-the very same protocol; pushing changes who starts the work, not how it is
-reported. That is why a pushed job still survives its session dying. A push that
-fails leaves the job `queued`, so a polling worker can still take it.
-
-**A dataset is an upload or a URL.** Uploads travel through this machine, so
-they stay modest; anything large is registered as a URL the worker fetches for
-itself. Sending 20 GB up a home tunnel and back down to Kaggle is the thing
-that design avoids.
-
-**Completion does not produce a usable model.** `register-model` writes a row
-into `models` with the weights' path, `is_active = false` and no endpoint.
-Weights are a file; a model here is a running FastAPI worker with a URL, and
-nothing in this platform can deploy one to a GPU. Pretending otherwise would
-only surface when a researcher's prediction failed.
-
 #### User Management (7) - Admin Only
 - `GET /api/admin/users` - List users with pagination & filters
 - `POST /api/admin/users` - Create new user
@@ -271,8 +201,8 @@ only surface when a researcher's prediction failed.
 - `POST /api/admin/users/{id}/reset-password` - Reset to default
 
 Disabling or resetting an account revokes all its existing tokens. Deletion
-returns **409** while the account has a pending/processing prediction or a
-queued/claimed/running training job. A successful deletion removes its
+returns **409** while the account has a pending/processing prediction.
+A successful deletion removes its
 prediction files, kept evidence, and temporary upload/download files.
 
 #### Model Management (9) - Admin Only
@@ -418,18 +348,11 @@ about a job got smaller.
 ### Scheduled Commands
 Registered in `routes/console.php` (Laravel 12 has no `app/Console/Kernel.php`):
 
-- `php artisan models:health-check` - Check all models health status (every 5 min)
+- `php artisan models:health-check` - Check all models health status (every minute)
 - `php artisan tokens:cleanup` - Delete tokens older than 7 days (daily)
 - `php artisan predictions:cleanup` - Enforce the 24-hour retention window on
   prediction output, and sweep abandoned uploads / orphaned download archives
   (hourly). Supports `--dry-run`.
-- `php artisan training:cleanup` - Free dataset archives nobody has come back
-  to (daily, 03:10). Supports `--dry-run`, and start there: the window is
-  measured from the dataset's **last use**, not from its upload, because a
-  dataset is uploaded here precisely so it can be reused. One with a queued or
-  running job is never swept. `TRAINING_DATASET_RETENTION_DAYS` (default 30)
-  sets the window; 0 disables it. The archive and its rendered previews go;
-  the row stays, stamped `archive_deleted_at`.
 
 ⚠️ **These only run if a scheduler process is running.** Neither Laragon nor
 Octane starts one. Without it, `models.status` in the database goes stale — it
@@ -472,7 +395,7 @@ Two more settings, both with sensible defaults:
 | `STORAGE_HEADROOM_MULTIPLIER` | `3.0` | An archive costs disk three times over: frames extracted from it, frames generated from those, and the archive built to hand results back |
 | `STORAGE_MINIMUM_FREE_BYTES` | 2 GB | A floor whatever the upload. A machine that runs to zero cannot write to MySQL, cannot record the failure, and cannot log why |
 
-Prediction upload and direct researcher training upload answer **507** when
+Prediction upload answer **507** when
 there is no room. Prediction intake checks the ZIP's expanded size before
 extracting frames.
 `GET /api/admin/storage` reports what is used and — more usefully — how much of
@@ -684,7 +607,6 @@ CREATE DATABASE db_aict_test;
 | `MessagingTest` | one thread per account, unread in both directions, archiving, guest messages |
 | `NotificationTest` | who each event reaches, the unread counters, and that nobody can read another account's |
 | `NewsPostTest` | the publish switch, slide order, the upload guard, a draft's photo staying private |
-| `TrainingTest` | worker auth, the claim lock, resume-after-death, checkpoint rotation, registering weights |
 | `AvatarTest` | own vs anyone else's, the upload guard, `avatar_url` in every payload, the 404 for no photo |
 | `PredictionPipelineTest` | recursive interpolation, worker contract, failure paths, counter release, frame provenance, the hold-out measurement, re-runs, kept thumbnails |
 | `ChunkedUploadTest` | ordering, idempotency, ownership, session cleanup |
@@ -693,8 +615,6 @@ CREATE DATABASE db_aict_test;
 | `StorageGuardTest` | refusing an upload with nowhere to put it, and noticing a results volume that is not mounted |
 | `TiffPreviewTest` (unit) | TIFF decoding, windowing, downscaling, PNG output, and the formats it must refuse |
 | `FrameMetricsTest` (unit) | MAE, RMSE and PSNR against numbers worked out by hand — a wrong constant here would quietly put wrong figures in a report |
-| `TrainingDatasetPreviewTest` | listing an archive without extracting it, the entry-name check, and a frame inside a subfolder — the case a normal route placeholder 404s on |
-| `TrainingDatasetRetentionTest` | the window measured from last use rather than upload, a dataset with live work never swept, and what the frame list says once the archive is gone |
 | `QueueHealthTest` | a job available but never reserved, and that the admin wording naming a command is not the wording a researcher gets |
 | `AdminQueueTest` | the board's ordering, and that a researcher's own position matches the number the admin sees on that same row |
 | `SourceEncodingTest` (unit) | a tripwire, not a feature: it fails if any source file grows a mojibake sequence. UTF-8 read back as Windows-1252 corrupts text through ordinary editing, and without this it comes back |

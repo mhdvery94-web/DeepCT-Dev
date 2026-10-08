@@ -1,5 +1,14 @@
 # 📋 Product Requirements Document (PRD)
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](handoff.md).
+
+Kontrak produk 9 Oktober: admin dan researcher hanya melakukan prediksi dengan
+model inference. Training tidak tersedia. Pengelolaan berita memisahkan editor
+artikel, upload gambar dan upload video. Field/tombol web menggunakan bentuk
+lebih lembut serta respons fokus/hover. LLM adalah usulan integrasi asisten untuk
+menjelaskan hasil dan belum masuk implementasi yang diminta.
+
 > **Status: dokumen niat produk, bukan status implementasi.**
 > Ditulis di awal proyek dan sengaja tidak diperbarui mengikuti kode — nilainya
 > justru sebagai catatan apa yang ingin dicapai. Untuk apa yang *sudah* berjalan

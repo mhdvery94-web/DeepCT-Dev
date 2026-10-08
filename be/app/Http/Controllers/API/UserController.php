@@ -5,7 +5,6 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\AnalysisRecord;
-use App\Models\TrainingJob;
 use App\Models\UserActivity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -200,9 +199,7 @@ class UserController extends Controller
         }
 
         if (AnalysisRecord::where('user_id', $user->id)
-            ->whereIn('status', ['pending', 'processing'])->exists()
-            || TrainingJob::where('created_by', $user->id)
-                ->whereIn('status', ['queued', 'claimed', 'running'])->exists()) {
+            ->whereIn('status', ['pending', 'processing'])->exists()) {
             return response()->json([
                 'success' => false,
                 'message' => 'This account still has active work. Finish or cancel it before deleting the account.',

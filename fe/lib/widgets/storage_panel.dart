@@ -6,12 +6,7 @@ import '../theme/app_theme.dart';
 
 /// Free space on the results volume, for the admin console.
 ///
-/// With results on a NAS, "how much room is left" stops being a curiosity and
-/// becomes a daily question — and the honest answer has two halves. A volume
-/// at 90% mostly holding prediction output is fine: the retention sweep gives
-/// it back within a day. A volume at 90% of training datasets is not, because
-/// nothing reclaims those. The bar shows the first number; the line under it
-/// shows the second.
+/// Shows volume usage and the prediction output reclaimed by retention.
 ///
 /// Loads itself and stays quiet when it fails. A storage panel that cannot
 /// reach the server should not take the dashboard with it.
@@ -150,10 +145,6 @@ class _StoragePanelState extends State<StoragePanel> {
               ),
               _fact(
                 context,
-                'Datasets ${StorageReport.human(report.datasetBytes)}',
-              ),
-              _fact(
-                context,
                 'Kept thumbnails ${StorageReport.human(report.evidenceBytes)}',
               ),
             ],
@@ -166,8 +157,7 @@ class _StoragePanelState extends State<StoragePanel> {
               // Tuesday.
               '${StorageReport.human(report.reclaimableBytes)} of that is '
               'prediction output and temporary files, which retention '
-              'reclaims within a day. Training datasets are not reclaimed '
-              'automatically.',
+              'reclaims within a day.',
               style: theme.textTheme.labelSmall?.copyWith(
                 color: AppTheme.textMuted,
                 height: 1.4,

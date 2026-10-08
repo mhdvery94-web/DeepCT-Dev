@@ -1,20 +1,35 @@
 # Roadmap
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](handoff.md).
+
 Satu-satunya daftar pekerjaan yang direncanakan. Diperbarui saat pekerjaan
 berjalan — centang diisi hanya setelah **diverifikasi**, bukan setelah ditulis.
 
 Ini bukan dokumen status. Jangan buat `*_PLAN.md` atau `*_SUMMARY.md` baru;
 perbarui berkas ini, lalu catat hasilnya di [CHANGELOG.md](CHANGELOG.md).
 
-**Terakhir diperbarui:** 8 Oktober 2026
+**Terakhir diperbarui:** 9 Oktober 2026
 
 ---
 
 ## Diketahui, belum dikerjakan
 
+- [x] **Aplikasi khusus prediksi, 9 Oktober 2026.** Runtime web/Flutter/API dan
+      scheduler training dihapus; migrasi menghapus skema/data fitur lama dengan
+      mempertahankan prediksi dan model inference. Tes upgrade dan penghapusan
+      file terjaga lulus dalam suite MySQL 329 tes/1.381 asersi.
+- [x] **Pisahkan editor berita dari media dan lunakkan kontrol web.** Dua kartu
+      gambar/video memiliki picker, preview, upload/hapus sendiri dan tersusun
+      vertikal di mobile. Lint/TypeScript, build produksi dan audit lulus.
+- [ ] **Validasi deployment perubahan 9 Oktober.** Push langsung `main` diminta
+      pengguna. Catat workflow, smoke Pi, validasi browser dan commit yang sudah
+      diamati di checkpoint. Entri bertanggal lebih lama di bawah adalah riwayat,
+      bukan instruksi untuk mengaktifkan training kembali.
+
 - [ ] **Selesaikan migrasi frontend web ke Next.js di `fe_web`.** Landing,
       artikel penuh, login/request/reset akses, CRUD admin, dashboard kedua role,
-      prediksi chunked/preview/start/comparison/download, training, pesan,
+      prediksi chunked/preview/start/comparison/download, pesan,
       notifikasi, profil, queue dan disk management sudah diimplementasikan.
       Validasi lokal 8 Oktober: 396 tes Laravel/1.593 asersi, lint/TypeScript,
       build Next.js Docker, 5 tes origin proxy, 30 smoke check API HTTP,
@@ -504,7 +519,7 @@ C sebelum D karena D memakai widget yang lahir di C.
       sebagai tersedia alih-alih tampak mati, dan jargon `ERR_NGROK_3200`
       diganti kalimat yang bisa ditindaklanjuti bagi periset — dengan
       diagnostiknya tetap utuh untuk admin. Rancangan lengkapnya:
-      [docs/superpowers/specs/2026-08-22-ui-cleanup-design.md](docs/superpowers/specs/2026-08-22-ui-cleanup-design.md).
+      [DESIGN.md](DESIGN.md) — rancangan aktif; proposal lama tersedia di riwayat Git.
 
       Terverifikasi 22 Agustus 2026: backend 250 test (dari 242), Flutter 144
       test (dari 129), `flutter analyze` bersih, APK release terbangun. Satu
@@ -540,7 +555,7 @@ C sebelum D karena D memakai widget yang lahir di C.
       `max_concurrent_jobs` dihapus — kolom yang tidak pernah dibandingkan
       dengan apa pun. Lencana status ikut dibereskan: worker lambat berlabel
       `SLOW`, bukan `TROUBLE`. Rancangan:
-      [docs/superpowers/specs/2026-08-22-b1-schema-cleanup-design.md](docs/superpowers/specs/2026-08-22-b1-schema-cleanup-design.md).
+      [DESIGN.md](DESIGN.md) — rancangan aktif; proposal lama tersedia di riwayat Git.
 
       Terverifikasi 22 Agustus 2026: backend 256 test (dari 250), Flutter 147
       test (dari 144), `flutter analyze` bersih, APK release terbangun. Payload
@@ -565,7 +580,7 @@ C sebelum D karena D memakai widget yang lahir di C.
       Unggah video (maks 50 MB) lewat mesin unggah berpotongan yang sudah ada
       (`purpose` baru `news_video`), ditambah tombol pemilih emoji dan status
       *pending* saat pesan dikirim. Rancangan:
-      [docs/superpowers/specs/2026-08-22-b2-video-and-messages-design.md](docs/superpowers/specs/2026-08-22-b2-video-and-messages-design.md).
+      [DESIGN.md](DESIGN.md) — rancangan aktif; proposal lama tersedia di riwayat Git.
 
       Terverifikasi 22 Agustus 2026: backend 270 test (dari 256), Flutter 153
       test (dari 147), `flutter analyze` bersih, APK release terbangun pada
@@ -605,7 +620,7 @@ C sebelum D karena D memakai widget yang lahir di C.
       dipakai di layar unggah dan di hasil/riwayat, menggabungkan frame input
       dan hasil prediksi dengan penanda. Termasuk unggah beberapa `.tif`
       sekaligus yang dibungkus ZIP di sisi klien. Rancangan:
-      [docs/superpowers/specs/2026-08-23-c-frame-viewer-design.md](docs/superpowers/specs/2026-08-23-c-frame-viewer-design.md).
+      [DESIGN.md](DESIGN.md) — rancangan aktif; proposal lama tersedia di riwayat Git.
 
       Lebih kecil dari bunyinya: `frames()` sudah menggabungkan input dan
       output, galeri sudah menampilkan gabungan itu (`_generatedOnly` default
@@ -642,7 +657,7 @@ C sebelum D karena D memakai widget yang lahir di C.
 - [x] **D — Training periset.** Tab Training sisi admin dihapus; tab sisi
       periset dikembangkan dengan unggah, viewer dari C, metrik PSNR/SSIM/
       MAE/MSE, dan gambar contoh per epoch yang bisa digeser. Rancangan:
-      [docs/superpowers/specs/2026-08-23-d-researcher-training-design.md](docs/superpowers/specs/2026-08-23-d-researcher-training-design.md).
+      [DESIGN.md](DESIGN.md) — rancangan aktif; proposal lama tersedia di riwayat Git.
 
       Menghapus tab admin **tidak** berarti membuang kemampuannya. Layar itu
       memegang `_registerModel()` — satu-satunya cara bobot hasil training jadi
@@ -683,7 +698,7 @@ C sebelum D karena D memakai widget yang lahir di C.
       Menutup separuh poin 10 yang terlewat saat D dirancang: unggah dataset
       punya preview seperti unggah prediksi.
       Rancangan:
-      [docs/superpowers/specs/2026-08-23-e-dataset-preview-design.md](docs/superpowers/specs/2026-08-23-e-dataset-preview-design.md).
+      [DESIGN.md](DESIGN.md) — rancangan aktif; proposal lama tersedia di riwayat Git.
 
       Audit 23 Agustus menemukan tiga dari empat tempat preview sudah ada;
       yang ini tidak. Bukan permintaan baru — kalimat aslinya meminta dua
@@ -708,7 +723,7 @@ Diajukan 22 Agustus 2026, di luar sepuluh permintaan di no. 12.
 
       Dua hal yang berhubungan, keduanya soal gestur di perangkat sentuh.
       Rancangan:
-      [docs/superpowers/specs/2026-08-23-f-swipe-navigation-design.md](docs/superpowers/specs/2026-08-23-f-swipe-navigation-design.md).
+      [DESIGN.md](DESIGN.md) — rancangan aktif; proposal lama tersedia di riwayat Git.
 
       **Yang pertama:** menggeser jari ke kiri atau kanan tidak melakukan apa
       pun hari ini. Ia seharusnya berpindah antar tab, dan dari tab mana pun

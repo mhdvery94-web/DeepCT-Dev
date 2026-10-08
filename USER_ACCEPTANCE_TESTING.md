@@ -1,5 +1,21 @@
 # Skenario dan Hasil User Acceptance Testing
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](handoff.md).
+
+## Pemeriksaan perubahan — 9 Oktober 2026
+
+Pemeriksaan browser lokal menggunakan build produksi Next.js, Laravel berjalan
+dan MySQL pengujian terisolasi. Skenario mencakup navigasi tanpa training, 404
+halaman/endpoint yang dipensiunkan, editor artikel tanpa input media, upload
+gambar/video independen, pemutaran video, penghapusan gambar yang mempertahankan
+video, serta tata letak media mobile. **51 pemeriksaan lulus**, termasuk upload,
+preview dan start prediksi, kedua role, form publik dan lima ukuran viewport.
+Hasil deployment dicatat di [checkpoint](handoff.md) setelah diamati. Uji ini tidak
+menggantikan UAT ilmiah prediksi terhadap worker GPU nyata.
+
+## Catatan historis — 1 Oktober 2026
+
 Dokumen ini mencatat pengujian black box dari sudut pandang pemakai. Penguji
 tidak membaca state database dan tidak memanggil class internal; hanya respons
 HTTPS dan tampilan web produksi yang dinilai.

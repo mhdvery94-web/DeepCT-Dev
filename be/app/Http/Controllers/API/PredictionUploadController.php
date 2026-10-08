@@ -6,14 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
 use App\Models\NewsPost;
-use App\Models\TrainingDataset;
-use App\Models\TrainingJob;
-use App\Models\UserActivity;
 use App\Services\IntakeException;
 use App\Services\PredictionIntake;
 use App\Services\QueueBoard;
 use App\Services\StorageGuard;
-use App\Services\TrainerDispatcher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -59,24 +55,8 @@ class PredictionUploadController extends Controller
     public function start(Request $request)
     {
         $validated = $request->validate([
-            // What the archive is for. Both kinds are a ZIP arriving in pieces
-            // over an unreliable link, which is the entire problem this
-            // controller solves — a second copy of it for training datasets
-            // would drift from this one the first time either was touched.
-            // Three purposes now. All three are a large file arriving in
-            // pieces over an unreliable link, which is the entire problem
-            // this controller solves.
-            'purpose' => 'nullable|in:prediction,training,news_video',
-            // `required_unless`, not `required_without`: the latter asks
-            // whether `purpose` was *sent*, not what it said, so a caller
-            // naming the default — `purpose: prediction` — switched the model
-            // off and reached the controller with no `model_id` and no
-            // complaint. Reading the key then raised a 500 with a stack trace
-            // where a 422 naming the field belonged. Only training may omit it.
-            // Only a prediction needs a model. `required_unless` takes a
-            // list, and each `exclude_if` takes one value, so both of the
-            // other purposes have to be named twice.
-            'model_id' => 'required_unless:purpose,training,news_video|exclude_if:purpose,training|exclude_if:purpose,news_video|exists:models,id',
+            'purpose' => 'nullable|in:prediction,news_video',
+            'model_id' => 'required_unless:purpose,news_video|exclude_if:purpose,news_video|exists:models,id',
             'total_size' => [
                 'required',
                 'integer',
@@ -88,10 +68,6 @@ class PredictionUploadController extends Controller
                     : self::MAX_TOTAL_BYTES),
             ],
             'filename' => 'nullable|string|max:255',
-            // Training only.
-            'name' => 'required_if:purpose,training|nullable|string|max:200',
-            'total_epochs' => 'required_if:purpose,training|nullable|integer|min:1|max:10000',
-            'base_model_id' => 'nullable|exists:models,id',
             // News video only.
             'news_post_id' => 'required_if:purpose,news_video|nullable|exists:news_posts,id',
         ]);
@@ -140,12 +116,6 @@ class PredictionUploadController extends Controller
             'user_id' => $request->user()->id,
             'purpose' => $purpose,
             'model_id' => $model?->id,
-            // A training run is not blocked by the trainer being offline the
-            // way a prediction is by its model: the job queues and a worker
-            // claims it whenever one appears.
-            'name' => $validated['name'] ?? null,
-            'total_epochs' => $validated['total_epochs'] ?? null,
-            'base_model_id' => $validated['base_model_id'] ?? null,
             'news_post_id' => $validated['news_post_id'] ?? null,
             'filename' => $validated['filename'] ?? 'upload.zip',
             'total_size' => (int) $validated['total_size'],
@@ -265,8 +235,9 @@ class PredictionUploadController extends Controller
             );
         }
 
-        if (($meta['purpose'] ?? 'prediction') === 'training') {
-            return $this->finalizeTraining($request, $uploadId, $meta, $partPath);
+        if (!in_array($meta['purpose'] ?? 'prediction', ['prediction', 'news_video'], true)) {
+            $this->discard($userId, $uploadId);
+            return $this->error('This upload purpose is no longer supported.', 410);
         }
 
         if (($meta['purpose'] ?? 'prediction') === 'news_video') {
@@ -405,13 +376,6 @@ class PredictionUploadController extends Controller
     }
 
     /**
-     * A finished training upload becomes a dataset and a queued run.
-     *
-     * The archive is *moved*, not copied and discarded: a training set is the
-     * largest thing this platform stores, and writing a second copy of it only
-     * to delete the first is an avoidable few gigabytes of disk churn.
-     */
-    /**
      * Attach a finished upload to a news post.
      *
      * The type is read from the assembled bytes rather than the filename or
@@ -477,65 +441,6 @@ class PredictionUploadController extends Controller
                 'video_size_bytes' => $post->video_size_bytes,
             ],
         ]);
-    }
-
-    private function finalizeTraining(Request $request, string $uploadId, array $meta, string $partPath)
-    {
-        $userId = $request->user()->id;
-        $target = 'training/datasets/' . $uploadId . '.zip';
-
-        Storage::move($partPath, $target);
-        Storage::delete($this->metaPath($userId, $uploadId));
-
-        $dataset = TrainingDataset::create([
-            'name' => $meta['name'],
-            'source_type' => 'upload',
-            'archive_path' => $target,
-            'size_bytes' => Storage::size($target),
-            // Lets a worker prove it fetched the archive intact before spending
-            // hours training on a truncated one.
-            'checksum' => md5_file(Storage::path($target)),
-            'uploaded_by' => $userId,
-        ]);
-
-        $job = TrainingJob::create([
-            'name' => $meta['name'],
-            'training_dataset_id' => $dataset->id,
-            'base_model_id' => $meta['base_model_id'] ?? null,
-            'total_epochs' => $meta['total_epochs'],
-            'hyperparameters' => [],
-            'status' => 'queued',
-            'created_by' => $userId,
-        ]);
-
-        UserActivity::create([
-            'user_id' => $userId,
-            'activity_type' => 'training_job_created',
-            'description' => "Started training run: {$job->name}",
-            'metadata' => ['job_id' => $job->id],
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-        ]);
-
-        // Best effort. A run nobody can push yet is still a recorded run, and
-        // a worker can claim it later — but the reason travels back rather
-        // than leaving a job that sits at `queued` explaining nothing.
-        $dispatch = app(TrainerDispatcher::class)->dispatch($job->load('dataset'));
-
-        return response()->json([
-            'success' => true,
-            'message' => $dispatch['ok']
-                ? 'Training started. Progress appears here as it reports back.'
-                : 'Training run queued.',
-            'dispatch_message' => $dispatch['ok'] ? null : $dispatch['message'],
-            'data' => [
-                'id' => $job->id,
-                'name' => $job->name,
-                'status' => $job->status,
-                'total_epochs' => $job->total_epochs,
-                'current_epoch' => 0,
-            ],
-        ], 201);
     }
 
     /**

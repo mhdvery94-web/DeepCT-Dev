@@ -153,7 +153,6 @@ class StorageGuard
         $total = $this->totalBytes();
 
         $predictions = $this->bytesUnder('predictions');
-        $datasets = $this->bytesUnder('training/datasets');
         $evidence = $this->bytesUnder('prediction-evidence');
         $temp = $this->bytesUnder('temp');
 
@@ -176,10 +175,6 @@ class StorageGuard
                 // Kept for good, and small on purpose: a few hundred kilobytes
                 // per run.
                 'evidence' => $evidence,
-                // Never reclaimed automatically. Up to 2 GB per run, and the
-                // only way out is an administrator deleting one — which is why
-                // it is broken out rather than folded into a total.
-                'training_datasets' => $datasets,
                 'temporary' => $temp,
             ],
         ];

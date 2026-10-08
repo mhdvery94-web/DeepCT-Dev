@@ -1,5 +1,8 @@
 # Neutron CT Frame Interpolation Platform
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](handoff.md).
+
 A research platform for **Badan Riset dan Inovasi Nasional (BRIN)** that fills
 gaps in Neutron CT frame sequences using deep learning.
 
@@ -14,6 +17,27 @@ frame_001.tif  frame_005.tif          frame_001 … 002 003 004 … frame_005
 ```
 
 ---
+
+## Prediction-only update — 9 October 2026
+
+Both roles now use inference only. Training screens, API routes, workers,
+schedulers, upload branches and Flutter services have been removed. A migration
+removes the four training tables, trainer models, the `kind` column and training
+activities while preserving inference models, predictions and accounts.
+Applied historical migrations remain available for upgrades.
+
+Deployment backs up MySQL before migration and removes retired application
+files afterward. Recovery requires that backup and the prior release.
+Research news now has an article editor plus **Manage media**, with independent
+image/video pickers, previews, upload and removal controls. Web forms/buttons
+use rounded corners, clearer spacing and hover/focus feedback.
+
+Local validation: **329 backend tests / 1,381 assertions**, five web proxy tests,
+lint/TypeScript, Docker production build and zero production dependency audit
+findings. **51 browser checks pass** against the isolated running API, covering
+independent media, removed routes, responsive layouts and prediction upload.
+Deployment results are recorded in the existing
+[checkpoint](handoff.md) and testing documents as they finish.
 
 ## Architecture
 
@@ -68,13 +92,11 @@ Full component and schema documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 | **Resumable upload** | Chunked, resumable on both sides; server-computed chunk size; an interrupted upload is offered back on the device. Native clients read ZIPs a range at a time; browser and loose-frame bundling still hold source bytes in memory |
 | **Frame preview** | 16-bit TIFF rendered to PNG server-side, in pure PHP — no imaging extension required |
 | **Retention** | Results deleted 24 hours after generation; the record and its audit trail remain |
-| **Dataset retention** | Training archives nobody has come back to are freed on a window measured from **last use**, not upload — a dataset is uploaded here precisely to be reused. One with a queued or running job is never swept. The run's numbers stay; the frames behind them go, and the API says which of the two an empty frame list means |
-| **Storage guard** | Prediction upload and direct training upload refuse with 507 when there is no room. ZIP extraction checks expanded size, frame count, duplicate names and available space before writing. A sentinel file proves the results volume is mounted |
+| **Storage guard** | Prediction upload refuse with 507 when there is no room. ZIP extraction checks expanded size, frame count, duplicate names and available space before writing. A sentinel file proves the results volume is mounted |
 | **Storage report** | Free space on the admin dashboard, split into what retention reclaims within a day and what nothing reclaims at all |
 | **Model registry** | One FastAPI/ngrok server can publish many models through `/models`; admin sync upserts them by slug and each row keeps its own `/predict/{model}` path. Availability is checked every minute and on demand |
 | **Queue board** | Who the model is working for right now and who is waiting behind them, in the worker's own order — read from the prediction records rather than inferred from the audit trail, and numbered by the same definition the researcher sees on their own job |
 | **Worker credentials** | A per-model shared secret sent as `Authorization: Bearer` and checked by the worker in constant time, stored encrypted and write-only through the API, plus a per-model say over TLS verification — needed the moment a worker moves off a random tunnel onto a LAN address |
-| **Managed training** | Datasets, a job queue, and a GPU worker protocol that survives the worker dying mid-run |
 | **Access control** | Admin-created accounts, no self-registration, server-enforced replacement of issued passwords; disabling or resetting an account revokes its tokens |
 | **Messaging** | In-app conversations with administrators, plus a public channel for people who cannot sign in |
 | **Research news** | Admin-published posts with photos, shown as a slideshow on the landing page |
@@ -160,7 +182,7 @@ body type is still checked.
 ## Testing
 
 ```bash
-cd be && php artisan test        # 396 tests, 1,593 assertions (8 October 2026 local validation)
+cd be && php artisan test        # 329 tests, 1,381 assertions (9 October 2026 local validation)
 cd fe && flutter analyze         # must be clean
 cd fe && flutter test            # 276 tests across 33 files
 cd fe_web && npm run check       # ESLint + TypeScript
@@ -232,10 +254,10 @@ the API; all 30 authenticated/public endpoint and role smoke checks passed.
 Another 20 public HTTP checks passed against the deployed web and API, including
 the full research article, request/reset pages, proxy-origin checks and anonymous
 portal guards. Local validation passed 396 Laravel tests/1,593 assertions and
-48 browser checks. The portal now exposes admin/user operations, training,
+48 browser checks. The portal now exposes admin/user prediction operations,
 application disk cleanup and signed artifact downloads. Laptop synchronization
 is still blocked: this executor has no configured VPN or TCP grant, and SSH to
-`100.85.5.67:22` cannot connect. Live GPU prediction/training acceptance remains
+`100.85.5.67:22` cannot connect. Live GPU prediction acceptance remains
 an outstanding research validation step.
 
 The application cutover is complete, but the old VPS's historical database and
@@ -291,7 +313,7 @@ pre-deployment checklist.
   approving a request from the landing page, and an account issued a default
   password cannot reach the console until it sets its own.
 - No credentials are stored in this repository. The seeded administrator
-  password, the inference endpoint and the training worker token all come from
+  password and the inference endpoint come from
   the environment.
 - Model endpoint URLs are visible to administrators only: knowing one would
   allow bypassing the platform and calling the GPU worker directly.

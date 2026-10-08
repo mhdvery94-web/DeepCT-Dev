@@ -64,7 +64,7 @@ class MeController extends Controller
      */
     public function models()
     {
-        $models = Model::inference()
+        $models = Model::query()
             ->where('is_active', true)
             // Explicit, because the picker selects the first available model
             // and the order therefore decides where work goes. This used to be

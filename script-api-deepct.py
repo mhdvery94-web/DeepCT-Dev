@@ -70,11 +70,8 @@ app = FastAPI()
 # ulang path-nya karena alasan yang tidak ada hubungannya dengan kode ini.
 #
 # Tiga salinan proyek ini membawa tiga path berbeda dan dua di antaranya salah.
-# Kegagalannya tiba sebagai `[Errno 2] No such file or directory`, dan pada
-# skrip training ia tiba *setelah* sebuah run diterima: peneliti melihat
-# jobnya jadi `failed` karena sesuatu yang tak bisa diperbaiki dari sisi mana
-# pun di platform. Fungsi ini identik dengan kembarannya di
-# `script-api-train-deepct.py`, supaya keduanya tidak bisa berselisih lagi.
+# Path yang salah menyebabkan `[Errno 2] No such file or directory` sebelum
+# inference tersedia. Temukan bobot dari lampiran model sesi saat ini.
 # --------------------------------------------------------------------------
 MODEL_SEARCH_ROOT = os.environ.get("MODEL_SEARCH_ROOT", "/kaggle/input")
 
@@ -172,7 +169,7 @@ def explain_tunnel_failure(error) -> str | None:
     return (
         "ERR_NGROK_334: domain ngrok akun ini sudah dipakai notebook "
         "lain yang sedang menyala. Satu akun gratis hanya punya satu "
-        "domain, dan notebook training biasanya sudah memegangnya. "
+        "domain, yang mungkin sedang dipakai notebook lain. "
         "Pilih satu: (a) buat Kaggle secret "
         f"'{PREFERRED_NGROK_SECRET}' berisi authtoken ngrok dari akun "
         "kedua, lalu jalankan ulang sel ini; atau (b) hentikan "

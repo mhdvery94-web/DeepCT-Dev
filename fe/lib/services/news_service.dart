@@ -114,7 +114,7 @@ class NewsService {
 
   /// How many times one chunk is retried before the upload gives up.
   ///
-  /// Matches ResearcherTrainingService: three attempts with a growing pause,
+  /// Matches PredictionService: three attempts with a growing pause,
   /// and a re-sync with the server in between, because a request that failed
   /// may still have landed.
   static const int _chunkAttempts = 3;
@@ -127,7 +127,7 @@ class NewsService {
   /// same path as prediction archives.
   ///
   /// The loop is the third copy of this shape in the app, after
-  /// PredictionService and ResearcherTrainingService. ROADMAP already records
+  /// PredictionService and PredictionService. ROADMAP already records
   /// that the first two are worth unifying; this adds to that debt rather than
   /// paying it, deliberately, because unifying while adding a third caller
   /// would mix two changes in one commit range.

@@ -10,16 +10,27 @@ $checks = 0;
 $tokens = [];
 
 try {
+    foreach (['training_samples', 'training_metrics', 'training_jobs', 'training_datasets'] as $table) {
+        if (Illuminate\Support\Facades\Schema::hasTable($table)) throw new RuntimeException('Retired schema still exists: ' . $table);
+        $checks++;
+    }
+    if (Illuminate\Support\Facades\Schema::hasColumn('models', 'kind')) throw new RuntimeException('Retired model kind column still exists.');
+    $checks++;
     foreach (['admin', 'user'] as $role) {
         $user = App\Models\User::where('role', $role)->where('is_active', true)->where('must_change_password', false)->first();
         if (!$user) throw new RuntimeException("No active account with a changed password for role {$role}.");
         $token = $user->createToken('deployment-smoke', ['*'], now()->addMinutes(2));
         $tokens[] = $token->accessToken;
-        $paths = ['/user', '/me/stats', '/me/models', '/me/activities', '/me/training/jobs', '/predictions', '/messages', '/notifications'];
-        if ($role === 'admin') $paths = array_merge($paths, ['/admin/stats', '/admin/users', '/admin/models', '/admin/news', '/admin/access-requests', '/admin/conversations', '/admin/activities', '/admin/training/jobs', '/admin/training/datasets', '/admin/queue', '/admin/storage']);
+        $paths = ['/user', '/me/stats', '/me/models', '/me/activities', '/predictions', '/messages', '/notifications'];
+        if ($role === 'admin') $paths = array_merge($paths, ['/admin/stats', '/admin/users', '/admin/models', '/admin/news', '/admin/access-requests', '/admin/conversations', '/admin/activities', '/admin/queue', '/admin/storage']);
         foreach ($paths as $path) {
             $response = Illuminate\Support\Facades\Http::acceptJson()->withToken($token->plainTextToken)->timeout(30)->get($base . $path);
             if ($response->status() !== 200 || $response->json('success') !== true) throw new RuntimeException("{$role}: GET {$path} returned {$response->status()}.");
+            $checks++;
+        }
+        foreach (['/me/training/jobs', '/admin/training/jobs', '/admin/training/datasets', '/downloads/training/1/weights'] as $path) {
+            $response = Illuminate\Support\Facades\Http::acceptJson()->withToken($token->plainTextToken)->timeout(15)->get($base . $path);
+            if ($response->status() !== 404) throw new RuntimeException("Retired route {$path} returned {$response->status()}.");
             $checks++;
         }
         if ($role === 'user') {

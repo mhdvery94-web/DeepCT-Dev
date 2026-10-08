@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Storage;
  *
  * Admin only. Free space on the results volume says how close the platform is
  * to refusing uploads, and the breakdown says whether that is a problem that
- * solves itself: prediction output and eligible training archives are reclaimed
+ * solves itself: prediction output is reclaimed
  * by their retention commands. Explicit cleanup is restricted to finished work.
  */
 class StorageController extends Controller
@@ -45,14 +45,13 @@ class StorageController extends Controller
     {
         abort_unless($guard->isMounted(), 409, 'Application storage is not mounted.');
         $predictionStatus = Artisan::call('predictions:cleanup');
-        $trainingStatus = Artisan::call('training:cleanup');
-        $this->record($request, ['mode' => 'retention', 'prediction_status' => $predictionStatus, 'training_status' => $trainingStatus]);
+        $this->record($request, ['mode' => 'retention', 'prediction_status' => $predictionStatus]);
 
         return response()->json([
-            'success' => $predictionStatus === 0 && $trainingStatus === 0,
-            'message' => $predictionStatus === 0 && $trainingStatus === 0 ? 'Expired application files cleaned.' : 'Cleanup was incomplete. Refresh storage and check the application log.',
+            'success' => $predictionStatus === 0,
+            'message' => $predictionStatus === 0 ? 'Expired application files cleaned.' : 'Cleanup was incomplete. Refresh storage and check the application log.',
             'data' => $guard->report(),
-        ], $predictionStatus === 0 && $trainingStatus === 0 ? 200 : 500);
+        ], $predictionStatus === 0 ? 200 : 500);
     }
 
     /** Only files of a finished prediction. Its record and evidence survive. */

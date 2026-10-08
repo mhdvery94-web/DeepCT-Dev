@@ -29,7 +29,7 @@ export default async function LoginPage({
           <span className="eyebrow eyebrow--light">Secure research workspace</span>
           <h1>From raw CT data to research insight.</h1>
           <p>
-            Continue to predictions, model training, research news, and administration
+            Continue to predictions, research news, and administration
             tools using your institutional account.
           </p>
         </div>

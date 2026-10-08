@@ -1,6 +1,12 @@
 # Working on this project
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](handoff.md).
+
 Read this before touching anything. It is short on purpose.
+
+Read `handoff.md` first when resuming. Do not restore managed training from old
+plans or historical notes: the user explicitly retired it for both roles.
 
 ## What this is
 
@@ -214,9 +220,7 @@ platform sends the model's `auth_token` as `Authorization: Bearer`; the worker
 only checks it if `WORKER_TOKEN` is set in its environment — read from Kaggle
 Secrets, never pasted into the script. Empty means open, which is the default,
 so setting the token in **Admin → Model Management** alone changes nothing
-until the Kaggle session is restarted with the secret. Both scripts print which
-mode they came up in at startup, and the training script's `GET /` reports
-`protected`.
+until the Kaggle session is restarted with the secret. The inference script prints which authentication mode it uses at startup.
 
 ### Flutter gotchas
 
@@ -243,8 +247,9 @@ mode they came up in at startup, and the training script's `GET /` reports
   row or column. Without it the dropdown sizes to its longest *option* rather
   than the space it was given, and overflows on a phone — this cost 54px in
   `PublicTicketSheet` before a layout test caught it.
-- Square corners everywhere (`BorderRadius.zero`), and `withValues(alpha:)`
-  rather than the deprecated `withOpacity`.
+- Flutter keeps its square visual theme. Web inputs/buttons now use rounded
+  corners, comfortable spacing and focus/hover feedback per the user request.
+  Use `withValues(alpha:)` rather than the deprecated Flutter `withOpacity`.
 
 ### Under Octane, `upload_max_filesize` does not apply — but `post_max_size` does
 
@@ -258,9 +263,6 @@ enforced by the framework long before RoadRunner's `max_request_size` is
 reached. It was left at the stock **8M** on this machine, and the symptoms did
 not look like a size limit at all:
 
-- a training worker finishing an epoch and posting its checkpoint back got
-  **413**, recorded as `413 Client Error: Request Entity Too Large` against a
-  run that had trained perfectly for four epochs;
 - a 19 MB dataset posted whole answered **"The POST data is too large"**, while
   the same archive sent through the chunked endpoint went up without complaint,
   because each chunk is small.
@@ -302,7 +304,7 @@ The PHP guard extends PHPUnit's `TestCase`, not Laravel's, so it uses
 ## Verify your work
 
 ```bash
-cd be && php artisan test          # 383 tests, needs the db_aict_test database
+cd be && php artisan test          # 329 tests locally verified on 9 October 2026; db_aict_test required
 cd fe && flutter analyze           # must be clean
 cd fe && flutter test              # 276 tests
 cd fe && flutter build apk --release

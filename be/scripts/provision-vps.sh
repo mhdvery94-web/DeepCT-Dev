@@ -182,10 +182,9 @@ else
   # `set -o pipefail`, `head` closing the pipe early can SIGPIPE the stage
   # feeding it and take the whole script down. It depends on buffer timing, so
   # it would pass in testing and fail on the machine that matters.
-  set_env TRAINING_WORKER_TOKEN "$(openssl rand -hex 24)"
 
   php artisan key:generate --force
-  echo "    wrote .env with APP_DEBUG=false and a fresh training worker token."
+  echo "    wrote .env with APP_DEBUG=false and production settings."
   # No CORS note here on purpose. config/cors.php has never been published, so
   # the framework default applies and allowed_origins is `*` — which is safe
   # here because Sanctum is used with bearer tokens and nothing sends a cookie.

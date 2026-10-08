@@ -1,5 +1,9 @@
 # 🧪 Jurnal Eksperimen AI & Deep Learning
 
+> Dokumen ini menyimpan hasil riset model dan eksperimen offline historis.
+> Aplikasi 9 Oktober 2026 hanya prediksi; eksperimen pelatihan di sini bukan fitur portal.
+> Kelanjutan agen: [checkpoint](handoff.md).
+
 > **Status: jurnal riset model — dokumen paling awet di repo ini.**
 > Berisi alasan di balik keputusan yang tidak terbaca dari kode, terutama
 > **mengapa interpolasi selalu t=0.5**: model mengabaikan nilai `time_scalar`

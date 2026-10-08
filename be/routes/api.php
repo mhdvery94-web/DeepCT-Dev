@@ -7,12 +7,9 @@ use App\Http\Controllers\API\AnalysisController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\AvatarController;
 use App\Http\Controllers\API\MeController;
-use App\Http\Controllers\API\MeTrainingController;
 use App\Http\Controllers\API\AdminQueueController;
 use App\Http\Controllers\API\MessageController;
 use App\Http\Controllers\API\NewsController;
-use App\Http\Controllers\API\TrainingController;
-use App\Http\Controllers\API\TrainingWorkerController;
 use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\StorageController;
 use App\Http\Controllers\API\PredictionUploadController;
@@ -59,22 +56,7 @@ Route::get('/news/{id}', [NewsController::class, 'publishedShow'])->whereNumber(
 Route::get('/news/{id}/image', [NewsController::class, 'image'])->name('api.news.image');
 Route::get('/news/{id}/video', [NewsController::class, 'video'])->name('api.news.video');
 
-// GPU training workers. Outside `auth:sanctum` on purpose: a worker is a
-// machine with a long-lived shared secret, not a person with an account, and
-// it must not be able to reach anything but these seven routes. See
-// EnsureTrainingWorker and ARCHITECTURE.md 7.
-Route::middleware('training.worker')->prefix('training/worker')->group(function () {
-    Route::post('/claim', [TrainingWorkerController::class, 'claim'])->name('api.training.worker.claim');
-    Route::get('/jobs/{id}/dataset', [TrainingWorkerController::class, 'dataset'])->name('api.training.worker.dataset');
-    Route::post('/jobs/{id}/heartbeat', [TrainingWorkerController::class, 'heartbeat'])->name('api.training.worker.heartbeat');
-    Route::post('/jobs/{id}/checkpoint', [TrainingWorkerController::class, 'checkpoint'])->name('api.training.worker.checkpoint');
-    Route::post('/jobs/{id}/sample', [TrainingWorkerController::class, 'sample'])->name('api.training.worker.sample');
-    Route::post('/jobs/{id}/complete', [TrainingWorkerController::class, 'complete'])->name('api.training.worker.complete');
-    Route::post('/jobs/{id}/fail', [TrainingWorkerController::class, 'fail'])->name('api.training.worker.fail');
-});
-
 Route::get('/downloads/predictions/{id}/{kind}', [AnalysisController::class, 'signedDownload'])->whereIn('kind', ['results', 'complete'])->middleware('signed:relative')->name('api.downloads.predictions');
-Route::get('/downloads/training/{id}/weights', [TrainingController::class, 'signedWeights'])->middleware('signed:relative')->name('api.downloads.weights');
 
 // Protected routes (authentication required)
 Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
@@ -107,30 +89,7 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         // reset to the shared default, which every admin then knows.
         Route::post('/password', [AuthController::class, 'changePassword'])->name('api.me.password');
 
-        Route::prefix('training')->group(function () {
-            Route::get('/jobs', [MeTrainingController::class, 'index'])->name('api.me.training.jobs');
-            Route::post('/jobs', [MeTrainingController::class, 'store'])->name('api.me.training.jobs.store');
-            Route::get('/jobs/{id}/weights-link', [TrainingController::class, 'weightsLink'])->name('api.me.training.weights-link');
-            Route::get('/jobs/{id}', [MeTrainingController::class, 'show'])->name('api.me.training.jobs.show');
-            Route::post('/jobs/{id}/cancel', [MeTrainingController::class, 'cancel'])->name('api.me.training.jobs.cancel');
-            Route::get('/jobs/{id}/samples', [MeTrainingController::class, 'samples'])->name('api.me.training.samples');
-            Route::get('/jobs/{id}/samples/{epoch}', [MeTrainingController::class, 'sampleImage'])->name('api.me.training.samples.show');
-            Route::get('/jobs/{id}/dataset/frames', [MeTrainingController::class, 'datasetFrames'])->name('api.me.training.dataset.frames');
-            // `{name}` has to span slashes. The listing beside it hands out
-            // entry names straight from the archive, and real datasets keep
-            // their frames in a folder — `input/HONDA_Used_0051.tif`. Without
-            // this, the client's `Uri.encodeComponent` produced `%2F`, which
-            // Symfony decodes back to a separator before matching, so the URL
-            // named two segments where the route expected one and matched
-            // nothing at all. Every frame in a foldered dataset answered 404.
-            //
-            // Safe because the controller checks the name against the
-            // archive's own listing rather than sanitising it: a name that is
-            // not an entry is refused whatever it looks like.
-            Route::get('/jobs/{id}/dataset/frames/{name}/preview', [MeTrainingController::class, 'datasetFramePreview'])
-                ->where('name', '.*')
-                ->name('api.me.training.dataset.preview');
-        });
+
     });
 
     // Serving a photo is authenticated rather than public: avatars appear
@@ -182,26 +141,6 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         Route::post('/news/{id}', [NewsController::class, 'update'])->name('api.admin.news.update');
         Route::patch('/news/{id}/toggle', [NewsController::class, 'toggle'])->name('api.admin.news.toggle');
         Route::delete('/news/{id}', [NewsController::class, 'destroy'])->name('api.admin.news.destroy');
-
-        // Managed model training. The platform records what should be trained
-        // and what came back; the GPU lives on a remote worker and talks to the worker
-        // routes below, outside this group.
-        Route::get('/training/datasets', [TrainingController::class, 'datasets'])->name('api.admin.training.datasets');
-        Route::post('/training/datasets', [TrainingController::class, 'storeDataset'])->name('api.admin.training.datasets.store');
-        Route::delete('/training/datasets/{id}', [TrainingController::class, 'destroyDataset'])->name('api.admin.training.datasets.destroy');
-
-        // No `POST /training/jobs`. Starting a run belongs to the researcher
-        // who has the data — see `me/training/jobs`. An administrator keeps
-        // oversight of every run here: see them, push them, cancel them,
-        // delete them. Two ways to start one, differing only in whose name it
-        // carries, is not oversight.
-        Route::get('/training/jobs', [TrainingController::class, 'jobs'])->name('api.admin.training.jobs');
-        Route::get('/training/jobs/{id}', [TrainingController::class, 'showJob'])->name('api.admin.training.jobs.show');
-        Route::post('/training/jobs/{id}/cancel', [TrainingController::class, 'cancelJob'])->name('api.admin.training.jobs.cancel');
-        Route::delete('/training/jobs/{id}', [TrainingController::class, 'destroyJob'])->name('api.admin.training.jobs.destroy');
-        Route::get('/training/jobs/{id}/weights-link', [TrainingController::class, 'weightsLink'])->name('api.admin.training.weights-link');
-        Route::get('/training/jobs/{id}/weights', [TrainingController::class, 'downloadWeights'])->name('api.admin.training.jobs.weights');
-        Route::post('/training/jobs/{id}/register-model', [TrainingController::class, 'registerModel'])->name('api.admin.training.jobs.register');
 
         // Support conversations
         Route::get('/conversations', [MessageController::class, 'adminIndex'])->name('api.admin.conversations.index');

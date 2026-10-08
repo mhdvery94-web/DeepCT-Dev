@@ -174,3 +174,7 @@
   .bl-workspace-link > span { display: none; }
   .ct-illustration { height: 248px; }
 }
+
+.bl-button, .menu-button { border-radius: 12px; }
+.bl-button { transition: background .2s, border-color .2s, box-shadow .2s; }
+.bl-button:hover { box-shadow: 0 6px 18px #5f171b22; }

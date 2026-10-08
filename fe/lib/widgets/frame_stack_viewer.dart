@@ -10,7 +10,7 @@ import '../theme/app_theme.dart';
 ///
 /// Lives here rather than inside the gallery screen because three places need
 /// it: the upload screen shows the frames just sent, the results screen shows
-/// those merged with what the model produced, and training shows its own.
+/// those merged with what the model produced, and show their retained evidence.
 ///
 /// WHY THE WHOLE STACK IS HELD IN MEMORY
 /// -------------------------------------

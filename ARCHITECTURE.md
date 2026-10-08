@@ -1,8 +1,11 @@
 # Arsitektur Sistem
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](handoff.md).
+
 Menggabungkan apa yang dulu tersebar di `ARCHITECTURE_FLOW.md`,
 `FASE3_DECISIONS.md`, `DATABASE_STATUS.md` dan `be/DATABASE_CLEANUP.md`.
-Semua yang tertulis di sini mencerminkan kode yang berjalan per 15 Agustus 2026.
+Kontrak aktif diperbarui 9 Oktober 2026: aplikasi hanya mengorkestrasi prediksi.
 
 ---
 
@@ -28,7 +31,7 @@ Semua yang tertulis di sini mencerminkan kode yang berjalan per 15 Agustus 2026.
        │              │ multipart POST
 ┌──────▼──────┐  ┌────▼──────────────────┐
 │  MySQL 8    │  │  FastAPI @ Kaggle     │  bobot .h5, GPU
-│  23 tabel   │  │  di balik ngrok       │  ~18–21 s / frame
+│  basis data │  │  di balik ngrok       │  ~18–21 s / frame
 └─────────────┘  └───────────────────────┘
 
 storage/app/private/predictions/{user_id}/{job_id}/{input,output}/
@@ -127,7 +130,8 @@ memicu inferensi GPU.
 
 ## 3. Skema database
 
-23 tabel di `db_aict` — 15 milik aplikasi, 8 bawaan kerangka. Yang relevan:
+Skema `db_aict` berfokus pada prediksi, akun, berita, pesan dan audit. Jumlah tabel
+termasuk instrumentasi kerangka dapat diperiksa lewat `Schema::getTables()`. Yang relevan:
 
 ### `users`
 `name`, `email`, `phone`, `password`, `role` (enum admin/user), `is_active`,
@@ -189,8 +193,7 @@ setiap peneliti yang login. Yang dijawab API hanyalah `has_auth_token`.
 
 **Sisi worker memeriksanya lewat `WORKER_TOKEN`.** Rahasia bersama butuh dua
 pihak; sampai `1.29.2` hanya platform yang mengirim, dan tidak ada yang
-memvalidasi. Kedua skrip Kaggle — `script-api-deepct.py` dan
-`script-api-train-deepct.py` — kini membandingkannya dengan
+memvalidasi. Skrip inference Kaggle `script-api-deepct.py` membandingkannya dengan
 `hmac.compare_digest`, bukan `==`, karena perbandingan string biasa berhenti
 pada byte pertama yang berbeda dan selisih waktunya bisa dipakai memulihkan
 rahasia satu karakter demi satu karakter. `WORKER_TOKEN` kosong berarti
@@ -304,7 +307,7 @@ mengirimkan event yang sama lewat email nanti cuma menambah `'mail'` di `via()`.
 Tabelnya polimorfik, jadi **tidak punya foreign key** ke `users`. Karena itu
 `User::booted()` menghapus notifikasi, token, avatar, berkas prediksi, bukti
 hasil, dan berkas sementara saat akun dihapus. Penghapusan ditolak selama akun
-masih memiliki prediksi atau training aktif, supaya pekerjaan yang sedang
+masih memiliki prediksi aktif, supaya pekerjaan yang sedang
 berjalan tidak kehilangan berkasnya.
 
 ### `news_posts` — berita riset di landing page
@@ -319,33 +322,11 @@ tiba dalam satu permintaan; **video dibatasi 50 MB dan tidak bisa** —
 `post_max_size` PHP adalah 8M, dan satu POST multipart 25 MB ditolak HTTP 413
 oleh `ValidatePostSize` Laravel. Karena itu video menempuh mesin unggah
 berpotongan di `PredictionUploadController` sebagai `purpose: news_video`,
-tujuan ketiganya di samping `prediction` dan `training`.
+tujuan kedua di samping `prediction`.
 
 `video_size_bytes` tidak punya pasangan di sisi gambar dengan sengaja: 4 MB
 tidak perlu diumumkan, 50 MB perlu, dan angkanya ditampilkan di sebelah
 tombol putar.
-
-### `training_samples` — satu frame per epoch
-
-`training_job_id`, `epoch`, `path`. Unik pada pasangan `(job, epoch)`: worker
-yang mengulang sebuah epoch setelah sesi Kaggle-nya mati harus menimpa, bukan
-menggandakan.
-
-Dihapus bersama job-nya — tetapi **lewat Eloquent, bukan lewat foreign key**.
-Cascade di database menghapus barisnya dengan sempurna dan tidak memicu event
-model sama sekali, sehingga setiap PNG akan tertinggal di disk tanpa ada yang
-menunjuknya. `TrainingJob::booted()` menghapusnya lebih dulu justru karena itu.
-
-### Tabel lain
-`personal_access_tokens` (Sanctum), `cache`, `cache_locks`, `jobs`,
-`job_batches`, `failed_jobs`, `migrations`, `sessions`,
-`password_reset_tokens`.
-
-Dua yang terakhir tidak dipakai untuk autentikasi API. `sessions` tetap terisi
-karena route `/` memakai session (`SESSION_DRIVER=database`); jangan
-menghapusnya tanpa mengubah driver dulu.
-
----
 
 ## 4. Keputusan teknis dan alasannya
 
@@ -521,7 +502,7 @@ per jam sebagai jaring pengaman.
 | Ekstraksi ZIP | Batas 50 MB/frame, 1000 frame, 2 GB total hasil ekstraksi; nama frame yang sama setelah folder diratakan ditolak |
 | Rahasia | `endpoint_url` model tidak pernah keluar ke non-admin |
 | Autentikasi worker | `auth_token` per model, dikirim `Authorization: Bearer`, terenkripsi saat disimpan, tulis-saja lewat API |
-| Ruang disk | Unggah prediksi langsung/chunked dan training langsung menolak dengan **507** ketika tidak ada tempat; lihat `StorageGuard` |
+| Ruang disk | Unggah prediksi langsung/chunked menolak dengan **507** ketika tidak ada tempat; lihat `StorageGuard` |
 | Volume hasil | Berkas sentinel membuktikan NAS-nya ter-mount, karena share yang absen menerima tulisan tanpa mengeluh |
 | TLS ke worker | `verify_tls` per model; satu-satunya tempat `withoutVerifying()` tersisa adalah `WorkerRequest` |
 
@@ -549,161 +530,28 @@ Tidak satu pun berjalan otomatis di setup Laragon saat ini.
 
 ---
 
-## 7. Sistem pelatihan model — rancangan, belum dibangun
+## 7. Aplikasi khusus prediksi dan penghapusan fitur lama
 
-Tidak ada satu baris kode pun untuk bagian ini. Yang ada di bawah adalah
-rancangan yang sudah dipikirkan sampai bisa dieksekusi, ditulis di sini supaya
-tidak perlu dipikirkan dari nol lagi.
+Web dan Flutter tidak menyediakan training. Laravel hanya mengorkestrasi
+inference; upload chunked menerima `prediction` atau media berita `news_video`.
+Route fitur lama tidak terdaftar dan menjawab 404 untuk seluruh peran.
 
-### Kenapa ini penting
+Migrasi 9 Oktober menghapus tabel samples, metrics, jobs, lalu datasets untuk
+menjaga urutan foreign key. Baris registry trainer, kolom `models.kind`, dan
+aktivitas training dihapus; model inference serta rekaman prediksi dipertahankan.
+Migrasi historis tetap ada agar database lama dapat naik versi. Migrasi baru
+idempoten saat diulang setelah DDL parsial dan tidak menyediakan rollback
+yang mengaku memulihkan data terhapus.
 
-Model sekarang dilatih pada dataset yang biasnya hanya bisa dihilangkan lewat
-retrain. **Metode rekursif di §2 ada justru untuk menyiasati bias itu** — kalau
-model dilatih ulang dengan dataset t yang seimbang, interpolasi bisa langsung ke
-t sembarang dan seluruh pohon rekursif tidak diperlukan lagi. Lihat
-[AI_EXPERIMENTS.md](AI_EXPERIMENTS.md).
+Workflow membuat backup MySQL sebelum migrasi, kemudian menjalankan
+`app:cleanup-retired-data`. Perintah tersebut memeriksa mount dan skema, menolak
+direktori yang mengarah keluar storage aplikasi, menghapus direktori fitur lama
+serta sesi upload lamanya. Prediksi, evidence, berita dan upload aktif prediksi
+tetap tersimpan. Pemulihan memerlukan backup dan kode rilis sebelumnya.
 
-### Batas yang menentukan bentuknya
-
-Tiga kenyataan, dan semuanya tidak bisa dinegosiasikan:
-
-1. **Notebook di repo ini nol kode training.** Yang ada cuma inferensi. Generator
-   GAN 25,6 juta parameter, dan discriminator-nya tidak ada di sini.
-2. **Sesi Kaggle putus tiap ~9–12 jam.** Training butuh berhari-hari. Apa pun
-   yang dirancang harus tahan proses eksekusinya mati di tengah jalan.
-3. **Mesin ini tidak punya GPU**, dan backend-nya PHP. Training tidak akan
-   pernah berjalan di dalam Laravel.
-
-### Bentuknya: platform **mengelola** training, bukan menjalankannya
-
-Pembagian yang sama persis dengan alur prediksi — dan itu bukan kebetulan,
-melainkan alasan utama rancangan ini masuk akal: infrastrukturnya sudah ada.
-
-| Pihak | Tanggung jawab |
-|---|---|
-| Platform | Menyimpan dataset, mencatat job, menerima bobot + metrik, mendaftarkan versi model baru |
-| Worker (Kaggle/Colab) | Menarik dataset, melatih, checkpoint berkala, melapor balik |
-
-Platform tidak pernah memegang GPU dan tidak pernah menunggu. Ia mencatat.
-
-### Tabel yang dibutuhkan
-
-**`training_datasets`** — `name`, `description`, `archive_path`, `frame_count`,
-`size_bytes`, `checksum`, `uploaded_by`. Diunggah lewat chunked upload yang
-**sudah ada** (§4): dataset training justru kasus yang paling membenarkan
-keberadaan alur itu — puluhan GB, jelas butuh resume.
-
-**`training_jobs`** — `dataset_id`, `base_model_id` (nullable, untuk fine-tune),
-`hyperparameters` (json), `status`
-(queued/claimed/running/checkpointed/completed/failed/abandoned),
-`current_epoch`, `total_epochs`, `metrics` (json), `checkpoint_path`,
-`claimed_at`, `heartbeat_at`, `resulting_model_id`.
-
-Tabel `models` sudah punya `version`, `accuracy`, dan `deployed_at`, jadi hasil
-training tinggal jadi baris baru di sana — separuh jalan sudah terpasang.
-
-### Alurnya, dan bagian yang paling mudah salah
-
-```
-admin unggah dataset  →  buat training job  →  status: queued
-                                                    │
-worker Kaggle polling GET /training/next ───────────┘
-   │  klaim job (status: claimed, claimed_at diisi)
-   │  tarik dataset, latih
-   ├── tiap N epoch: POST /training/{id}/checkpoint  (bobot + metrik)
-   │                 status: checkpointed, heartbeat_at diperbarui
-   │
-   └── sesi Kaggle mati ─────────────────────────────┐
-                                                     │
-   scheduler: job dengan heartbeat_at > 30 menit ────┘
-              dikembalikan ke queued, checkpoint_path dipertahankan
-                                                     │
-   worker berikutnya klaim job itu ──────────────────┘
-              lanjut dari checkpoint, bukan dari nol
-```
-
-**Heartbeat plus checkpoint adalah inti rancangan ini, bukan hiasan.** Sesi
-Kaggle yang putus tiap ~9–12 jam bukan kasus tepi — itu kejadian normal yang
-akan terjadi berkali-kali dalam satu training. Tanpa checkpoint yang dipulihkan,
-setiap putus berarti mengulang dari awal, dan training berhari-hari tidak akan
-pernah selesai. Ini kebalikan dari alur prediksi, yang boleh gagal begitu saja
-karena satu frame cuma ~20 detik.
-
-Konsekuensinya: **job training tidak boleh `failed` hanya karena worker-nya
-diam.** Yang menandai gagal adalah worker yang melapor gagal; worker yang hilang
-menghasilkan job yang kembali `queued`.
-
-### Endpoint yang dibutuhkan
-
-Semua di bawah `/api/training`, dengan token khusus worker (bukan token user):
-
-| Method | Path | Untuk |
-|---|---|---|
-| `GET` | `/training/next` | Worker mengklaim satu job |
-| `GET` | `/training/{id}/dataset` | Unduh arsip dataset |
-| `POST` | `/training/{id}/heartbeat` | "Masih hidup", plus epoch/metrik terbaru |
-| `POST` | `/training/{id}/checkpoint` | Unggah bobot sementara |
-| `POST` | `/training/{id}/complete` | Bobot final + metrik → jadi versi model baru |
-| `POST` | `/training/{id}/fail` | Melapor gagal beserta alasannya |
-
-Token worker harus terpisah dari token user: worker itu mesin, umurnya panjang,
-dan haknya sempit — cuma boleh menyentuh job yang diklaimnya sendiri.
-
-### Yang tidak dirancang di sini
-
-Notebook training-nya sendiri. Itu pekerjaan riset (arsitektur discriminator,
-loss, augmentasi), bukan pekerjaan platform, dan menulis kontrak API tanpa tahu
-bentuk akhirnya justru menghasilkan kontrak yang salah.
-
-### Dua cara memulai: ditarik worker, atau didorong platform
-
-Rancangan awalnya *pull*: worker mem-polling `claim`. Itu tetap ada dan tetap
-jadi jaring pengaman. Tapi ada cara kedua yang bentuknya persis seperti
-prediksi, dan itu yang biasanya diharapkan orang:
-
-```
-Konsol admin ──POST /train──► notebook GPU ──heartbeat/checkpoint──► platform
-```
-
-Admin mendaftarkan **trainer URL** (`TRAINING_TRAINER_URL`, atau diisi saat
-menekan tombolnya), lalu menekan **SEND TO TRAINER** pada job yang antre.
-Platform mem-POST job itu — id, epoch, hyperparameter, sumber dataset,
-**alamat callback dan worker token** — ke URL tersebut.
-`scripts/training_server.py` adalah sisi notebook-nya: FastAPI dengan
-`POST /train`, kembarannya server inferensi yang sudah ada.
-
-Tiga hal yang membuat ini bekerja, dan versi naifnya tidak:
-
-1. **Request-nya cuma minta "terima job ini"**, dengan timeout pendek.
-   Notebook harus menjawab langsung dan melatih di thread latar. Koneksi yang
-   ditahan selama training berhari-hari akan timeout di jaringan mana pun.
-2. **Job tetap `queued` setelah dikirim.** Trainer bilang ia *menerima*; yang
-   membuktikan ia *mulai* adalah heartbeat pertama. Kalau platform langsung
-   menandainya `running`, job yang tidak pernah jalan akan terlihat sehat
-   selamanya.
-3. **Mendorong tidak melewati protokol pelaporan.** Justru itu yang membuat
-   job hasil dorongan selamat saat sesinya mati: heartbeat, checkpoint, dan
-   `training:reclaim` bekerja persis sama.
-
-Kalau dorongannya gagal — trainer menolak atau tidak terjangkau — job tetap
-`queued`. Push yang gagal tidak boleh membuat job terlantar; worker yang
-mem-polling masih bisa mengambilnya.
-
-**Alamat callback divalidasi sebelum dikirim.** `APP_URL` di hampir semua mesin
-pengembangan masih `http://localhost`, dan GPU di internet jelas tidak bisa
-menjangkaunya. Tanpa pemeriksaan itu dispatch-nya sukses, trainer menerima, lalu
-setiap laporan baliknya gagal diam-diam — job duduk di `queued` selamanya tanpa
-ada yang menjelaskan kenapa. Sekarang ditolak **422** dengan pesan yang
-menyebutkan variabel mana yang harus diisi. Ini ketahuan dari uji langsung,
-bukan dari membaca kode.
-
-### Ukurannya
-
-Setara seluruh FASE 3 — tabel, endpoint, worker protocol, layar admin, dan
-notebook training yang belum ada. Karena itu ia dijadwalkan terakhir, dan
-[ROADMAP.md](ROADMAP.md) mencatatnya sebagai sistem terpisah, bukan fitur.
-
----
+LLM belum diimplementasikan. Integrasi yang memungkinkan adalah asisten untuk
+menjelaskan metadata, hasil prediksi dan metrik dengan akses sesuai peran.
+Interpolasi TIFF tetap dikerjakan model CT; asisten tidak mengganti model itu.
 
 ## 8. Deployment: Raspberry Pi + ngrok + Vercel
 
@@ -822,8 +670,7 @@ perubahan harus diikuti dengan pembaruan `RASPI_API_BASE_URL` dan rebuild web.
    `SEED_ADMIN_PASSWORD` dan `SEED_USER_PASSWORD` hanya ke proses seeder,
    menunggu Octane siap, lalu membuktikan login kedua peran. Push biasa tidak
    pernah mereset kredensial.
-4. **`TRAINING_WORKER_TOKEN` baru** untuk produksi — token pengembangan sudah
-   pernah lewat terminal dan log.
+
 5. **`script-deepct.py` jangan di-commit.** Berkas itu memuat token otentikasi
    ngrok dalam teks polos. Saat ini belum ter-track; biarkan begitu, atau
    pindahkan tokennya ke variabel lingkungan lebih dulu.
@@ -866,7 +713,7 @@ membutuhkannya. Di server ia mendarat sebagai
 yang justru merupakan langkah 1 dari urutan di bawah.
 
 Ia membuat database dan usernya, menulis `.env` dengan `APP_DEBUG=false` plus
-`TRAINING_WORKER_TOKEN` baru, mengunduh binari RoadRunner dan menjalankan
+konfigurasi produksi, mengunduh binari RoadRunner dan menjalankan
 migrasi. Bagian Supervisor di skrip adalah jalur bootstrap lama; instalasi Pi
 aktif menggunakan PM2 setelah provisioning selesai.
 

@@ -71,11 +71,8 @@ async function handler(
     // streaming gigabytes through Vercel's function response limit.
     const resourcePath = buildPath(path);
     const predictionDownload = resourcePath.match(/^\/predictions\/(\d+)\/download\/(results|complete)$/);
-    const weightsDownload = resourcePath.match(/^\/(admin|me)\/training\/jobs\/(\d+)\/weights$/);
-    if (request.method === "GET" && (predictionDownload || weightsDownload)) {
-      const linkPath = predictionDownload
-        ? `/predictions/${predictionDownload[1]}/download-link?kind=${predictionDownload[2]}`
-        : `/${weightsDownload![1]}/training/jobs/${weightsDownload![2]}/weights-link`;
+    if (request.method === "GET" && predictionDownload) {
+      const linkPath = `/predictions/${predictionDownload[1]}/download-link?kind=${predictionDownload[2]}`;
       const linkResponse = await fetch(apiUrl(linkPath), { headers, cache: "no-store" });
       const payload = await linkResponse.json();
       if (!linkResponse.ok) return NextResponse.json(payload, { status: linkResponse.status });

@@ -60,10 +60,8 @@ class ModelController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'version' => 'required|string|max:50',
-            // 'inference' answers POST /predict, 'trainer' answers POST /train.
-            // One registry: registering a trainer is the same act, with the
-            // same on/off switch and the same health check behind it.
-            'kind' => 'nullable|in:inference,trainer',
+            // Older inference clients send this field; it is no longer stored.
+            'kind' => 'sometimes|in:inference',
             'endpoint_url' => 'required|url|max:500',
             'description' => 'nullable|string',
             'file_path' => 'nullable|string|max:255',
@@ -84,7 +82,6 @@ class ModelController extends Controller
             'name' => $request->name,
             'slug' => $this->uniqueSlug($request->name),
             'version' => $request->version,
-            'kind' => $request->input('kind', 'inference'),
             ...$this->endpointFields($request->endpoint_url),
             'endpoint_url' => $request->endpoint_url,
             'auth_token' => $request->input('auth_token') ?: null,

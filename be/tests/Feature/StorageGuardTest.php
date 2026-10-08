@@ -184,13 +184,11 @@ class StorageGuardTest extends TestCase
         // a different situation from one holding datasets nothing will ever
         // reclaim, and a single "used" figure cannot tell them apart.
         Storage::put('predictions/1/abc/output/frame_002.tif', str_repeat('x', 500));
-        Storage::put('training/datasets/set.zip', str_repeat('x', 900));
         Storage::put('prediction-evidence/7/frame_002.png', str_repeat('x', 100));
 
         $report = app(StorageGuard::class)->report();
 
         $this->assertSame(500, $report['breakdown']['predictions']);
-        $this->assertSame(900, $report['breakdown']['training_datasets']);
         $this->assertSame(100, $report['breakdown']['evidence']);
         $this->assertTrue($report['mounted']);
     }

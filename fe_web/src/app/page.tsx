@@ -12,7 +12,7 @@ import "./bootslander.css";
 
 const capabilities: Array<{ icon: IconName; title: string; description: string }> = [
   { icon: "prediction", title: "CT frame prediction", description: "Generate missing frames and keep the origin of every result visible." },
-  { icon: "training", title: "Model training", description: "Bring your datasets into a managed, reproducible training workflow." },
+  { icon: "model", title: "Model comparison", description: "Compare prediction models using the same scanned frames and retain the evidence." },
   { icon: "shield", title: "Governed access", description: "Researcher and administrator tools, with access managed by your institution." },
   { icon: "activity", title: "Traceable research", description: "Review your activity, compare outputs and preserve the evidence behind a run." },
 ];
@@ -50,7 +50,7 @@ export default async function Home() {
             <div className="bl-about__copy" data-reveal>
               <span className="bl-label">About the platform</span>
               <h2 id="about-title">Less friction.<br />More room for research.</h2>
-              <p>DeepCT brings CT prediction, model training and research collaboration into one workspace for BRIN researchers and approved academic partners.</p>
+              <p>DeepCT brings CT prediction, model comparison and research collaboration into one workspace for BRIN researchers and approved academic partners.</p>
               <p>Move from a dataset to a reviewable result, with the tools and records you need at every step.</p>
               <a className="bl-button" href="#join">Join the platform <UiIcon name="arrow" size={17} /></a>
             </div>

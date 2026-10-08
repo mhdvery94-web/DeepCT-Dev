@@ -120,6 +120,30 @@ class NewsVideoTest extends TestCase
      * A 50 MB file left behind by a deleted post is the kind of thing that
      * fills a VPS disk without anyone deciding to.
      */
+    public function test_removing_only_video_preserves_image_and_article(): void
+    {
+        $post = $this->postWithVideo();
+        $videoPath = $post->video_path;
+        Storage::put('news/kept-image.png', 'kept image');
+        $post->update(['image_path' => 'news/kept-image.png', 'image_mime' => 'image/png', 'body' => 'Kept research content']);
+        $token = $this->tokenFor($this->admin->email, 'password123');
+
+        $this->apiAs($token)->postJson("/api/admin/news/{$post->id}", ['remove_video' => true])
+            ->assertOk()->assertJsonPath('data.has_video', false)
+            ->assertJsonPath('data.has_image', true)
+            ->assertJsonPath('data.body', 'Kept research content');
+        $this->assertFalse(Storage::exists($videoPath));
+        $this->assertTrue(Storage::exists('news/kept-image.png'));
+        $this->assertNull($post->fresh()->video_path);
+        $this->assertNull($post->fresh()->video_mime);
+        $this->assertNull($post->fresh()->video_size_bytes);
+
+        // Repeating removal is safe; malformed controls fail validation.
+        $this->apiAs($token)->postJson("/api/admin/news/{$post->id}", ['remove_video' => true])->assertOk();
+        $this->apiAs($token)->postJson("/api/admin/news/{$post->id}", ['remove_video' => 'invalid'])
+            ->assertUnprocessable()->assertJsonValidationErrors('remove_video');
+    }
+
     public function test_deleting_a_post_deletes_its_video(): void
     {
         $post = $this->postWithVideo();

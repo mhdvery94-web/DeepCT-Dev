@@ -13,7 +13,6 @@ StorageReport _report({
   int? free = 40 * 1024 * 1024 * 1024,
   int? total = 100 * 1024 * 1024 * 1024,
   int predictions = 0,
-  int datasets = 0,
   int evidence = 0,
   int temporary = 0,
 }) => StorageReport(
@@ -22,7 +21,6 @@ StorageReport _report({
   freeBytes: free,
   totalBytes: total,
   predictionBytes: predictions,
-  datasetBytes: datasets,
   evidenceBytes: evidence,
   temporaryBytes: temporary,
 );
@@ -33,16 +31,15 @@ void main() {
   group('StorageReport', () {
     test('separates what retention reclaims from what it does not', () {
       // The number that decides whether a full volume is a problem or a
-      // Tuesday. Datasets are reclaimed by nobody.
+      // Retained evidence is excluded from reclaimed bytes.
       final report = _report(
         predictions: 800,
         temporary: 200,
-        datasets: 5000,
         evidence: 50,
       );
 
       expect(report.reclaimableBytes, 1000);
-      expect(report.datasetBytes, 5000);
+      expect(report.evidenceBytes, 50);
     });
 
     test('works out how full the volume is', () {
@@ -72,14 +69,12 @@ void main() {
         'breakdown': {
           'predictions': 100,
           'evidence': 20,
-          'training_datasets': 900,
           'temporary': 5,
         },
       });
 
       expect(report.mounted, isFalse);
       expect(report.predictionBytes, 100);
-      expect(report.datasetBytes, 900);
       expect(report.reclaimableBytes, 105);
     });
 
@@ -105,7 +100,6 @@ void main() {
     testWidgets('shows the breakdown once it has an answer', (tester) async {
       StoragePanel.debugLoader = () async => _report(
         predictions: 3 * 1024 * 1024 * 1024,
-        datasets: 1024 * 1024 * 1024,
       );
 
       await tester.pumpWidget(_host(const StoragePanel()));
@@ -113,7 +107,6 @@ void main() {
 
       expect(find.byKey(const Key('storage-panel')), findsOneWidget);
       expect(find.textContaining('Predictions 3.0 GB'), findsOneWidget);
-      expect(find.textContaining('Datasets 1.0 GB'), findsOneWidget);
       expect(find.textContaining('reclaims within a day'), findsOneWidget);
     });
 

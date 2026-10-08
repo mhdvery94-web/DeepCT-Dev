@@ -15,7 +15,6 @@ const adminModules: readonly Module[] = [
 const userModules: readonly Module[] = [
   ["/workspace/predictions", "prediction", "Predictions", "Explore your CT prediction workspace."],
   ["/workspace/models", "model", "Available models", "Browse the models for your research."],
-  ["/workspace/training", "training", "Model training", "Open your model training workspace."],
   ["/workspace/messages", "message", "Messages", "Stay in touch with the research team."],
 ];
 const workflow: readonly [IconName, string, string][] = [
@@ -134,7 +133,7 @@ export default async function DashboardPage() {
           </div>
         </section>
         <section className="dashboard-workflow">
-          <header className="dashboard-section-heading"><div><span className="dashboard-kicker">From input to insight</span><h2>Your research workflow</h2></div><UiIcon name="training" size={22} /></header>
+          <header className="dashboard-section-heading"><div><span className="dashboard-kicker">From input to insight</span><h2>Your research workflow</h2></div><UiIcon name="prediction" size={22} /></header>
           <ol>
             {workflow.map(([icon, title, description]) => (
               <li key={title}>

@@ -170,3 +170,7 @@
   .portal-footer { align-items: start; flex-direction: column; gap: 7px; padding: 16px; }
   .portal-footer .creator-credit { font-size: 11px; }
 }
+
+.portal-menu-button, .portal-account__security, .logout-button { border-radius: 10px; }
+.portal-nav a { border-radius: 10px; }
+.dashboard-quick, .dashboard-analysis, .dashboard-models, .dashboard-modules, .dashboard-workflow { border-radius: 16px; }

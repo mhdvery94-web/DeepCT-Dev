@@ -10,11 +10,6 @@ class Model extends EloquentModel
         'name',
         'slug',
         'version',
-        // 'inference' or 'trainer'. One registry, two purposes: a trainer
-        // endpoint is registered, switched on and health-checked exactly like
-        // an inference endpoint, so it would be a second table with the same
-        // columns and the same probe behind it.
-        'kind',
         'base_url',
         'endpoint',
         'full_endpoint_url',
@@ -90,29 +85,6 @@ class Model extends EloquentModel
         return $this->hasMany(AnalysisRecord::class);
     }
 
-    /**
-     * Endpoints that answer `POST /predict`.
-     *
-     * Every query that existed before this column did means this one. A trainer
-     * appearing in the model picker on the upload screen would offer a
-     * researcher an endpoint that cannot interpolate anything.
-     */
-    public function scopeInference($query)
-    {
-        return $query->where('kind', 'inference');
-    }
-
-    /** Endpoints that answer `POST /train`. */
-    public function scopeTrainers($query)
-    {
-        return $query->where('kind', 'trainer');
-    }
-
-    public function isTrainer(): bool
-    {
-        return $this->kind === 'trainer';
-    }
-
     /** The URL used for inference, with a fallback for pre-migration rows. */
     public function predictionUrl(): ?string
     {
@@ -122,8 +94,7 @@ class Model extends EloquentModel
     /** Whether this row came from a multi-model server catalogue. */
     public function usesModelCatalog(): bool
     {
-        return $this->kind === 'inference'
-            && filled($this->base_url)
+        return filled($this->base_url)
             && filled($this->slug);
     }
 

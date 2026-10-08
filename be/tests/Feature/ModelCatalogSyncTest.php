@@ -108,7 +108,6 @@ class ModelCatalogSyncTest extends TestCase
             'name' => 'Ginet TC-D Revisi',
             'slug' => 'ginet-tcd-revisi',
             'version' => 'remote',
-            'kind' => 'inference',
             'base_url' => 'https://worker.example',
             'endpoint' => '/predict/ginet-tcd-revisi',
             'full_endpoint_url' => 'https://worker.example/predict/ginet-tcd-revisi',

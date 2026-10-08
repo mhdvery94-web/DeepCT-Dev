@@ -1,5 +1,20 @@
 # 🔬 Frontend - Platform Analisis Citra Neutron CT
 
+> Kontrak aplikasi diperbarui 9 Oktober 2026: khusus prediksi; managed training telah dihapus.
+> Status dan langkah kelanjutan agen: [checkpoint](../handoff.md).
+
+## Prediction-only client — 9 October 2026
+
+Both roles retain inference models and prediction upload/history. Training
+models, services, handoff widgets and related tests have been removed. Upload
+resume now stores only the existing prediction slot; storage reporting omits
+retired datasets. The default API points at the Raspberry Pi reserved tunnel;
+deployment can override it using `API_BASE_URL`.
+
+Flutter validation runs in GitHub Actions because the local host has no Flutter
+SDK. Historical test totals below remain dated observations; current workflow
+results are recorded in the root checkpoint after verification.
+
 Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** dan **Android**.
 
 ---
@@ -70,13 +85,6 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
     public site by accident
   - Filter by published/draft; drafts show their photo to an admin only
 
-- ✅ **Model Training**
-  - Register a dataset by upload or by URL, queue a job, watch its progress
-  - Live epoch counter, metrics and worker label, refreshed every 20s
-  - A job whose worker has gone quiet says so, and says why it is not an error
-  - Cancel a run; register finished weights as a new (inactive) model version
-  - Warns plainly when no worker token is configured — nothing would ever run
-
 - ✅ **Profile photos**
   - Change or remove your own from the sidebar avatar
   - An admin can set or clear anyone's from the user list
@@ -106,7 +114,7 @@ Flutter application untuk platform analisis citra Neutron CT. Mendukung **Web** 
 ### Admin additions
 - ✅ **Storage panel** on the dashboard — free space, and the breakdown that
   actually decides whether a full volume is a problem: prediction output comes
-  back within a day, training datasets never do. Shouts when the results volume
+  back within a day; retained evidence remains. Shouts when the results volume
   is not mounted, because nothing else in the system reports that
 - ✅ **Worker credentials** in the model form — a shared secret sent to the
   worker as `Authorization: Bearer`, write-only (typing a new one replaces it;
@@ -268,7 +276,6 @@ lib/
 │   ├── me_stats.dart             # MeStats (researcher dashboard counters)
 │   ├── prediction.dart           # Prediction (one interpolation job)
 │   ├── prediction_frame.dart     # One frame of a prediction, with its provenance
-│   ├── training.dart             # Training jobs, datasets and per-epoch samples
 │   ├── storage_report.dart       # Room left on the results volume
 │   ├── access_request.dart       # An account request from the landing page
 │   ├── chat_message.dart         # Conversation + ChatMessage
@@ -293,8 +300,6 @@ lib/
 │   ├── notification_service.dart # The bell
 │   ├── news_service.dart         # Public feed + admin CRUD
 │   ├── prediction_service.dart   # Upload, list, download
-│   ├── training_service.dart     # Managed training, administrator side
-│   ├── researcher_training_service.dart # Managed training, researcher side
 │   └── upload_resume_store.dart  # What an unfinished upload was going to become
 │
 ├── screens/
@@ -323,7 +328,6 @@ lib/
 │       ├── upload_screen.dart               # Start a new analysis
 │       ├── prediction_history_screen.dart   # Job status, polling, download
 │       ├── frame_gallery_screen.dart        # Frame previews for one job
-│       ├── training_screen.dart             # Datasets, runs and metrics
 │       ├── user_activity_screen.dart        # Full paginated activity log
 │       └── user_activity_tile.dart          # Shared row widget
 │
@@ -339,7 +343,6 @@ lib/
 │   ├── frame_stack_viewer.dart   # Scrub through a stack of frames the way ImageJ does
 │   ├── model_status_strip.dart   # Live availability of the deep-learning workers
 │   ├── storage_panel.dart        # Free space on the results volume
-│   ├── training_handoff_panel.dart # Finished runs waiting to become model versions
 │   ├── register_model_form.dart  # Turn a run's weights into a model version
 │   ├── message_bubbles.dart      # Bubble list + composer, both sides
 │   ├── notification_bell.dart    # Bell, badge and panel
@@ -625,10 +628,9 @@ flutter build appbundle --release
   sign-in page
 - ✅ Research news: admin editor with photo upload and a publish switch, shown
   in the landing page's Research section as one featured post plus the rest
-- ✅ Managed training from the researcher's side: datasets, runs, per-epoch
-  metrics, and looking at a dataset before spending GPU time on it
+
 - ✅ Admin queue board and storage panel
-- ✅ Native prediction and training ZIP uploads read a range at a time, so a
+- ✅ Native prediction ZIP uploads read a range at a time, so a
   512 MB archive does not sit in the Dart heap; web and loose TIFF bundles
   still hold source bytes in memory
 
@@ -655,7 +657,6 @@ evidence of anything.
 | `archive_source_test.dart` | That a large archive is walked a range at a time and never pulled into the heap whole |
 | `frame_bundle_test.dart` / `file_extension_test.dart` | Zipping loose frames, and the extension check `file_picker` cannot do portably |
 | `frame_provenance_test.dart` / `frame_stack_viewer_test.dart` | How a frame says where it came from, and scrubbing a stack |
-| `training_test.dart` / `researcher_training_test.dart` / `training_metrics_test.dart` / `training_handoff_panel_test.dart` | The managed-training payloads from both sides, metrics in whatever shape they arrive, and handing weights over as a model version |
 | `model_status_test.dart` / `model_status_message_test.dart` / `upload_model_picker_test.dart` | Live worker availability, the wording a researcher gets when a model is unusable, and picking one |
 | `queue_monitor_screen_test.dart` / `storage_panel_test.dart` / `recent_activity_scroll_test.dart` | The admin panels |
 | `worker_auth_test.dart` | The per-model secret never reaching a client — including MySQL's integer booleans being read correctly |

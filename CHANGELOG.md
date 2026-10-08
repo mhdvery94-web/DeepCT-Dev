@@ -1,5 +1,8 @@
 # 📅 Changelog
 
+> Entri lama adalah catatan historis. Kontrak aplikasi 9 Oktober 2026 hanya prediksi;
+> fitur training telah dipensiunkan. Kelanjutan agen: [checkpoint](handoff.md).
+
 All notable changes to Platform Analisis Citra Neutron CT will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -16,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [Unreleased]
+
+### Changed
+- Make the application prediction only for administrators and researchers.
+  Remove web/Flutter training UI, backend routes/controllers/models, scheduler
+  commands, worker scripts and training upload branches.
+- Remove legacy training schema/data and trainer registry entries through an
+  upgrade migration. Keep inference models and predictions; run scoped retired
+  file cleanup after the deployment database backup and migration.
+- Separate Research news article editing from image and video management.
+  Each media has its own picker, preview, upload, size guidance and removal.
+  Videos continue to use resumable chunks.
+- Soften web fields/buttons with rounded corners, spacing and focus/hover
+  feedback. Preserve responsive portal scrolling and section fitting.
+- Update Markdown contracts and agent checkpoint; remove obsolete implementation
+  proposals. Historical experiment results remain research records.
+- Verify 329 Laravel tests/1,381 assertions, five proxy tests, lint/TypeScript,
+  Docker production build and production dependency audit (zero findings).
+- Pass 51 browser checks against the running isolated Laravel API: five public
+  viewport sizes, both role dashboards/modules, full articles, public forms,
+  removed routes, independent news media and prediction upload/preview/start.
+
+## [2026-10-08] — Portal implementation before prediction-only retirement
 
 ### Added
 - Connect Next.js portal modules to Raspberry Pi Laravel APIs: account/model/news
@@ -935,7 +960,7 @@ apakah seseorang perlu menggulungnya.
 
 Di ponsel tombolnya turun ke bawah judul dan boleh pecah dua baris. Itu bukan
 kehati-hatian: `REGISTER AS MODEL` dan `DELETE` bersama-sama menuntut 374
-piksel, sebuah ponsel 360 piksel menawarkan 328, dan selisihnya muncul sebagai
+piksel, sebuah ponsel 360 piksel menawarkan 329, dan selisihnya muncul sebagai
 luapan 46 piksel yang terukur di tes.
 
 Panelnya keluar dari `model_management_screen.dart` menjadi

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { asRow, asRows, backend, bytes, display, type Row } from "@/lib/client-api";
 
 export function StorageManagement() {
@@ -24,7 +23,7 @@ export function StorageManagement() {
   const total = Number(report?.total_bytes); const used = Number(report?.used_bytes);
   const percent = total > 0 ? Math.min(100, Math.round(used / total * 100)) : 0;
   return <div className="data-module" aria-busy={busy}>
-    <div className="module-toolbar"><button className="button button--secondary" disabled={busy} onClick={() => void refresh()}>Refresh storage</button><button className="button button--primary" disabled={busy || !report || report.mounted !== true} onClick={() => void cleanup("/admin/storage/cleanup", "Clean expired application files and abandoned uploads using the retention rules?")}>Clean expired files</button><Link className="button button--secondary" href="/admin/datasets">Manage training datasets</Link></div>
+    <div className="module-toolbar"><button className="button button--secondary" disabled={busy} onClick={() => void refresh()}>Refresh storage</button><button className="button button--primary" disabled={busy || !report || report.mounted !== true} onClick={() => void cleanup("/admin/storage/cleanup", "Clean expired application files and abandoned uploads using the retention rules?")}>Clean expired files</button></div>
     {error && <p className="form-message form-message--error" role="alert">{error}</p>}
     {message && <p className="form-message form-message--success" role="status">{message}</p>}
     {report && <>

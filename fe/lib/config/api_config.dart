@@ -1,7 +1,7 @@
 class ApiConfig {
   /// Backend base URL, including the `/api` prefix.
   ///
-  /// **Points at the ngrok tunnel while the platform is still in testing.**
+  /// Points at the Raspberry Pi API's reserved ngrok tunnel.
   /// The intended production address is
   /// `https://api.brin.fajrianhost.my.id/api`, and it was briefly the default
   /// here — but that subdomain has no DNS record yet (the parent domain
@@ -32,7 +32,7 @@ class ApiConfig {
   /// `android:usesCleartextTraffic="true"`.
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://nucleus-drone-grueling.ngrok-free.dev/api',
+    defaultValue: 'https://zestfully-usable-pledge.ngrok-free.dev/api',
   );
 
   // Timeouts
@@ -63,11 +63,6 @@ class ApiConfig {
   static const String adminConversations = '/admin/conversations';
   static const String adminNews = '/admin/news';
 
-  // Managed model training. The GPU worker's own routes
-  // (/training/worker/*) are not here: that side authenticates with a shared
-  // secret from a notebook, not from this app.
-  static const String adminTrainingDatasets = '/admin/training/datasets';
-  static const String adminTrainingJobs = '/admin/training/jobs';
   static const String adminModels = '/admin/models';
   static const String adminActivities = '/admin/activities';
 

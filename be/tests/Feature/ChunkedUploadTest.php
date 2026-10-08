@@ -338,14 +338,14 @@ class ChunkedUploadTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors('model_id');
     }
 
-    /** And a training session is the one case that needs no model at all. */
-    public function test_a_training_session_needs_no_model(): void
+    /** Removed purposes cannot create a session. */
+    public function test_a_removed_upload_purpose_is_rejected(): void
     {
         $this->apiAs($this->token)->postJson('/api/predictions/uploads', [
             'purpose' => 'training',
             'name' => 'Balanced t sweep',
             'total_epochs' => 5,
             'total_size' => 1024,
-        ])->assertStatus(201);
+        ])->assertStatus(422)->assertJsonValidationErrors('purpose');
     }
 }
