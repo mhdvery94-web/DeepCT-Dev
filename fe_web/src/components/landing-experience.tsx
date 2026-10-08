@@ -36,9 +36,51 @@ export function LandingExperience({ children }: { children: ReactNode }) {
         });
 
         gsap.to("[data-scan-line]", {
-          yPercent: 520,
-          duration: 3.2,
+          yPercent: 600,
+          duration: 2.8,
           ease: "none",
+          repeat: -1,
+          yoyo: true,
+        });
+
+        gsap.to("[data-scan-volume]", {
+          rotation: "+=360",
+          duration: 24,
+          ease: "none",
+          repeat: -1,
+        });
+
+        gsap.to("[data-scan-slice]", {
+          rotation: (index) => `+=${index % 2 === 0 ? 34 : -28}`,
+          scale: (index) => 1 + index * 0.012,
+          duration: 3.4,
+          ease: "sine.inOut",
+          stagger: 0.12,
+          repeat: -1,
+          yoyo: true,
+        });
+
+        gsap.to("[data-scan-core]", {
+          scale: 1.12,
+          filter: "brightness(1.28)",
+          duration: 1.35,
+          ease: "sine.inOut",
+          repeat: -1,
+          yoyo: true,
+        });
+
+        gsap.to("[data-scan-orbit]", {
+          rotation: (index) => (index === 0 ? "+=360" : "-=360"),
+          duration: (index) => (index === 0 ? 18 : 13),
+          ease: "none",
+          repeat: -1,
+        });
+
+        gsap.to("[data-hero-float]", {
+          y: (index) => (index === 0 ? -8 : 7),
+          duration: (index) => (index === 0 ? 2.6 : 3.1),
+          ease: "sine.inOut",
+          stagger: 0.2,
           repeat: -1,
           yoyo: true,
         });

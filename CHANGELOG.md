@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Tighten the Next.js landing hero after mobile review: remove the viewport-height
+  minimum that left a large empty band below navigation, keep the tablet hero in
+  a compact two-column composition, and compress mobile actions, metrics and CT
+  preview without horizontal overflow. Replace the old DeepCT-AI artwork with a
+  CSS-rendered scanner animated by GSAP—rotating reconstruction slices, opposing
+  orbital markers, a pulsing core, scan sweep and floating research panels—with
+  a static reduced-motion fallback. Browser checks at 390, 820 and 1,440 px
+  observed hero heights of 870, 641 and 750 px respectively; the earlier mobile
+  and tablet layouts measured 1,331 and 1,259 px.
 - Allow the staging Next.js deployment to reuse the configured Raspberry Pi API
   when a dedicated `STAGING_API_BASE_URL` is unavailable. This is an explicit
   temporary deployment choice: staging logins and admin mutations use the same

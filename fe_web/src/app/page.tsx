@@ -91,9 +91,14 @@ export default async function Home() {
                 </div>
                 <div className="hero-console__body">
                   <div className="hero-scan">
-                    <div className="hero-scan__volume" aria-hidden="true">
-                      <i /><i /><i /><i /><i />
-                      <span />
+                    <div className="hero-scan__orbits" aria-hidden="true">
+                      <i className="hero-scan__orbit hero-scan__orbit--outer" data-scan-orbit />
+                      <i className="hero-scan__orbit hero-scan__orbit--inner" data-scan-orbit />
+                    </div>
+                    <div className="hero-scan__volume" data-scan-volume aria-hidden="true">
+                      <i data-scan-slice /><i data-scan-slice /><i data-scan-slice />
+                      <i data-scan-slice /><i data-scan-slice />
+                      <span data-scan-core><b /></span>
                     </div>
                     <div className="hero-scan__grid" aria-hidden="true" />
                     <div className="hero-scan__line" data-scan-line aria-hidden="true" />
@@ -127,11 +132,11 @@ export default async function Home() {
                   <span>BRIN · 2026</span>
                 </div>
               </div>
-              <div className="hero-float hero-float--model" aria-hidden="true">
+              <div className="hero-float hero-float--model" data-hero-float aria-hidden="true">
                 <span><UiIcon name="model" size={18} /> Model workspace</span>
                 <strong>Validated architecture</strong>
               </div>
-              <div className="hero-float hero-float--research" aria-hidden="true">
+              <div className="hero-float hero-float--research" data-hero-float aria-hidden="true">
                 <Image src="/assets/BRIN.png" alt="" width={30} height={30} />
                 <span>National research<br />infrastructure</span>
               </div>
