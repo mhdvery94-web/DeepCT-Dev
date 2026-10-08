@@ -69,8 +69,8 @@ class NotificationController extends Controller
      *
      * Carries the unread *message* count as well, so the bell and the Messages
      * badge cost one request between them rather than one each. The client
-     * polls this every 45 seconds; see ARCHITECTURE.md §4 on why this platform
-     * polls rather than holding sockets open.
+     * polls this every 45 seconds rather than holding sockets open.
+     * See docs/ARCHITECTURE.md for platform context.
      */
     public function unreadCount(Request $request)
     {

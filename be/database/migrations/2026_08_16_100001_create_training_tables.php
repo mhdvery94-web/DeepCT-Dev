@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\Schema;
  * hours, and training takes days.
  *
  * So a job is a row that a remote worker claims, reports progress against, and
- * hands weights back to. The design is written up in ARCHITECTURE.md §7.
+ * hands weights back to. This retired schema remains only as upgrade history;
+ * the prediction-only contract is documented in docs/ARCHITECTURE.md.
  */
 return new class extends Migration
 {

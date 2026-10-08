@@ -11,7 +11,7 @@ import 'app_dialog.dart';
 /// The bell, with its unread badge and the panel behind it.
 ///
 /// It polls rather than holding a socket open, for the reason in
-/// ARCHITECTURE.md §4: one reader, events measured in minutes, and a poll that
+/// docs/ARCHITECTURE.md: one reader, events measured in minutes, and a poll that
 /// costs a single indexed count. The same request carries the unread *message*
 /// count, so the shell's Messages badge comes free — [onCounts] hands both back.
 class NotificationBell extends StatefulWidget {

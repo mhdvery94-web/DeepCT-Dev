@@ -14,9 +14,6 @@
 # Trained model weights (~88 MB). Git handles large binaries badly and GitHub
 # rejects files over 100 MB. Keep the weights alongside the repo, not in it.
 #
-# The file the platform expects is:
-#   models-ai/generator(Salinan 3 Ginet TC-D_Revisi).h5
-#
 # It is uploaded to the Kaggle/Colab notebook at runtime, not read by Laravel.
 # If it must be versioned, use Git LFS:
 #   git lfs install && git lfs track "*.h5"
@@ -62,12 +59,7 @@ $RECYCLE.BIN/
 # credential for the tunnel account, not source code, and it must not travel
 # with the repository.
 #
-# Neither `script-api-deepct.py` nor `script-api-train-deepct.py` is listed any
-# more: both now read the token from the environment or from a Kaggle secret
-# and hold no credential of their own. Ignoring the prediction script was the
-# reason it could drift away from the notebook without appearing in a single
-# diff — the hard-coded weights path it carried for weeks was invisible here,
-# while its tracked twin's showed up on every commit.
+# The tracked inference script reads its token from environment/Kaggle secrets.
 #
 # `script-deepct.py` is the old name, which did keep its token. Nothing on this
 # machine answers to it now, and the line stays so a stale copy cannot arrive.
@@ -86,3 +78,12 @@ koneksi-vps.bat
 # Berkas kunci Word (`~$nama.docx`). Ia muncul selama dokumen terbuka dan
 # sempat ikut ter-commit ketika naskah sedang dibuka di Word.
 ~$*
+
+# Local/generated agent instructions and retired non-application material.
+AGENTS.md
+CLAUDE.md
+/.kilo/
+/stitch/
+/proposal/
+/models-ai/
+/Images/

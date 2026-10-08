@@ -42,7 +42,7 @@ class _LandingPageState extends State<LandingPage> {
   bool _submitted = false;
   String? _joinError;
 
-  /// Breakpoints, matching the ones documented in fe/README.md.
+  /// Breakpoints used by the responsive Flutter landing page.
   ///
   /// Below [_desktopBreakpoint] the two-column sections stack vertically.
   /// Without this the page is a fixed desktop layout and overflows on

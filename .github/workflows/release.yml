@@ -348,7 +348,7 @@ jobs:
     runs-on: [self-hosted, Linux, ARM64, deepct-raspi]
     # One deployment at a time, and never cancelled halfway. A run interrupted
     # between `rsync` and the restart leaves new code under an old process —
-    # the exact state CLAUDE.md warns about, where a new route 404s and nothing
+    # the stale worker state described in docs/OPERATIONS.md, where a route 404s and nothing
     # in the logs says why.
     concurrency:
       group: raspi-deploy
@@ -413,7 +413,7 @@ jobs:
           if [ ! -f .env ]; then
             echo "::error::$DEPLOY_PATH/.env does not exist."
             echo "The server keeps its own configuration; the deploy never writes one."
-            echo "ARCHITECTURE.md section 8 lists what it has to contain."
+            echo "See docs/OPERATIONS.md for the required server configuration."
             exit 1
           fi
 
@@ -449,8 +449,8 @@ jobs:
           composer install --no-dev --optimize-autoloader --no-interaction --no-progress
           npm ci --omit=dev --no-audit --no-fund
 
-          # The backup goes before the migration, not after. ARCHITECTURE.md
-          # section 8 lists "no database backups" as an outstanding item, and
+          # The backup goes before the migration, not after. docs/OPERATIONS.md
+          # describes recovery and the need for backups outside the Pi, and
           # running migrations automatically against a live database is the
           # moment that stops being tolerable.
           echo "--- Backup"

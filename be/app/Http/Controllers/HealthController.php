@@ -6,7 +6,7 @@ namespace App\Http\Controllers;
  * GET /api/health — is the API answering at all?
  *
  * The one endpoint that needs no token, so it is what a client, a tunnel check
- * or a deployment script probes first. `fe/README.md` documents
+ * or a deployment script probes first. `docs/OPERATIONS.md` documents
  * `curl <API_BASE_URL>/health` as the first thing to try when the app cannot
  * reach the server.
  *

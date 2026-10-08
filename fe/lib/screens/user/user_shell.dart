@@ -335,7 +335,7 @@ class _UserShellState extends State<UserShell> {
               actions: [_buildBell(), const SizedBox(width: 4)],
             ),
       // The wide layout has no AppBar, so nothing reserves room for the system
-      // status bar. See fe/README.md.
+      // status bar. See docs/DEVELOPMENT.md.
       // One SelectionArea over the whole body rather than a SelectableText
       // per label: selection then runs across widgets, so a block spanning
       // several rows can be swept in one gesture. Text fields are unaffected
