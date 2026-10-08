@@ -61,18 +61,57 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.DEEPCT_WEB_VERCEL_TOKEN || secrets.DEEPCT_DEV_VERCEL_TOKEN || secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.DEEPCT_WEB_VERCEL_ORG_ID || secrets.DEEPCT_DEV_VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.DEEPCT_WEB_VERCEL_PROJECT_ID }}
+      VERCEL_PROJECT_NAME: deepct-web
       LARAVEL_API_BASE_URL: >-
         ${{ github.ref_name == 'main'
             && (vars.RASPI_API_BASE_URL || vars.NGROK_RASPI)
             || github.ref_name == 'staging'
             && vars.STAGING_API_BASE_URL
-            || vars.DEVELOP_API_BASE_URL }}
+            || github.ref_name == 'develop'
+            && (vars.DEVELOP_API_BASE_URL || vars.NGROK_RASPI || vars.RASPI_API_BASE_URL)
+            || '' }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Resolve and configure Vercel project
+        if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PROJECT_REF="${VERCEL_PROJECT_ID:-$VERCEL_PROJECT_NAME}"
+          PROJECT_JSON="$(curl -fsS --get \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            --data-urlencode "teamId=$VERCEL_ORG_ID" \
+            "https://api.vercel.com/v9/projects/$PROJECT_REF")"
+          PROJECT_ID="$(jq -r '.id // empty' <<< "$PROJECT_JSON")"
+
+          if [ -z "$PROJECT_ID" ]; then
+            echo "::error::Vercel project '$VERCEL_PROJECT_NAME' was not found in the configured organization."
+            exit 1
+          fi
+
+          ROOT_DIRECTORY="$(jq -r '.rootDirectory // empty' <<< "$PROJECT_JSON")"
+          FRAMEWORK="$(jq -r '.framework // empty' <<< "$PROJECT_JSON")"
+          if [ "$ROOT_DIRECTORY" != fe_web ] || [ "$FRAMEWORK" != nextjs ]; then
+            UPDATED_PROJECT="$(curl -fsS -X PATCH \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              -H 'Content-Type: application/json' \
+              --data '{"rootDirectory":"fe_web","framework":"nextjs"}' \
+              "https://api.vercel.com/v9/projects/$PROJECT_ID?teamId=$VERCEL_ORG_ID")"
+
+            if [ "$(jq -r '.rootDirectory // empty' <<< "$UPDATED_PROJECT")" != fe_web ] \
+              || [ "$(jq -r '.framework // empty' <<< "$UPDATED_PROJECT")" != nextjs ]; then
+              echo "::error::Vercel did not retain the required fe_web/Next.js project settings."
+              exit 1
+            fi
+          fi
+
+          echo "VERCEL_PROJECT_ID=$PROJECT_ID" >> "$GITHUB_ENV"
 
       - name: Validate deployment configuration
         id: deployment-config
@@ -82,11 +121,11 @@ jobs:
 
           if [ -z "${VERCEL_TOKEN:-}" ] || [ -z "${VERCEL_ORG_ID:-}" ] || [ -z "${VERCEL_PROJECT_ID:-}" ]; then
             if [ "${{ github.ref_name }}" = develop ]; then
-              echo "::warning::Next.js Vercel project credentials are not configured yet; verification passed and the develop deployment is skipped."
+              echo "::warning::Next.js Vercel project credentials or project lookup are not configured yet; verification passed and the develop deployment is skipped."
               echo "enabled=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "::error::Set DEEPCT_WEB_VERCEL_PROJECT_ID and a DeepCT/Vercel token plus organization ID."
+            echo "::error::Configure the deepct-web project and a DeepCT/Vercel token plus organization ID."
             exit 1
           fi
 

@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Let the Next.js deployment workflow resolve the dedicated `deepct-web`
+  project by name when its project-ID secret has not been added yet, then
+  enforce Vercel Root Directory `fe_web` and the Next.js framework through the
+  authenticated Vercel API before building. Development previews may reuse the
+  existing Raspberry Pi API variable until a separate development endpoint is
+  configured; staging still requires its own API URL. Automatic Vercel Git
+  builds are disabled inside `fe_web`, leaving GitHub Actions as the sole
+  publisher and preventing duplicate deployments.
 - Add the first Next.js 16 web-client slice under `fe_web`: a responsive BRIN
   landing page, a desktop/tablet research-news media stage that switches image
   and video without stacking oversized players, a Sanctum login held in an
