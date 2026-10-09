@@ -51,10 +51,17 @@ Flutter tidak diubah pada sesi ini. Tidak ada LLM/chatbox yang diimplementasikan
 
 ## Publikasi dan pekerjaan terbuka
 
-Implementasi dan dokumentasi sudah selesai diverifikasi lokal. Commit/push main
-serta hasil workflow/deployment sesi ini dicatat setelah publikasi selesai.
-Deploy backend harus menerapkan migration telepon sebelum form reset digunakan.
-Akun lama tanpa telepon perlu dilengkapi administrator.
+Implementasi **845912a sudah dipush main**. **Next 37876789863 sukses**, termasuk
+verifikasi dan deployment Vercel. **Release 37876789839 sukses seluruhnya**:
+backend, Flutter tests, Web/Linux/Android/iOS/macOS, deployment Pi/Vercel dan
+publikasi artifact. Tidak ada pekerjaan deployment sesi ini yang tertunda.
+
+Pi membuat backup `storage/backups/db-20261009-095559.sql.gz`, menerapkan
+`2026_10_09_040000_add_phone_to_access_requests`, restart, dan **39 smoke check
+API lulus**. HTTPS produksi mengonfirmasi form request access baru, reset hanya
+email/telepon, link login dan validasi reset 422 melalui BFF Vercel ke Pi.
+Akun lama tanpa telepon perlu dilengkapi administrator. Commit checkpoint
+dengan [skip ci] tidak mengubah kode produksi 845912a.
 
 Laptop Vivobook tidak disentuh; pengguna memilih git pull manual. Checkout
 /workspace/DeepCT-Dev adalah workspace Codex, bukan bukti sinkronisasi laptop.
