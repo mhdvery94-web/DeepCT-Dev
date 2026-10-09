@@ -84,8 +84,11 @@ flutter build apk --release --dart-define=API_BASE_URL=https://zestfully-usable-
 
 CI membuat build Web/Android/Linux/iOS/macOS. Uji browser perubahan UI memakai
 API/database terisolasi, kedua role, desktop/mobile, fokus dan navigasi.
-Bukti sebelumnya: backend 329 tes/1.381 asersi, Flutter 227 tes, browser 51,
-Pi smoke 39 dan HTTPS publik 25; detail/commit ada di CHECKPOINT.md.
+Bukti terbaru dan baseline Flutter/Pi ada di CHECKPOINT.md. Tes ZIP Next.js
+memakai decoder independen fflate sebagai dependency pengembangan; verifikasi
+nama/byte TIFF, identitas resume, batas ukuran dan pembatalan. Tes backend juga
+menguji telepon approval, matching reset tanpa perubahan kredensial, serta cache
+input/output dengan nama frame yang sama.
 Jangan mengklaim UAT GPU nyata dari worker mock atau passing build.
 
 ## Konvensi

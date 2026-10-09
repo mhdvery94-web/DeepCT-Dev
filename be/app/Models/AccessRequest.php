@@ -18,6 +18,7 @@ class AccessRequest extends EloquentModel
         'first_name',
         'last_name',
         'email',
+        'phone',
         'institution',
         'reason',
         'status',

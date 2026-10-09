@@ -23,6 +23,12 @@ const workflow: readonly [IconName, string, string][] = [
   ["prediction", "Run an analysis", "Submit a job through the prediction workspace."],
   ["activity", "Review the result", "Track activity and inspect the output."],
 ];
+const adminWorkflow: readonly [IconName, string, string][] = [
+  ["request", "Review access", "Approve researcher accounts and manage access."],
+  ["model", "Manage models", "Register model endpoints manually and check availability."],
+  ["workflow", "Monitor analyses", "Follow researcher jobs through the queue monitor."],
+  ["database", "Maintain storage", "Review application files before cleaning disk space."],
+];
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -133,9 +139,9 @@ export default async function DashboardPage() {
           </div>
         </section>
         <section className="dashboard-workflow">
-          <header className="dashboard-section-heading"><div><span className="dashboard-kicker">From input to insight</span><h2>Your research workflow</h2></div><UiIcon name="prediction" size={22} /></header>
+          <header className="dashboard-section-heading"><div><span className="dashboard-kicker">{user.role === "admin" ? "Platform management" : "From input to insight"}</span><h2>{user.role === "admin" ? "Administration workflow" : "Your research workflow"}</h2></div><UiIcon name={user.role === "admin" ? "workflow" : "prediction"} size={22} /></header>
           <ol>
-            {workflow.map(([icon, title, description]) => (
+            {(user.role === "admin" ? adminWorkflow : workflow).map(([icon, title, description]) => (
               <li key={title}>
                 <span><UiIcon name={icon} size={18} /></span>
                 <div><h3>{title}</h3><p>{description}</p></div>

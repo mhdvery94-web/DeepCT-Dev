@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { NewsMediaManager } from "@/components/news-media-manager";
 import { Modal } from "@/components/modal";
-import { asRow, asRows, backend, bytes, display, uploadArchive, type ApiResult, type Row } from "@/lib/client-api";
+import { asRow, asRows, backend, bytes, display, type ApiResult, type Row } from "@/lib/client-api";
 
 type Field = { name: string; label: string; type?: string; required?: boolean; max?: number; options?: string[] };
 type Config = { path: string; columns: string[]; fields?: Field[]; updateMethod?: string; readOnly?: boolean; filters?: string[] };
@@ -14,9 +14,8 @@ const configs: Record<string, Config> = {
   "User management": { path: "/admin/users", columns: ["name", "email", "role", "is_active", "last_login_at"], fields: [name, { name: "email", label: "Email", type: "email", required: true, max: 255 }, { name: "phone", label: "Phone", max: 30 }, { name: "role", label: "Role", options: ["user", "admin"], required: true }], filters: ["active", "inactive"] },
   "Model management": { path: "/admin/models", columns: ["name", "version", "status", "is_active"], fields: registryFields, filters: ["online", "offline", "trouble"] },
   "Available models": { path: "/me/models", columns: ["name", "version", "status", "description"], readOnly: true },
-  "Access requests": { path: "/admin/access-requests", columns: ["first_name", "last_name", "email", "institution", "status"], filters: ["pending", "approved", "rejected"] },
+  "Access requests": { path: "/admin/access-requests", columns: ["first_name", "last_name", "email", "phone", "institution", "status"], filters: ["pending", "approved", "rejected"] },
   "Research news": { path: "/admin/news", columns: ["title", "summary", "is_published", "published_at"], updateMethod: "POST", fields: [{ name: "title", label: "Title", required: true, max: 200 }, { name: "summary", label: "Summary", type: "textarea", required: true, max: 500 }, { name: "body", label: "Full article", type: "textarea", max: 20000 }, { name: "sort_order", label: "Slide order", type: "number" }, { name: "is_published", label: "Published", type: "checkbox" }], filters: ["published", "draft"] },
-  "Predictions": { path: "/predictions", columns: ["file_name", "status", "input_files_count", "output_files_count", "queue_position", "expires_at"], filters: ["uploaded", "pending", "processing", "completed", "failed"] },
   "Messages": { path: "/messages", columns: [] },
   "Support inbox": { path: "/admin/conversations", columns: ["name", "guest_email", "preview", "unread", "is_archived"], filters: ["active", "archived"] },
   "Activity logs": { path: "/admin/activities", columns: ["created_at", "user", "activity_type", "description"], readOnly: true },
@@ -42,10 +41,6 @@ export function DataModule({ title }: { title: string }) {
   const [editing, setEditing] = useState<Row | null | undefined>();
   const [detail, setDetail] = useState<Row>();
   const [media, setMedia] = useState<Row>();
-  const [models, setModels] = useState<Row[]>([]);
-  const [progress, setProgress] = useState<number>();
-  const [uploading, setUploading] = useState(false);
-  const uploadController = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     if (!config) return;
@@ -63,13 +58,7 @@ export function DataModule({ title }: { title: string }) {
     const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 15000);
     return () => window.clearInterval(timer);
   }, [refresh]);
-  useEffect(() => {
-    if (title !== "Predictions") return;
-    const controller = new AbortController();
-    void backend("/me/models", "GET", undefined, controller.signal).then((response) => setModels(asRows(response.data))).catch(() => {});
-    return () => controller.abort();
-  }, [title]);
-  useEffect(() => () => uploadController.current?.abort(), []);
+
 
   if (!config) return <p role="alert">Unknown workspace module.</p>;
   let rows = asRows(result?.data);
@@ -110,19 +99,6 @@ export function DataModule({ title }: { title: string }) {
     const response = await action(`${config.path}${editing ? `/${editing.id}` : ""}`, editing ? config.updateMethod ?? "PUT" : "POST", payload);
     if (response) setEditing(undefined);
   }
-  async function upload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
-    const file = data.get("archive");
-    if (!(file instanceof File) || !/\.zip$/i.test(file.name)) { setError("Select a ZIP archive containing numbered TIFF frames."); return; }
-    setBusy(true); setUploading(true); setError(""); setProgress(0);
-    const controller = new AbortController(); uploadController.current = controller;
-    try {
-      const fields = { purpose: "prediction", model_id: Number(data.get("model_id")) };
-      const response = await uploadArchive(file, fields, setProgress, controller.signal);
-      setNotice([response.message, response.dispatch_message].filter(Boolean).join(" ")); form.reset(); await refresh();
-    } catch (reason) { setError(controller.signal.aborted ? "Upload paused. Select the same file and submit again to resume." : reason instanceof Error ? reason.message : "Upload failed. Retry to resume."); }
-    finally { setBusy(false); setUploading(false); setProgress(undefined); uploadController.current = null; }
-  }
 
   const closeDetail = () => setDetail(undefined);
   return <div className="data-module" aria-busy={loading || busy}>
@@ -143,18 +119,6 @@ export function DataModule({ title }: { title: string }) {
     {issuedPassword && <p className="issued-password" role="status">Issued password: <code>{issuedPassword}</code> <button onClick={() => setIssuedPassword("")}>Dismiss</button></p>}
     {typeof result?.meta?.queue_message === "string" && <p className="module-note">{result.meta.queue_message}</p>}
 
-    {title === "Predictions" && <section className="module-panel"><h2>Upload CT frames</h2>
-      <p>Upload a ZIP containing numbered TIFF frames. Interrupted uploads can be resumed by selecting the same file.</p>
-      <form className="module-form" onSubmit={upload}>
-        <label><span>Available model</span><select name="model_id" required defaultValue=""><option value="" disabled>Select a model</option>{models.map((model) => <option key={model.id} value={model.id} disabled={model.is_available === false}>{display(model.name)} · {display(model.status)}</option>)}</select></label>
-        <label><span>Dataset ZIP</span><input name="archive" type="file" required /></label>
-        {progress !== undefined && <div role="status"><progress value={progress} max={100} /> {progress}%</div>}
-        <div className="module-actions"><button className="button button--primary" disabled={busy}>{busy ? "Uploading…" : "Upload and preview"}</button>{uploading && <button className="button button--secondary" type="button" onClick={() => uploadController.current?.abort()}>Pause upload</button>}</div>
-      </form>
-    </section>}
-
-    {title === "Model management" && <details className="module-panel"><summary>Import models from a worker catalogue</summary><form className="module-form" onSubmit={(event) => { event.preventDefault(); void action("/admin/models/sync", "POST", Object.fromEntries(new FormData(event.currentTarget))); }}><label><span>Worker base URL</span><input name="base_url" type="url" required /></label><label><span>Worker token (optional)</span><input name="auth_token" type="password" autoComplete="off" /></label><button className="button button--primary" disabled={busy}>Sync models</button></form></details>}
-
     {title === "Messages" ? <section className="module-panel"><h2>Your support conversation</h2><MessageList messages={asRows(asRow(result?.data).messages)} />
       <form className="module-form" onSubmit={async (event) => { event.preventDefault(); const form = event.currentTarget; if (await action("/messages", "POST", Object.fromEntries(new FormData(form)))) form.reset(); }}><label><span>Message</span><textarea name="body" required maxLength={5000} rows={4} /></label><button className="button button--primary" disabled={busy}>Send message</button></form>
       <button className="button button--secondary" disabled={busy} onClick={() => void action("/messages/read", "POST", {})}>Mark replies read</button>
@@ -168,11 +132,9 @@ export function DataModule({ title }: { title: string }) {
           {title === "User management" && <><button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/reset-password`, "POST", {}, "Reset this account to its default password and revoke its sessions?")}>Reset password</button><button disabled={busy} onClick={() => { setDetail(row); }}>Profile</button></>}
           {title === "Model management" && <><button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/health-check`, "POST", {})}>Health check</button><button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/test`, "POST", {}, "Run an inference test using the GPU worker?")}>Test</button></>}
           {title === "Access requests" && row.status === "pending" && <><button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/approve`, "POST", {}, "Approve this request and issue an account?")}>Approve</button><button disabled={busy} onClick={() => { const note = window.prompt("Reason for rejection (optional)"); if (note !== null) void action(`${config.path}/${row.id}/reject`, "POST", { note }); }}>Reject</button></>}
-          {title === "Predictions" && row.status === "uploaded" && <button disabled={busy} onClick={() => void action(`/predictions/${row.id}/start`, "POST", {})}>Start prediction</button>}
-          {title === "Predictions" && row.status === "completed" && !row.files_deleted_at && <><a href={`/api/backend/predictions/${row.id}/download/results`}>Download results</a><a href={`/api/backend/predictions/${row.id}/download/complete`}>Complete archive</a><button disabled={busy} onClick={() => setDetail({ ...row, rerun: true })}>Compare model</button></>}
           {title === "Support inbox" && <button disabled={busy} onClick={() => void action(`${config.path}/${row.id}`, "PATCH", { is_archived: !row.is_archived })}>{row.is_archived ? "Restore" : "Archive"}</button>}
           {title === "Notifications" && row.read === false && <button disabled={busy} onClick={() => void action(`/notifications/${row.id}/read`, "POST", {})}>Mark read</button>}
-          {!config.readOnly && title !== "Messages" && !(title === "Predictions" && ["pending", "processing"].includes(String(row.status))) && <button className="danger-action" disabled={busy} onClick={() => void action(`${config.path}/${row.id}`, "DELETE", undefined, "Permanently delete this record and its application files?")}>Delete</button>}
+          {!config.readOnly && title !== "Messages" && <button className="danger-action" disabled={busy} onClick={() => void action(`${config.path}/${row.id}`, "DELETE", undefined, "Permanently delete this record and its application files?")}>Delete</button>}
         </div></td></tr>)}
         {!rows.length && <tr><td colSpan={config.columns.length + 1}>{loading ? "Loading records…" : error ? "Unable to load records. Use Refresh to try again." : "No records found."}</td></tr>}
       </tbody></table></div>
@@ -194,14 +156,9 @@ export function DataModule({ title }: { title: string }) {
         {detail.has_image === true && <img src={`/api/backend/news/${detail.id}/image`} alt={String(detail.title)} />}
         {detail.has_video === true && <video src={`/api/backend/news/${detail.id}/video`} controls playsInline preload="metadata" />}
       </div>}
-      {title === "Predictions" && Array.isArray(detail.evidence) && detail.evidence.length > 0 && <section><h3>Retained research evidence</h3><div className="frame-gallery">{detail.evidence.map((name) => <figure key={String(name)}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img loading="lazy" alt={String(name)} src={`/api/backend/predictions/${detail.id}/evidence/${encodeURIComponent(String(name))}`} /><figcaption>{String(name)}</figcaption></figure>)}</div></section>}
       {title === "Support inbox" && <><MessageList messages={asRows(detail.messages)} /><form className="module-form" onSubmit={async (event) => { event.preventDefault(); const form = event.currentTarget; if (await action(`${config.path}/${detail.id}/reply`, "POST", Object.fromEntries(new FormData(form)))) { form.reset(); await view(detail); } }}><label><span>Reply</span><textarea name="body" required maxLength={5000} /></label><button className="button button--primary" disabled={busy}>Send reply</button></form><button className="button button--secondary" disabled={busy} onClick={() => void action(`${config.path}/${detail.id}/read`, "POST", {})}>Mark read</button></>}
       {title === "User management" && <form className="module-form" onSubmit={async (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); if (await action(`/admin/users/${detail.id}/avatar`, "POST", data)) await view(detail); }}><label><span>Profile photo (JPEG, PNG, WebP; up to 2 MB)</span><input name="avatar" type="file" required accept="image/jpeg,image/png,image/webp" /></label><button className="button button--primary" disabled={busy}>Upload photo</button><button className="button button--secondary" type="button" disabled={busy} onClick={() => void action(`/admin/users/${detail.id}/avatar`, "DELETE", undefined, "Remove this profile photo?")}>Remove photo</button></form>}
 
-      {detail.rerun === true && <form className="module-form" onSubmit={async (event) => { event.preventDefault(); if (await action(`/predictions/${detail.id}/rerun`, "POST", { model_id: Number(new FormData(event.currentTarget).get("model_id")) })) closeDetail(); }}><label><span>Comparison model</span><select name="model_id" required>{models.map((model) => <option key={model.id} value={model.id} disabled={model.is_available === false}>{display(model.name)}</option>)}</select></label><button className="button button--primary" disabled={busy}>Create comparison run</button></form>}
-      {title === "Predictions" && !detail.files_deleted_at && <FrameGallery path={`/predictions/${detail.id}/frames`} />}
       {error && <p className="form-message form-message--error" role="alert">{error}</p>}
     </Modal>}
   </div>;
@@ -209,16 +166,4 @@ export function DataModule({ title }: { title: string }) {
 
 function MessageList({ messages }: { messages: Row[] }) {
   return <div className="message-list">{messages.length ? messages.map((message) => <article className={message.from_admin ? "from-admin" : ""} key={message.id}><strong>{display(message.author)}</strong><time>{display(message.created_at)}</time><p>{display(message.body)}</p></article>) : <p>No messages yet.</p>}</div>;
-}
-
-function FrameGallery({ path }: { path: string }) {
-  const [frames, setFrames] = useState<Row[]>([]); const [error, setError] = useState("");
-  useEffect(() => {
-    const controller = new AbortController();
-    void backend(path, "GET", undefined, controller.signal).then((response) => { const data = asRow(response.data); setFrames(Array.isArray(response.data) ? asRows(response.data) : [...asRows(data.input), ...asRows(data.output)]); }).catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Preview unavailable."); });
-    return () => controller.abort();
-  }, [path]);
-  return <section><h3>Frame preview</h3>{error && <p>{error}</p>}<div className="frame-gallery">{frames.slice(0, 24).map((frame, index) => { const frameName = typeof frame === "string" ? frame : String(frame.name); return <figure key={index}>
-    {/* eslint-disable-next-line @next/next/no-img-element */}
-    <img loading="lazy" alt={frameName} src={`/api/backend${path}/${encodeURIComponent(frameName)}/preview?kind=${encodeURIComponent(String(frame.kind ?? "input"))}`} /><figcaption>{frameName}</figcaption></figure>; })}</div>{frames.length > 24 && <p>Showing the first 24 frames.</p>}</section>;
 }

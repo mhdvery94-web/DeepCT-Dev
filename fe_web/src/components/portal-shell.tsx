@@ -24,7 +24,6 @@ const adminNavigation: readonly NavigationItem[] = [
   ["/admin/models", "model", "Model management"],
   ["/admin/storage", "database", "Disk management"],
   ["/admin/queue", "workflow", "Queue monitor"],
-  ["/workspace/predictions", "prediction", "Predictions"],
   ["/workspace/notifications", "news", "Notifications"],
   ["/workspace/profile", "shield", "Account settings"],
   ["/admin/activity", "activity", "Activity logs"],

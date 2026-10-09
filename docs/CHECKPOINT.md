@@ -1,58 +1,62 @@
 # Checkpoint proyek — 9 Oktober 2026
 
-## Kontrak dan keadaan yang sudah diterima
+## Keadaan aplikasi
 
-- Admin/user memakai prediksi saja; training telah dihapus di frontend, backend,
-  skema database dan berkas aplikasi lama.
-- News memakai editor artikel serta pengelolaan gambar/video independen.
-  Web memiliki kontrol lebih lembut dan layout responsif.
-- Baseline prediksi/media 49da8eb, dokumentasi sebelumnya bbe1e39.
-- Next workflow 37828069039 dan Release 37828069000 selesai sukses: tes,
-  Web/Android/Linux/iOS/macOS, deployment Pi/Vercel dan artifact.
-- Backend 329 tes/1.381 asersi, Flutter 227 tes dan analyze bersih,
-  browser 51, Pi smoke 39, HTTPS publik 25 semuanya lulus.
-- Backup Pi storage/backups/db-20261009-015729.sql.gz dibuat sebelum migrasi
-  retirement; migrasi dan app:cleanup-retired-data berhasil.
-- UAT ilmiah worker GPU nyata belum diterima; browser/suite memakai fixture/mock.
+Training sudah dipensiunkan di frontend, API, database dan storage legacy.
+Migrasi historis tetap tersedia untuk upgrade. News memiliki editor teks dan
+kartu upload/hapus gambar serta video yang terpisah. Root hanya README.md;
+enam dokumen aplikasi berada di docs. Folder stitch/proposal/models-ai/Images/
+.kilo dan Markdown agent sudah dibersihkan. Jangan mengulang pekerjaan ini.
 
-## Pekerjaan sesi pembersihan saat ini
+Baseline sebelum debug Next.js: main 9f520ea. Produksi sebelumnya 923bc86,
+Next workflow 37833767080 dan Release 37833766927 sukses. Baseline Flutter
+227 tes/analyze, Pi smoke 39, dan HTTPS publik sudah diterima.
 
-Pengguna meminta hanya README.md di root, dokumentasi aplikasi diringkas di
-docs, AGENTS/CLAUDE dan bahan nonaplikasi dikeluarkan dari GitHub, lalu git pull
-untuk sinkronisasi local. Pertanyaan LLM dijawab melalui rancangan, bukan
-implementasi provider/UI baru.
+## Debug Next.js terbaru
 
-Folder stitch/proposal/models-ai/Images/.kilo dihapus dari repo. Aset logo/icon
-aktif tetap di frontend dan identik dengan salinan root yang dihapus.
-Script inference tetap pada lokasi aslinya; runtime/data/migration tidak
-dipindahkan. Next agentRules=false mencegah Markdown agent dibuat ulang.
-Dokumen lama digabung menjadi architecture/API/operations/development/LLM/
-checkpoint; riwayat rinci tetap tersedia di Git commit bbe1e39.
+- Researcher mengunggah satu ZIP atau banyak TIFF bernomor. TIFF dirakit menjadi
+  ZIP STORE tanpa mengubah data; identitas arsip stabil untuk resumable upload.
+- Upload selesai membuka input preview otomatis. Start tetap eksplisit.
+  Pending/processing dipoll setiap 3 detik; progress, queue position, preview
+  hasil, slider/playback, download dan evidence tersedia. Tombol compare dihapus.
+- Preview API menerima kind=input/output dan memakai cache terpisah untuk nama
+  yang sama. Detail API menyertakan file_name. Kontrak lama tetap kompatibel.
+- Admin Next.js tidak memiliki tab prediksi; URL langsung menuju queue monitor.
+  Model management memakai registrasi manual tanpa UI impor katalog. API katalog
+  lama tetap tersedia bagi klien lain.
+- Disk cleanup menjelaskan scope, dataset/pemilik dan file yang dipertahankan;
+  checkbox wajib sebelum penghapusan. Proteksi backend job aktif/mount/path tetap
+  berlaku. Grid portal diperbaiki agar preview/form tidak melebar pada mobile.
+- Request access memiliki contoh placeholder dan telepon wajib di Next.js;
+  API menerima phone nullable demi Flutter lama, approval menyalinnya ke akun.
+- Reset memakai email+telepon saja. Cocok pada akun aktif yang sama -> permintaan
+  inbox admin; salah/tidak aktif/tanpa telepon -> User not found. Phone format
+  08.../+628... dinormalisasi. Password/sesi tidak berubah dari request publik;
+  admin memverifikasi pemilik sebelum reset. Tidak ada OTP/email provider baru.
+- Migration tambahan: 2026_10_09_040000_add_phone_to_access_requests.
 
-Konsolidasi selesai: tujuh Markdown aktif, sekitar 550 baris, link valid, folder lama
-tidak ada, aset frontend utuh dan script inference tidak berubah. Lint/
-TypeScript, tes web dan build produksi Docker lulus. next dev berhasil dan
-tidak membuat AGENTS.md kembali. Backend hanya menerima pembaruan komentar;
-logika runtime/database tidak berubah pada sesi ini.
+## Verifikasi sesi ini
 
-Pembersihan **923bc86 sudah dipush main**. GitHub root telah diverifikasi hanya
-berisi komponen aplikasi/config dan README; docs memuat enam dokumen di atas.
-`git pull --ff-only` di workspace berhasil dengan Already up to date, dan
-HEAD/origin/main sama. **Next 37833767080 dan Release 37833766927 selesai sukses
-seluruhnya**, termasuk backend 329/1.381, Flutter 227/analyze bersih,
-Web/Android/Linux/iOS/macOS, deployment Pi/Vercel dan publikasi artifact.
-Produksi 923bc86 melewati 39 smoke API Pi serta lima check health/web/aset HTTPS.
-Dokumentasi hasil akhir dicatat dengan [skip ci]; kode produksi tidak berubah.
+Backend MySQL terisolasi: **338 tes / 1.427 asersi lulus**. Next.js lint,
+TypeScript, **11 tes di Node 22**, production build dan production dependency
+npm audit lulus (0 kerentanan). Browser Chromium dengan Laravel/MySQL terisolasi:
+**15 skenario lulus**, termasuk TIFF/ZIP, automatic previews, explicit Start,
+queue/status polling, kedua role, matching reset dan konfirmasi storage.
+Ukuran portal diperiksa pada 1366/768/390/360 px termasuk overflow internal main.
 
-Pembersihan dan pull workspace selesai. Tidak ada pekerjaan konsolidasi yang
-perlu diulang. Lanjutkan hanya permintaan baru, implementasi LLM bila diminta,
-UAT GPU nyata atau sinkronisasi Vivobook setelah koneksi SSH tersedia.
+Upload, preview, antrean, auth dan forms memakai API nyata di database test.
+Perubahan processing/completed dan frame hasil memakai fixture; worker GPU tidak
+menjalankan inferensi dalam browser test. **UAT ilmiah GPU nyata belum diterima**.
+Flutter tidak diubah pada sesi ini. Tidak ada LLM/chatbox yang diimplementasikan.
 
-## Sinkronisasi lokal
+## Publikasi dan pekerjaan terbuka
 
-Workspace /workspace/DeepCT-Dev adalah checkout lokal environment Codex.
-Laptop Vivobook 100.85.5.67 belum berhasil diakses: percobaan SSH terbaru
-menjawab Connection refused. Snapshot environment menunjukkan VPN belum
-terkonfigurasi dan TCP grants kosong. Jangan menyebut git pull workspace
-sebagai bukti laptop sudah sinkron. Jika akses tersedia, periksa branch/status/
-commit laptop terlebih dahulu dan pertahankan perubahan lokalnya.
+Implementasi dan dokumentasi sudah selesai diverifikasi lokal. Commit/push main
+serta hasil workflow/deployment sesi ini dicatat setelah publikasi selesai.
+Deploy backend harus menerapkan migration telepon sebelum form reset digunakan.
+Akun lama tanpa telepon perlu dilengkapi administrator.
+
+Laptop Vivobook tidak disentuh; pengguna memilih git pull manual. Checkout
+/workspace/DeepCT-Dev adalah workspace Codex, bukan bukti sinkronisasi laptop.
+Lanjutkan pemeriksaan rilis terbaru atau UAT GPU, jangan mulai migrasi/pembersihan
+repo dari awal lagi.

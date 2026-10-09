@@ -1,4 +1,5 @@
 import { DataModule } from "@/components/data-module";
+import { PredictionWorkspace } from "@/components/prediction-workspace";
 
 export function ModulePage({
   eyebrow,
@@ -18,7 +19,7 @@ export function ModulePage({
           <p>{description}</p>
         </div>
       </header>
-      <DataModule title={title} />
+      {title === "Predictions" ? <PredictionWorkspace /> : <DataModule title={title} />}
     </main>
   );
 }

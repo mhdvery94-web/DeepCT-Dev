@@ -11,6 +11,7 @@ use App\Http\Controllers\API\AdminQueueController;
 use App\Http\Controllers\API\MessageController;
 use App\Http\Controllers\API\NewsController;
 use App\Http\Controllers\API\NotificationController;
+use App\Http\Controllers\API\PasswordResetRequestController;
 use App\Http\Controllers\API\StorageController;
 use App\Http\Controllers\API\PredictionUploadController;
 use App\Http\Controllers\API\UserController;
@@ -36,8 +37,12 @@ Route::post('/access-requests', [AccessRequestController::class, 'store'])
     ->middleware('throttle:5,1')
     ->name('api.access-requests.store');
 
-// A message from the sign-in page, for people who cannot get in — the third
-// and last unauthenticated write path.
+Route::post('/password-reset-requests', [PasswordResetRequestController::class, 'store'])
+    ->middleware('throttle:5,10')
+    ->name('api.password-reset-requests.store');
+
+// General support from people who cannot sign in. Account-matched password
+// reset requests use the dedicated route above.
 //
 // 5 per 10 minutes, not 5 per hour. The hourly window was picked to be tight
 // against spam and turned out to be tight against *people*: someone testing

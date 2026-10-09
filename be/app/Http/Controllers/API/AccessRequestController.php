@@ -7,6 +7,7 @@ use App\Models\AccessRequest;
 use App\Models\User;
 use App\Models\UserActivity;
 use App\Services\Notifier;
+use App\Services\PhoneNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -31,9 +32,16 @@ class AccessRequestController extends Controller
             'first_name' => 'required|string|max:100',
             'last_name' => 'required|string|max:100',
             'email' => 'required|email|max:255',
+            // Optional in the API for older Flutter clients; required on Next.js.
+            'phone' => 'nullable|string|max:30',
             'institution' => 'required|string|max:255',
             'reason' => 'nullable|string|max:2000',
         ]);
+        if (!empty($validated['phone']) && PhoneNumber::normalize($validated['phone']) === null) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'phone' => ['Enter a valid phone number, for example +6281234567890.'],
+            ]);
+        }
 
         // Someone who already has an account does not need to apply, and
         // saying so plainly is more useful than a silent duplicate.
@@ -161,6 +169,7 @@ class AccessRequestController extends Controller
         $user = User::create([
             'name' => $accessRequest->fullName(),
             'email' => $accessRequest->email,
+            'phone' => $accessRequest->phone,
             'password' => Hash::make(self::DEFAULT_PASSWORD),
             // Handed out with a published default password, so the first sign-in
             // has to replace it before anything else happens.

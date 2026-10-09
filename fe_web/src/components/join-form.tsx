@@ -67,24 +67,29 @@ export function JoinForm() {
       <div className="form-grid">
         <label>
           <span>First name</span>
-          <input name="first_name" autoComplete="given-name" required maxLength={100} />
+          <input name="first_name" autoComplete="given-name" placeholder="Ayu" required maxLength={100} />
         </label>
         <label>
           <span>Last name</span>
-          <input name="last_name" autoComplete="family-name" required maxLength={100} />
+          <input name="last_name" autoComplete="family-name" placeholder="Pratama" required maxLength={100} />
         </label>
       </div>
       <label>
         <span>Institutional email</span>
-        <input name="email" type="email" autoComplete="email" required maxLength={255} />
+        <input name="email" type="email" autoComplete="email" placeholder="ayu.pratama@institution.ac.id" required maxLength={255} />
+      </label>
+      <label>
+        <span>Phone number</span>
+        <input name="phone" type="tel" autoComplete="tel" placeholder="+6281234567890" required maxLength={30} aria-describedby="join-phone-help" />
+        <small id="join-phone-help">Use this same registered number when requesting a password reset.</small>
       </label>
       <label>
         <span>Department / institution</span>
-        <input name="institution" autoComplete="organization" required maxLength={255} />
+        <input name="institution" autoComplete="organization" placeholder="Pusat Riset Teknologi Deteksi Radiasi — BRIN" required maxLength={255} />
       </label>
       <label>
         <span>Research purpose <small>(optional)</small></span>
-        <textarea name="reason" rows={4} maxLength={2000} />
+        <textarea name="reason" rows={4} maxLength={2000} placeholder="Evaluate interpolation of missing Neutron CT frames for my research." />
       </label>
 
       {state.status === "error" && (

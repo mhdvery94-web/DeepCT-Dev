@@ -52,6 +52,24 @@ class AccessRequestTest extends TestCase
 
     // ---------------------------------------------------------- submission
 
+    public function test_requested_phone_is_preserved_on_the_approved_account(): void
+    {
+        $id = $this->postJson('/api/access-requests', $this->payload(['phone' => '+6281234567890']))
+            ->assertCreated()->json('data.id');
+        $token = $this->admin->createToken('test')->plainTextToken;
+        $this->apiAs($token)->postJson("/api/admin/access-requests/{$id}/approve")
+            ->assertOk();
+        $this->assertDatabaseHas('access_requests', ['id' => $id, 'phone' => '+6281234567890']);
+        $this->assertDatabaseHas('users', ['email' => 'siti.rahayu@brin.go.id', 'phone' => '+6281234567890']);
+    }
+
+    public function test_invalid_requested_phone_is_rejected(): void
+    {
+        $this->postJson('/api/access-requests', $this->payload(['phone' => 'invalid']))
+            ->assertUnprocessable()->assertJsonValidationErrors('phone');
+        $this->assertSame(0, AccessRequest::count());
+    }
+
     public function test_anyone_can_submit_a_request(): void
     {
         $response = $this->postJson('/api/access-requests', $this->payload());

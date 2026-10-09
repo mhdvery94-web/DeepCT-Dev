@@ -1002,6 +1002,20 @@ class PredictionPipelineTest extends TestCase
         $this->assertSame($signature, substr($response->getContent(), 0, 8));
     }
 
+    public function test_input_and_output_with_the_same_name_have_separate_preview_caches(): void
+    {
+        $this->fakeWorkerReturnsFrames();
+        $this->upload();
+        $record = AnalysisRecord::first();
+        Storage::put("{$record->input_folder}/frame_001.tif", $this->tifBytes(4, 1));
+        Storage::put("{$record->output_folder}/frame_001.tif", $this->tifBytes(8, 5));
+        $input = $this->apiAs($this->token)->get("/api/predictions/{$record->id}/frames/frame_001.tif/preview?kind=input")->assertOk();
+        $output = $this->apiAs($this->token)->get("/api/predictions/{$record->id}/frames/frame_001.tif/preview?kind=output")->assertOk();
+        $this->assertNotSame($input->getContent(), $output->getContent());
+        $this->apiAs($this->token)->get("/api/predictions/{$record->id}/frames/frame_001.tif/preview?kind=input")->assertContent($input->getContent());
+        $this->apiAs($this->token)->getJson("/api/predictions/{$record->id}/frames/frame_001.tif/preview?kind=invalid")->assertUnprocessable();
+    }
+
     /** Rendering is cached beside the job so a gallery does not redo the work. */
     public function test_a_rendered_preview_is_cached(): void
     {

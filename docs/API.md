@@ -22,14 +22,19 @@ sesuai controller. Jangan menyamakan semua collection/filter.
 |---|---|---|
 | GET | `/health` | Liveness API |
 | POST | `/login` | Email/password, throttle 5/menit/IP |
-| POST | `/access-requests` | first_name, last_name, email, institution, reason opsional |
-| POST | `/messages/public` | Dukungan/reset request; throttle 5/10 menit |
+| POST | `/access-requests` | first_name, last_name, email, institution; phone/reason opsional di API, phone wajib di Next.js |
+| POST | `/password-reset-requests` | Email + phone cocok pada akun aktif yang sama; throttle 5/10 menit |
+| POST | `/messages/public` | Dukungan umum; throttle 5/10 menit |
 | GET | `/news`, `/news/{id}` | Berita terbit dan isi artikel |
 | GET | `/news/{id}/image`, `/news/{id}/video` | Media; draft hanya dapat diakses admin |
 | GET | `/downloads/predictions/{id}/{kind}` | Unduhan signed results/complete |
 
-Reset publik mengirim permintaan ke inbox administrator; penggantian password
-tetap melalui verifikasi/admin dan kewajiban mengganti password terbitan.
+Reset publik menerima email dan phone saja. Nomor Indonesia `08...` dan `+628...`
+dicocokkan setelah normalisasi format. Tidak cocok/tidak aktif/tanpa telepon:
+404 `User not found`. Cocok: 201, permintaan masuk ke inbox administrator.
+Password dan token tidak berubah sampai admin memverifikasi kepemilikan dan
+melakukan reset; password terbitan wajib diganti. Tidak ada pengiriman OTP/email
+otomatis. Approval access request menyalin phone ke akun baru.
 
 ## Akun yang login
 
@@ -58,7 +63,7 @@ Model yang dilihat researcher tidak memuat worker URL atau kredensial.
 | POST | `/predictions/{id}/start` | Mulai setelah preview |
 | POST | `/predictions/{id}/rerun` | Perbandingan menggunakan model_id lain |
 | GET | `/predictions/{id}/frames` | Daftar frame |
-| GET | `/predictions/{id}/frames/{name}/preview` | Preview aman |
+| GET | `/predictions/{id}/frames/{name}/preview` | PNG; size 64–2048, kind=input/output opsional, cache terpisah |
 | GET | `/predictions/{id}/evidence/{name}` | Evidence yang tetap tersimpan |
 | GET | `/predictions/{id}/download-link` | Signed link, kind=results/complete |
 | GET | `/predictions/{id}/download/results`, `/download/complete` dengan prefix ID yang sama | ZIP hasil/sequence lengkap |
@@ -66,6 +71,8 @@ Model yang dilihat researcher tidak memuat worker URL atau kredensial.
 Download besar di web diarahkan ke signed API URL lima menit untuk menghindari
 batas respons Vercel. API memeriksa kepemilikan, status akun, expiry dan checksum.
 Pending/processing dilindungi dari cleanup.
+Detail menyertakan file_name, queue_position, estimated_wait_minutes dan status.
+Next.js menghapus aksi compare/rerun dari UI; endpoint lama tetap tersedia.
 
 ### Upload chunked
 
@@ -83,6 +90,9 @@ Server mengembalikan `upload_id`, `chunk_size`, `received`, `total_size`.
 Gunakan chunk_size server; BFF web membatasi setiap potongan ke 3 MiB.
 Client dapat melanjutkan dari offset server. Finalize prediksi tidak langsung
 mengantrekan job; Start merupakan aksi tersendiri.
+API menerima ZIP. Next.js juga menerima banyak `.tif`/`.tiff` lalu membungkusnya
+sebagai ZIP STORE; minimal dua frame bernomor, 50 MiB per frame, total arsip
+2 GiB. Preview input langsung dibuka sesudah finalize, hasil sesudah completed.
 
 ## Administrator: prefix /admin
 
@@ -103,6 +113,8 @@ mengantrekan job; Start merupakan aksi tersendiri.
 Model: name, version, endpoint_url, description, auth_token opsional,
 verify_tls dan availability. Token write-only; menghilangkannya saat edit
 mempertahankan secret. Tidak ada trainer registration.
+UI Next.js hanya menyediakan registrasi model manual, tanpa impor katalog dan
+tanpa tab prediksi admin. Admin memantau `/admin/queue`.
 
 Berita: title <=200, summary <=500, body <=20000, sort_order, is_published.
 Gambar multipart JPEG/PNG/WebP, backend maksimal 4 MiB; picker web membatasi

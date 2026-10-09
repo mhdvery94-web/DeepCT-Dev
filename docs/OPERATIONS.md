@@ -58,6 +58,20 @@ Cleanup admin menolak pekerjaan aktif dan mount yang tidak tersedia.
 `STORAGE_HEADROOM_MULTIPLIER` default 3 dan `STORAGE_MINIMUM_FREE_BYTES`
 default 2 GiB. Jika memakai NAS, buat sentinel dengan `php artisan storage:mark`
 lalu aktifkan `STORAGE_REQUIRE_SENTINEL`. Jangan menulis ke mount kosong.
+Di portal, cleanup rutin mengikuti expiry dan stale temporary uploads/downloads.
+Cleanup per-job hanya untuk completed/failed dan dapat menghapus file sebelum
+expiry. Unduh hasil yang dibutuhkan lebih dahulu, periksa dataset/pemilik, lalu
+centang konfirmasi. Rekaman, evidence, akun/database, news/media, backup, OS dan
+bobot model TUF tidak dihapus. Angka disk mencakup volume, bukan hanya DeepCT.
+
+## Telepon dan reset akun
+
+Rilis form telepon memerlukan migration
+`2026_10_09_040000_add_phone_to_access_requests`. Kolom nullable menjaga
+kompatibilitas request Flutter lama. Akun lama tanpa telepon perlu dilengkapi
+admin melalui pengelolaan akun sebelum memakai pencarian reset email+telepon.
+Inbox menampilkan permintaan yang cocok, tetapi admin tetap harus memverifikasi
+pemilik sebelum memakai aksi reset password. Tidak ada OTP/provider email baru.
 
 ## Diagnosis singkat
 

@@ -239,6 +239,7 @@ class AnalysisController extends Controller
         $data = [
             'id' => $prediction->id,
             'job_id' => $prediction->job_id,
+            'file_name' => $prediction->file_name,
             'user_id' => $prediction->user_id,
             'status' => $prediction->status,
             'input_files_count' => $prediction->input_files_count,
@@ -530,10 +531,17 @@ class AnalysisController extends Controller
 
         // basename() keeps a crafted name from escaping the job's folders.
         $name = basename($name);
+        $request->validate(['kind' => 'nullable|in:input,output']);
+        $kind = $request->input('kind');
         $size = (int) $request->input('size', 512);
         $size = max(64, min($size, 2048));
 
-        $source = collect([$prediction->output_folder, $prediction->input_folder])
+        $folders = match ($kind) {
+            'input' => [$prediction->input_folder],
+            'output' => [$prediction->output_folder],
+            default => [$prediction->output_folder, $prediction->input_folder],
+        };
+        $source = collect($folders)
             ->map(fn($folder) => "{$folder}/{$name}")
             ->first(fn($path) => Storage::exists($path));
 
@@ -544,7 +552,8 @@ class AnalysisController extends Controller
             ], 404);
         }
 
-        $cachePath = "{$prediction->storageDirectory()}/preview/{$size}_{$name}.png";
+        $cacheKind = $kind ?? ($source === "{$prediction->output_folder}/{$name}" ? 'output' : 'input');
+        $cachePath = "{$prediction->storageDirectory()}/preview/{$size}_{$cacheKind}_{$name}.png";
 
         if (!Storage::exists($cachePath)) {
             try {

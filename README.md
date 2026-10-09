@@ -1,8 +1,9 @@
 # DeepCT
 
 Platform BRIN untuk mengisi gap frame Neutron CT melalui model deep learning.
-Admin dan researcher menggunakan **prediksi saja**: upload ZIP TIFF, preview,
-mulai proses, bandingkan model, lalu unduh hasil. LLM masih rancangan.
+Researcher menggunakan **prediksi saja**: upload ZIP atau banyak TIFF, preview,
+mulai proses, pantau antrean, lalu lihat dan unduh hasil. Portal admin Next.js
+mengelola akun, model, antrean dan storage. LLM masih rancangan.
 
 ## Komponen
 
@@ -48,9 +49,7 @@ Produksi: [website](https://deepct-web.vercel.app) dan
 Deploy otomatis dikendalikan workflow GitHub main.
 Git pull memakai --ff-only agar commit lokal tidak dibuang diam-diam.
 
-Versi prediksi/media 49da8eb diterima oleh CI: backend 329 tes/1.381 asersi,
-Flutter 227 tes, browser 51, API Pi 39 dan HTTPS publik 25 lulus.
-Bukti rilis serta hasil pembersihan terbaru tercatat di checkpoint.
+Bukti tes, rilis dan pekerjaan yang masih terbuka tercatat di checkpoint.
 
 Training tidak tersedia. Migrasi historis tetap dipertahankan untuk upgrade
 database lama. Pemulihan penghapusan data membutuhkan backup sebelum migrasi
