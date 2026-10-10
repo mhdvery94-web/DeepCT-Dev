@@ -65,6 +65,16 @@ Route::get('/downloads/predictions/{id}/{kind}', [AnalysisController::class, 'si
 
 // Protected routes (authentication required)
 Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
+    Route::prefix('ai')->group(function () {
+        $controller = \App\Http\Controllers\API\AiConversationController::class;
+        Route::get('/status', [$controller, 'status'])->name('api.ai.status');
+        Route::get('/conversations', [$controller, 'index'])->name('api.ai.conversations.index');
+        Route::post('/conversations', [$controller, 'store'])->name('api.ai.conversations.store');
+        Route::get('/conversations/{id}', [$controller, 'show'])->whereNumber('id')->name('api.ai.conversations.show');
+        Route::post('/conversations/{id}/messages', [$controller, 'message'])->whereNumber('id')->name('api.ai.messages.store');
+        Route::get('/requests/{id}', [$controller, 'request'])->whereNumber('id')->name('api.ai.requests.show');
+        Route::post('/requests/{id}/cancel', [$controller, 'cancel'])->whereNumber('id')->name('api.ai.requests.cancel');
+    });
     // Auth routes
     Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
     Route::get('/user', [AuthController::class, 'me'])->name('api.user');
