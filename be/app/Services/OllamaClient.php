@@ -34,14 +34,14 @@ class OllamaClient
         $content = $body['message']['content'];
         // Only a single complete leading reasoning block is accepted. No raw
         // output is logged, even when malformed or reasoning-only.
-        if (preg_match('/<\/?think\b/i', $content)) {
-            if (! preg_match('/\A\s*<think>.*?<\/think>\s*(.*)\z/su', $content, $match)) {
+        $thinkingTags = preg_match_all('/<\/?think/i', $content);
+        if ($thinkingTags > 0) {
+            // Validate every tag before stripping so a nested opening cannot
+            // hide inside the removed block and expose unfinished reasoning.
+            if ($thinkingTags !== 2 || ! preg_match('/\A\s*<think>.*?<\/think>\s*(.*)\z/su', $content, $match)) {
                 throw new AiProviderException('invalid_output');
             }
             $content = $match[1];
-            if (preg_match('/<\/?think\b/i', $content)) {
-                throw new AiProviderException('invalid_output');
-            }
         }
         $answer = trim($content);
         if ($answer === '' || mb_strlen($answer) > 12000) {

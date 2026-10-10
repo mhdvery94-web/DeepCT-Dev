@@ -172,7 +172,14 @@ class AiAssistantTest extends TestCase
                 'message' => ['content' => in_array($kind, ['length', 'malformed']) ? 'Incomplete' : $kind],
             ]);
         });
-        foreach (['<think>private reasoning</think>', '<think>unterminated', '<think', 'length', 'malformed', 'timeout'] as $kind) {
+        foreach (['<think>private reasoning</think>', '<think>unterminated', '<think',
+            '<think>outer<think>inner</think>still private reasoning',
+            '<think>outer<think>inner</think></think>answer',
+            '<think>first</think><think>second</think>answer',
+            '<think>private reasoning</think extra>answer',
+            '<thinking>private reasoning</thinking>answer',
+            'answer<think>private reasoning</think>',
+            'length', 'malformed', 'timeout'] as $kind) {
             $id = $this->conversation();
             $requestId = $this->send($id, hash('sha256', $kind))->assertAccepted()->json('data.request.id');
             $this->work($requestId);
