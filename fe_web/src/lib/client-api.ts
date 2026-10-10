@@ -5,6 +5,10 @@ export type ApiResult = {
   meta?: Record<string, unknown>; dispatch_message?: string;
 };
 
+export class BackendError extends Error {
+  constructor(message: string, public readonly status: number, public readonly errorCode?: string) { super(message); }
+}
+
 export async function backend(path: string, method = "GET", body?: FormData | Record<string, unknown>, signal?: AbortSignal): Promise<ApiResult> {
   const multipart = body instanceof FormData;
   const transportMethod = multipart && method !== "POST" && method !== "GET" ? "POST" : method;
@@ -16,7 +20,7 @@ export async function backend(path: string, method = "GET", body?: FormData | Re
   const payload = await response.json().catch(() => null);
   if (!response.ok || payload?.success === false) {
     const validation = payload?.errors ? Object.values(payload.errors).flat().find((value) => typeof value === "string") : undefined;
-    throw new Error(String(validation ?? payload?.message ?? `Request failed (${response.status}).`));
+    throw new BackendError(String(validation ?? payload?.message ?? `Request failed (${response.status}).`), response.status, payload?.error_code);
   }
   return payload as ApiResult;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { PredictionFrameViewer } from "@/components/prediction-frame-viewer";
 import { asRow, asRows, backend, bytes, display, uploadArchive, type ApiResult, type Row } from "@/lib/client-api";
 import { preparePredictionArchive, validatePredictionFiles } from "@/lib/prediction-files";
@@ -138,6 +139,7 @@ export function PredictionWorkspace() {
       <div className="module-actions"><h2 id="prediction-review-title">{selected.status === "completed" ? "Prediction results" : selected.status === "uploaded" ? "Review uploaded frames" : "Analysis progress"}</h2><button type="button" className="button button--secondary" disabled={busy} onClick={() => { selection.current = undefined; setSelected(undefined); setSelectedId(undefined); }}>Close preview</button></div>
       <p>{display(selected.file_name || selected.job_id)} · {display(asRow(selected.model).name)} · {display(selected.input_files_count)} input frames</p>
       <PredictionProgress prediction={selected} />
+      <Link className="button button--secondary" href={`/workspace/assistant?analysis_record_id=${selected.id}`}>Jelaskan hasil dengan asisten</Link>
       {selected.status === "uploaded" && <div className="module-actions"><button type="button" className="button button--primary" disabled={busy || !hasFiles(selected)} onClick={() => void start(selected)}>{busy ? "Starting…" : "Start analysis"}</button><p className="module-note">Uploading does not start processing. Start only after reviewing your input.</p></div>}
       {selected.status === "completed" && hasFiles(selected) && <ResultDownloads prediction={selected} />}
       {hasFiles(selected) && ["uploaded", "completed"].includes(String(selected.status)) && <PredictionFrameViewer key={String(selected.id) + String(selected.status)} predictionId={selected.id} completed={selected.status === "completed"} />}
