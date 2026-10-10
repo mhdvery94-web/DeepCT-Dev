@@ -28,7 +28,7 @@ export default async function Home() {
             <div className="bl-hero__copy">
               <span className="bl-hero__eyebrow" data-hero-reveal>BRIN · Neutron CT Platform</span>
               <h1 id="hero-title" data-hero-reveal>From CT data to the <span>next discovery.</span></h1>
-              <p data-hero-reveal>A shared workspace for deep learning, neutron imaging and reproducible research. Built for the people behind the science.</p>
+              <p data-hero-reveal>A shared workspace for deep learning, neutron/X-ray imaging and reproducible research. Built for the people behind the science</p>
               <div className="bl-hero__actions" data-hero-reveal>
                 <a className="bl-button bl-button--white" href="#research">Explore research <UiIcon name="arrow" size={17} /></a>
                 <Link className="bl-workspace-link" href="/login"><span><UiIcon name="arrow" size={18} /></span> Open workspace</Link>
