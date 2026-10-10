@@ -66,14 +66,19 @@ env:
   # every target, web, Android, iOS and desktop all talk to whichever backend
   # wins here.
   #
-  # Production has one backend: the Raspberry Pi. Its address must be a stable
-  # public HTTPS URL; the Pi's NetBird address is private and Vercel cannot
-  # reach it. There is deliberately no hard-coded fallback: producing a client
-  # that silently talks to the retired VPS is worse than stopping the build.
+  # Preview branches require their own API, including manual runs. Production
+  # main/version tags retain the production variables and explicit override.
+  # Other branches have no default endpoint and fail preflight safely.
   API_BASE_URL: >-
-    ${{ github.event.inputs.api_base_url
-        || vars.RASPI_API_BASE_URL
-        || vars.API_BASE_URL }}
+    ${{ github.ref == 'refs/heads/main'
+        && (github.event.inputs.api_base_url || vars.RASPI_API_BASE_URL || vars.API_BASE_URL)
+        || startsWith(github.ref, 'refs/tags/v')
+        && (github.event.inputs.api_base_url || vars.RASPI_API_BASE_URL || vars.API_BASE_URL)
+        || github.ref_name == 'staging'
+        && vars.STAGING_API_BASE_URL
+        || github.ref_name == 'develop'
+        && vars.DEVELOP_API_BASE_URL
+        || '' }}
 
 jobs:
   # Ten seconds that stop a ten-minute build from producing clients nobody can
@@ -90,7 +95,7 @@ jobs:
           set -euo pipefail
 
           if [ -z "${API_BASE_URL:-}" ]; then
-            echo "::error::API_BASE_URL is empty. Set the repository variable RASPI_API_BASE_URL."
+            echo "::error::API_BASE_URL is empty. Configure DEVELOP_API_BASE_URL or STAGING_API_BASE_URL for previews; RASPI_API_BASE_URL for main/version tags."
             exit 1
           fi
 
@@ -102,7 +107,7 @@ jobs:
             *)
               echo "::error::API_BASE_URL is '$API_BASE_URL', which does not end in /api."
               echo "The client appends paths directly to it, so every request would 404."
-              echo "Set RASPI_API_BASE_URL to '${API_BASE_URL%/}/api'."
+              echo "Set the API variable for this branch to '${API_BASE_URL%/}/api'."
               exit 1
               ;;
           esac
@@ -340,7 +345,7 @@ jobs:
     name: Deploy backend to Raspberry Pi
     # `test-backend`, not `test`: this job ships `be/` and nothing else.
     needs: [test-backend]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     # The Pi is behind NetBird, so a GitHub-hosted runner cannot SSH to it.
     # Running the deploy on the Pi also removes the need to store an SSH key in
     # repository secrets. The custom label prevents another self-hosted runner

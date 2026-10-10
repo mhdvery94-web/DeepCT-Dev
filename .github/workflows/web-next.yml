@@ -66,9 +66,9 @@ jobs:
         ${{ github.ref_name == 'main'
             && (vars.RASPI_API_BASE_URL || vars.NGROK_RASPI)
             || github.ref_name == 'staging'
-            && (vars.STAGING_API_BASE_URL || vars.RASPI_API_BASE_URL || vars.NGROK_RASPI)
+            && vars.STAGING_API_BASE_URL
             || github.ref_name == 'develop'
-            && (vars.DEVELOP_API_BASE_URL || vars.NGROK_RASPI || vars.RASPI_API_BASE_URL)
+            && vars.DEVELOP_API_BASE_URL
             || '' }}
     steps:
       - uses: actions/checkout@v4

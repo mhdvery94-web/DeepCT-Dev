@@ -20,6 +20,27 @@ Vercel tidak bisa menghubungi IP NetBird privat. Web server memakai
 Secret Vercel, password seed dan worker token berada di konfigurasi server/
 repository secrets. Jangan commit .env, APP_KEY, password atau token.
 
+## Develop dan staging
+
+Deploy web `develop` hanya memakai `DEVELOP_API_BASE_URL`; `staging` hanya
+memakai `STAGING_API_BASE_URL`. Keduanya tidak fallback ke API produksi
+`RASPI_API_BASE_URL` atau `NGROK_RASPI`. URL kosong melewatkan deploy develop
+dengan warning dan menggagalkan deploy staging. `main` tetap memakai
+`RASPI_API_BASE_URL`, dengan fallback `NGROK_RASPI`.
+
+Sebelum staging, siapkan API HTTPS publik berakhiran `/api`, database/storage
+terisolasi, akun uji kedua role, serta queue dan scheduler staging. Endpoint
+GPU/model staging harus disepakati dan dipisahkan dari pekerjaan produksi.
+Atur `STAGING_API_BASE_URL` dan credential/project Vercel di repository settings;
+jangan menunjuk staging ke database, storage atau API produksi. Build CI memakai
+API loopback hanya untuk verifikasi build; itu bukan endpoint deployment.
+
+Flutter `release.yml` mengikuti variable preview yang sama. Tanpa URL preview,
+preflight gagal sebelum build/deploy client. Override manual `api_base_url`
+hanya berlaku pada `main` atau tag versi `v*`; branch lain tidak fallback ke
+produksi. Deploy backend Pi hanya diizinkan dari `main` atau tag versi `v*`,
+termasuk workflow manual; manual `develop`/`staging` tidak dapat deploy Pi.
+
 ## Proses server
 
 API, queue dan scheduler harus sama-sama hidup. `npm run serve:all` di be
@@ -31,6 +52,17 @@ Queue supervisor menggunakan memory_limit PHP 1 GiB, worker memory 768 MiB,
 timeout 7200 dan tries 1. Scheduler memprobe model tiap menit, membersihkan
 token tiap hari serta output prediksi tiap jam. Host GPU memiliki timeout
 dan masa sesi sendiri; model offline bukan kegagalan akun.
+
+Queue CT memakai connection `database` / queue `default`. Lease `retry_after`
+minimal 7260 detik, termasuk jika `DB_QUEUE_RETRY_AFTER` lama bernilai lebih
+kecil; nilai lebih besar tetap dihormati. Job CT memiliki timeout 7200 detik,
+sehingga worker lain tidak mengambil ulang job yang masih berjalan. Setelah
+upgrade, bangun ulang config cache dan reload worker melalui prosedur server.
+
+Connection `llm` memakai driver database dan queue `llm` terpisah, lease 360
+detik untuk job/worker dengan timeout 300 detik. Worker khusus memakai
+`php artisan queue:work llm --queue=llm --timeout=300 --tries=1`; jalankan saat
+fitur LLM diaktifkan. Worker CT tetap hanya mengonsumsi queue `default`.
 
 ## Urutan rilis dan backup
 
@@ -44,6 +76,13 @@ Perintah smoke membuat token sementara untuk akun aktif kedua peran lalu
 mencabutnya. Ia memeriksa endpoint nyata, hak akses, skema akhir dan route
 yang dipensiunkan. Jangan seed/reset akun produksi untuk sekadar mengecek API.
 Backup lokal Pi bukan pengganti backup terpisah di luar Pi.
+
+Migration historis `2026_10_05_170847_purge_all_models` sekarang sengaja no-op
+pada `up` dan `down`: upgrade tidak boleh menghapus registry model aktif atau
+mengosongkan relasi prediksi/activity. Migration yang sudah tercatat tidak
+dijalankan ulang; perubahan ini melindungi instalasi yang belum menjalankannya
+dan replay. Data yang pernah dihapus hanya dapat dipulihkan dari backup yang
+sesuai. Perubahan ini tidak mengembalikan managed training.
 
 Penghapusan training bersifat irreversible melalui migration rollback.
 Pemulihan membutuhkan SQL backup sebelum migrasi dan source rilis sebelumnya.
