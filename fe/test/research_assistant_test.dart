@@ -13,24 +13,28 @@ class FakeAi extends AiService {
   ApiException? rejection;
   final List<Map<String, dynamic>> sends = [];
   int polls = 0;
+  int? originalContextId;
   Map<String, dynamic> get request => {
     'id': 42,
     'conversation_id': 7,
     'user_message_id': 100,
+    'analysis_record_id': originalContextId,
     'status': state,
     'error_code': state == 'failed' ? 'provider_timeout' : null,
     'assistant_message': state == 'completed'
         ? {'id': 101, 'role': 'assistant', 'content': 'Jawaban eksperimen'}
         : null,
-    'sources': [
-      {
-        'type': 'analysis_record',
-        'id': 3,
-        'status': 'pending',
-        'processing_time_seconds': null,
-        'metrics': {'mae': null},
-      },
-    ],
+    'sources': state == 'completed'
+        ? [
+            {
+              'type': 'analysis_record',
+              'id': 3,
+              'status': 'pending',
+              'processing_time_seconds': null,
+              'metrics': {'mae': null},
+            },
+          ]
+        : [],
     'metrics': {'total_duration': 50000000000},
   };
   @override
@@ -97,6 +101,7 @@ class FakeAi extends AiService {
       throw const ApiException('Jaringan terputus');
     }
     state = 'queued';
+    originalContextId = data['analysis_record_id'] as int?;
     return {
       'request': request,
       'user_message': {'id': 100, 'role': 'user', 'content': data['content']},
@@ -130,6 +135,69 @@ void main() {
   tearDown(
     () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, null),
+  );
+  for (final state in ['failed', 'cancelled']) {
+    for (final composerContext in [null, 9]) {
+      testWidgets(
+        '$state history regeneration retains original prediction via entry $composerContext',
+        (tester) async {
+          final api = FakeAi()
+            ..enabled = true
+            ..state = state
+            ..originalContextId = 3;
+          await mount(tester, api, context: composerContext);
+          await tester.tap(find.text('Riwayat riset'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Buat ulang jawaban'));
+          await tester.pump();
+          await tester.pump();
+          expect(api.sends.single['analysis_record_id'], 3);
+          expect(api.sends.single['content'], 'Pertanyaan tersimpan');
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+  for (final state in ['failed', 'cancelled']) {
+    testWidgets(
+      '$state context-free original stays context-free despite selected composer prediction',
+      (tester) async {
+        final api = FakeAi()
+          ..enabled = true
+          ..state = state;
+        await mount(tester, api, context: 9);
+        await tester.tap(find.text('Riwayat riset'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Buat ulang jawaban'));
+        await tester.pump();
+        await tester.pump();
+        expect(api.sends.single.containsKey('analysis_record_id'), isFalse);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+  testWidgets(
+    'polled request context survives composer context removal before regeneration',
+    (tester) async {
+      final api = FakeAi()
+        ..enabled = true
+        ..state = 'processing'
+        ..originalContextId = 3;
+      await mount(tester, api, context: 9);
+      await tester.tap(find.text('Riwayat riset'));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Lepas konteks'));
+      await tester.pump();
+      api.state = 'failed';
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      await tester.tap(find.text('Buat ulang jawaban'));
+      await tester.pump();
+      await tester.pump();
+      expect(api.sends.single['analysis_record_id'], 3);
+      await tester.pumpWidget(const SizedBox());
+    },
   );
   testWidgets('definitive admission refusal lets the user correct input', (
     tester,

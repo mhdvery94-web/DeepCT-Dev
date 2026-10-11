@@ -351,6 +351,89 @@ class AiAssistantTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_original_analysis_selection_is_public_for_queued_failed_cancelled_and_context_free_requests(): void
+    {
+        $record = AnalysisRecord::create(['user_id' => $this->owner->id, 'job_id' => 'original-selection', 'status' => 'pending']);
+        $conversationId = $this->conversation();
+        $requestId = $this->send($conversationId, extra: ['analysis_record_id' => $record->id])
+            ->assertAccepted()->assertJsonPath('data.request.analysis_record_id', $record->id)->json('data.request.id');
+        Http::fake(['*' => Http::response([], 503)]);
+        $this->work($requestId);
+        $this->apiAs($this->token)->getJson("/api/ai/requests/{$requestId}")->assertOk()
+            ->assertJsonPath('data.status', 'failed')->assertJsonPath('data.analysis_record_id', $record->id)
+            ->assertJsonPath('data.sources', []);
+        $cancelledId = $this->send($conversationId, 'cancel-original', ['analysis_record_id' => $record->id])
+            ->assertAccepted()->json('data.request.id');
+        $this->apiAs($this->token)->postJson("/api/ai/requests/{$cancelledId}/cancel")->assertOk()
+            ->assertJsonPath('data.status', 'cancelled')->assertJsonPath('data.analysis_record_id', $record->id)
+            ->assertJsonPath('data.sources', []);
+        $originalId = $record->id;
+        $record->delete();
+        $this->apiAs($this->token)->getJson("/api/ai/conversations/{$conversationId}")->assertOk()
+            ->assertJsonPath('data.request.analysis_record_id', $originalId);
+        $this->send($conversationId, 'context-free')->assertAccepted()
+            ->assertJsonStructure(['data' => ['request' => ['analysis_record_id']]])
+            ->assertJsonPath('data.request.analysis_record_id', null);
+    }
+
+    public function test_deleted_original_analysis_fails_before_provider_even_when_foreign_key_is_cleared(): void
+    {
+        $record = AnalysisRecord::create(['user_id' => $this->owner->id, 'job_id' => 'delete-before-work', 'status' => 'pending']);
+        $originalId = $record->id;
+        $requestId = $this->send($this->conversation(), extra: ['analysis_record_id' => $originalId])
+            ->assertAccepted()->json('data.request.id');
+        $record->delete();
+        $this->assertNull(AiRequest::findOrFail($requestId)->analysis_record_id);
+        Http::fake(['*' => Http::response(['done' => true, 'done_reason' => 'stop', 'message' => ['content' => 'Should never be requested']])]);
+        $this->work($requestId);
+        $this->apiAs($this->token)->getJson("/api/ai/requests/{$requestId}")->assertOk()
+            ->assertJsonPath('data.status', 'failed')->assertJsonPath('data.error_code', 'context_unavailable')
+            ->assertJsonPath('data.analysis_record_id', $originalId)->assertJsonPath('data.assistant_message', null);
+        Http::assertNothingSent();
+    }
+
+    public function test_deleted_original_analysis_during_generation_prevents_publication(): void
+    {
+        $record = AnalysisRecord::create(['user_id' => $this->owner->id, 'job_id' => 'delete-before-publication', 'status' => 'pending']);
+        $originalId = $record->id;
+        $requestId = $this->send($this->conversation(), extra: ['analysis_record_id' => $originalId])
+            ->assertAccepted()->json('data.request.id');
+        Http::fake(function () use ($record) {
+            $record->delete();
+
+            return Http::response(['done' => true, 'done_reason' => 'stop', 'message' => ['content' => 'Must not publish']]);
+        });
+        $this->work($requestId);
+        $this->assertSame('context_unavailable', AiRequest::findOrFail($requestId)->error_code);
+        $this->assertSame(0, AiMessage::where('role', 'assistant')->count());
+        Http::assertSentCount(1);
+    }
+
+    public function test_newly_foreign_original_analysis_during_generation_prevents_publication(): void
+    {
+        $record = AnalysisRecord::create(['user_id' => $this->owner->id, 'job_id' => 'foreign-before-publication', 'status' => 'pending']);
+        $other = User::factory()->create();
+        $requestId = $this->send($this->conversation(), extra: ['analysis_record_id' => $record->id])
+            ->assertAccepted()->json('data.request.id');
+        Http::fake(function () use ($record, $other) {
+            $record->update(['user_id' => $other->id]);
+
+            return Http::response(['done' => true, 'done_reason' => 'stop', 'message' => ['content' => 'Must not publish']]);
+        });
+        $this->work($requestId);
+        $this->assertSame('context_unavailable', AiRequest::findOrFail($requestId)->error_code);
+        $this->assertSame(0, AiMessage::where('role', 'assistant')->count());
+        Http::assertSentCount(1);
+    }
+
+    public function test_admitted_original_selection_cannot_be_changed(): void
+    {
+        $requestId = $this->send($this->conversation())->assertAccepted()->json('data.request.id');
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('The admitted analysis selection is immutable.');
+        AiRequest::findOrFail($requestId)->update(['requested_analysis_record_id' => 123]);
+    }
+
     public function test_expired_analysis_sources_include_safe_model_and_nullable_validation(): void
     {
         $model = Model::create([

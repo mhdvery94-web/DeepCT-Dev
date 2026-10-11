@@ -153,7 +153,11 @@ class AiChatController extends ChangeNotifier {
     _notify();
   }
 
-  Future<bool> send(String content, {bool retry = false}) async {
+  Future<bool> send(
+    String content, {
+    bool retry = false,
+    bool useRequestContext = false,
+  }) async {
     if (!enabled ||
         active ||
         knownActive != null ||
@@ -162,12 +166,17 @@ class AiChatController extends ChangeNotifier {
         (!retry && pending != null)) {
       return false;
     }
+    // The persisted request owns regeneration context, including an explicit
+    // null. Composer changes apply only to new questions.
+    final selectedContext = useRequestContext
+        ? (request?['analysis_record_id'] as int?)
+        : contextId;
     final payload = retry
         ? pending
         : {
             'content': content.trim(),
             'idempotency_key': _key(),
-            if (contextId != null) 'analysis_record_id': contextId,
+            'analysis_record_id': ?selectedContext,
           };
     if (payload == null || payload['content'].toString().isEmpty) return false;
     busy = true;
@@ -218,7 +227,7 @@ class AiChatController extends ChangeNotifier {
       (message) => message['id'] == request?['user_message_id'],
     );
     if (original.isEmpty) return false;
-    return send(original.first['content'].toString());
+    return send(original.first['content'].toString(), useRequestContext: true);
   }
 
   void _accept(Map<String, dynamic> incoming) {

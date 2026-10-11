@@ -134,6 +134,7 @@ class AiConversationController extends Controller
                     $record = AiRequest::create([
                         'user_id' => $user->id, 'ai_conversation_id' => $conversation->id, 'user_message_id' => $message->id,
                         'analysis_record_id' => $input['analysis_record_id'] ?? null, 'idempotency_key' => $input['idempotency_key'],
+                        'requested_analysis_record_id' => $input['analysis_record_id'] ?? null,
                         'payload_hash' => $hash, 'model' => config('ai.model'), 'prompt_version' => config('ai.prompt_version'), 'status' => 'queued',
                     ]);
                     $conversation->touch();

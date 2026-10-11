@@ -37,6 +37,7 @@ newest messages; messages within each page are returned oldest first. Detail's
     "id": 42,
     "conversation_id": 7,
     "user_message_id": 100,
+    "analysis_record_id": 3,
     "status": "completed",
     "model": "deepseek-r1:1.5b",
     "prompt_version": "deepct-assistant-v1",
@@ -72,6 +73,16 @@ newest messages; messages within each page are returned oldest first. Detail's
 
 The example demonstrates the shape, not an observed model answer. Request
 states are `queued`, `processing`, `completed`, `failed`, `cancelled`.
+`analysis_record_id` is the original authorized prediction selection (integer or
+null), independent of generated sources and present even on queued, failed or
+cancelled requests. Regeneration uses that original ID with a new idempotency
+key; a null original stays context-free even if the composer selects another
+prediction. The server retains this immutable selection after prediction
+deletion and revalidates its existence and ownership before generation and
+publication. Missing or newly foreign context fails as `context_unavailable`;
+it never silently becomes a context-free question. The additive migration only
+backfills surviving foreign-key selections. Older selections already erased
+before that migration remain unknown/null, without inference from snapshots.
 `assistant_message` is null until completed; `sources` is empty and provider
 `metrics` is null until completed. `started_at` and `finished_at` are nullable.
 `sources` is trusted, allowlisted server metadata captured for generation;

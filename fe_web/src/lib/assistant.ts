@@ -9,9 +9,17 @@ export type AiSource = {
   model: { id: number; name: string; slug: string | null; version: string } | null;
   metrics: Record<string, number | null>; validation_provenance: Record<string, unknown>; frame_provenance: Record<string, unknown>[];
 };
-export type AiRequest = { id: number; conversation_id: number; user_message_id: number; status: "queued" | "processing" | "completed" | "failed" | "cancelled"; error_code: string | null; model: string; prompt_version: string; experimental: true; assistant_message: AiMessage | null; sources: AiSource[]; metrics: Record<string, number> | null };
+export type AiRequest = { id: number; conversation_id: number; user_message_id: number; analysis_record_id: number | null; status: "queued" | "processing" | "completed" | "failed" | "cancelled"; error_code: string | null; model: string; prompt_version: string; experimental: true; assistant_message: AiMessage | null; sources: AiSource[]; metrics: Record<string, number> | null };
 export type AiDetail = AiConversation & { messages: AiMessage[]; pagination: AiPagination; request: AiRequest | null };
 export type AiSubmission = { content: string; idempotency_key: string; analysis_record_id?: number };
+
+export function regenerationSubmission(message: AiMessage, request: AiRequest, key: string): AiSubmission {
+  return {
+    content: message.content,
+    idempotency_key: key,
+    ...(request.analysis_record_id != null ? { analysis_record_id: request.analysis_record_id } : {}),
+  };
+}
 
 export const activeRequest = (request: AiRequest | null | undefined) => request?.status === "queued" || request?.status === "processing";
 export const requestLabels = { queued: "Dalam antrean", processing: "Sedang diproses", completed: "Selesai", failed: "Gagal", cancelled: "Dibatalkan" };

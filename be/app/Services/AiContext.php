@@ -11,10 +11,10 @@ class AiContext
     /** Trusted metadata only: no filenames, paths, free-form errors or model URLs. */
     public function sources(AiRequest $request): array
     {
-        if (! $request->analysis_record_id) {
+        if ($request->requested_analysis_record_id === null) {
             return [];
         }
-        $record = AnalysisRecord::where('user_id', $request->user_id)->find($request->analysis_record_id);
+        $record = AnalysisRecord::where('user_id', $request->user_id)->find($request->requested_analysis_record_id);
         if (! $record) {
             throw new AiProviderException('context_unavailable');
         }

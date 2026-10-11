@@ -7,10 +7,11 @@ import { mkdir } from 'node:fs/promises';
 import { chromium } from '/workspace/.browser-tools/node_modules/playwright-core/index.mjs';
 
 let enabled = false, state = 'completed', failSend = false, failPoll = false, refuseSend = false;
+let originalContextId = null;
 const sends = [];
 const date = '2026-10-10T12:00:00Z';
 const msg = (id, role, content) => ({ id, role, content, created_at: date });
-const request = () => ({ id: 42, conversation_id: 7, user_message_id: 100, status: state, model: 'deepseek-r1:1.5b', prompt_version: 'deepct-assistant-v1', experimental: true, error_code: state === 'failed' ? 'provider_timeout' : null, assistant_message: state === 'completed' ? msg(101, 'assistant', 'Jawaban eksperimen') : null, sources: [{type:'analysis_record',id:3,status:'pending',input_files_count:2,output_files_count:null,processing_time_seconds:null,expired:false,files_deleted:false,model:null,metrics:{mae:null},validation_provenance:{},frame_provenance:[]}], metrics: {total_duration:50000000000}, created_at:date, started_at:null, finished_at:null });
+const request = () => ({ id: 42, conversation_id: 7, user_message_id: 100, analysis_record_id: originalContextId, status: state, model: 'deepseek-r1:1.5b', prompt_version: 'deepct-assistant-v1', experimental: true, error_code: state === 'failed' ? 'provider_timeout' : null, assistant_message: state === 'completed' ? msg(101, 'assistant', 'Jawaban eksperimen') : null, sources: state === 'completed' ? [{type:'analysis_record',id:3,status:'pending',input_files_count:2,output_files_count:null,processing_time_seconds:null,expired:false,files_deleted:false,model:null,metrics:{mae:null},validation_provenance:{},frame_provenance:[]}] : [], metrics: state === 'completed' ? {total_duration:50000000000} : null, created_at:date, started_at:null, finished_at:null });
 const fixture = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
   const path = url.pathname.replace(/^\/api/, '');
@@ -26,7 +27,7 @@ const fixture = http.createServer(async (req, res) => {
     const body = JSON.parse(text); sends.push(body);
     if (refuseSend) {refuseSend=false;status=404;payload={success:false,message:'Konteks tidak ditemukan'};}
     else if (failSend) {failSend=false;status=502;payload={success:false,message:'Jaringan terputus'};}
-    else {state='queued';payload={request:request(),user_message:msg(100,'user',body.content)};status=202;}
+    else {state='queued';originalContextId=body.analysis_record_id ?? null;payload={request:request(),user_message:msg(100,'user',body.content)};status=202;}
   } else if (path.endsWith('/cancel')) {state='cancelled';payload=request();}
   else if (path.startsWith('/ai/requests/')) {
     if (failPoll) {status=502;payload={success:false,message:'Jaringan polling terputus'};}
@@ -126,6 +127,53 @@ try {
   await page.getByRole('button',{name:'Toggle navigation'}).click();
   await page.getByRole('link',{name:'Asisten riset',exact:true}).waitFor({state:'visible'});
   console.log('PASS admin own assistant navigation, retired prediction nav, mobile drawer/no horizontal overflow');
+
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({width:1440,height:1000});
+  for (const terminal of ['failed','cancelled']) {
+    for (const entryContext of [null,9,'removed']) {
+      state=terminal; originalContextId=3;
+      await page.goto('http://127.0.0.1:3213/workspace/assistant'+(entryContext == null ? '' : '?analysis_record_id=9'));
+      await page.getByRole('button',{name:'Riwayat riset',exact:true}).click();
+      await page.getByRole('button',{name:'Buat ulang jawaban',exact:true}).waitFor();
+      if(entryContext === 'removed') {
+        await page.getByRole('button',{name:'Lepas konteks',exact:true}).click();
+      }
+      await page.getByRole('button',{name:'Buat ulang jawaban',exact:true}).click();
+      await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
+      assert.equal(sends.at(-1).analysis_record_id,3,terminal+' history must keep original context through entry '+entryContext);
+      assert.equal(sends.at(-1).content,'Pertanyaan tersimpan');
+      await page.getByRole('button',{name:'Batalkan',exact:true}).click();
+      await page.getByText('Dibatalkan',{exact:true}).waitFor();
+    }
+  }
+  for (const terminal of ['failed','cancelled']) {
+    state=terminal; originalContextId=null;
+    await page.goto('http://127.0.0.1:3213/workspace/assistant?analysis_record_id=9');
+    await page.getByRole('button',{name:'Riwayat riset',exact:true}).click();
+    await page.getByRole('button',{name:'Buat ulang jawaban',exact:true}).click();
+    await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
+    assert.equal(Object.hasOwn(sends.at(-1),'analysis_record_id'),false,'context-free history cannot acquire composer context');
+    await page.getByRole('button',{name:'Batalkan',exact:true}).click();
+    await page.getByText('Dibatalkan',{exact:true}).waitFor();
+  }
+  console.log('PASS failed/cancelled history regeneration preserves original context through ordinary/different entry and explicit composer removal; context-free original stays context-free');
+
+  state='processing'; originalContextId=3;
+  await page.goto('http://127.0.0.1:3213/workspace/assistant?analysis_record_id=9');
+  await page.getByRole('button',{name:'Riwayat riset',exact:true}).click();
+  await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Lepas konteks',exact:true}).click();
+  state='failed';
+  await page.getByRole('button',{name:'Buat ulang jawaban',exact:true}).waitFor({timeout:12000});
+  const previousKey=sends.at(-1).idempotency_key;
+  await page.getByRole('button',{name:'Buat ulang jawaban',exact:true}).click();
+  await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
+  assert.equal(sends.at(-1).analysis_record_id,3,'polling must retain original context independently of composer removal');
+  assert.notEqual(sends.at(-1).idempotency_key,previousKey);
+  await page.getByRole('button',{name:'Batalkan',exact:true}).click();
+  await page.getByText('Dibatalkan',{exact:true}).waitFor();
+  console.log('PASS polling restores original context for regeneration after composer removal with a fresh key');
 } finally {
   await browser?.close();app.kill('SIGTERM');await new Promise(resolve=>fixture.close(resolve));
 }

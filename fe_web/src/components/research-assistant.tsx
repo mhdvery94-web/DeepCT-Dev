@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { backend, BackendError } from "@/lib/client-api";
-import { activeRequest, mergeMessages, requestLabels, type AiConversation, type AiDetail, type AiMessage, type AiPagination, type AiRequest, type AiStatus, type AiSubmission } from "@/lib/assistant";
+import { activeRequest, mergeMessages, regenerationSubmission, requestLabels, type AiConversation, type AiDetail, type AiMessage, type AiPagination, type AiRequest, type AiStatus, type AiSubmission } from "@/lib/assistant";
 import { AssistantEvidence } from "@/components/assistant-evidence";
 
 const messageOf = (error: unknown) => error instanceof Error ? error.message : "Permintaan tidak dapat diselesaikan.";
@@ -189,7 +189,7 @@ export function ResearchAssistant({ analysisRecordId }: { analysisRecordId?: num
         {messagePage && messagePage.current_page < messagePage.last_page && <button className="assistant-older" disabled={busy} onClick={() => void olderMessages()}>Pesan lebih lama</button>}
         {!loading && messages.length === 0 && <div className="assistant-welcome"><div className="assistant-mark">BRIN</div><h2>Ruang diskusi riset Anda</h2><p>Tanyakan tentang status atau hasil analisis CT. Konteks hanya memakai metadata prediksi milik Anda.</p><p>Jawaban model adalah eksperimen; sumber tepercaya ditampilkan terpisah.</p></div>}
         {messages.map(message => <article key={message.id} className={`assistant-message assistant-message--${message.role}`}><div className="assistant-message__label">{message.role === "user" ? "Anda" : "Asisten · eksperimental"} <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</time></div><div className="assistant-message__bubble">{message.content}</div><button aria-label={`Salin pesan ${message.id}`} onClick={() => void copy(message)}>{copied === message.id ? "Tersalin" : "Salin"}</button></article>)}
-        {request && <div className="assistant-request" role="status"><span>{requestLabels[request.status]}{request.status === "failed" ? ` · ${request.error_code ?? "generation_failed"}` : ""}</span>{activeRequest(request) && <button disabled={busy} onClick={() => void cancel()}>Batalkan</button>}{["failed", "cancelled"].includes(request.status) && lastUser && <button disabled={blocked} onClick={() => void send({ content: lastUser.content, idempotency_key: crypto.randomUUID(), ...(contextId ? { analysis_record_id: contextId } : {}) })}>Buat ulang jawaban</button>}</div>}
+        {request && <div className="assistant-request" role="status"><span>{requestLabels[request.status]}{request.status === "failed" ? ` · ${request.error_code ?? "generation_failed"}` : ""}</span>{activeRequest(request) && <button disabled={busy} onClick={() => void cancel()}>Batalkan</button>}{["failed", "cancelled"].includes(request.status) && lastUser && <button disabled={blocked} onClick={() => void send(regenerationSubmission(lastUser, request, crypto.randomUUID()))}>Buat ulang jawaban</button>}</div>}
         {request?.status === "completed" && <AssistantEvidence request={request} />}
         <div ref={end} />
       </div>

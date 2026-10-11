@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use LogicException;
 
 class AiRequest extends Model
 {
@@ -11,7 +12,16 @@ class AiRequest extends Model
 
     protected $guarded = ['id'];
 
-    protected $casts = ['sources' => 'array', 'metrics' => 'array', 'started_at' => 'datetime', 'finished_at' => 'datetime'];
+    protected $casts = ['requested_analysis_record_id' => 'integer', 'sources' => 'array', 'metrics' => 'array', 'started_at' => 'datetime', 'finished_at' => 'datetime'];
+
+    protected static function booted(): void
+    {
+        static::updating(function (self $request) {
+            if ($request->isDirty('requested_analysis_record_id')) {
+                throw new LogicException('The admitted analysis selection is immutable.');
+            }
+        });
+    }
 
     public function assistantMessage(): BelongsTo
     {
@@ -31,6 +41,7 @@ class AiRequest extends Model
         return [
             'id' => $this->id, 'conversation_id' => $this->ai_conversation_id,
             'user_message_id' => $this->user_message_id, 'status' => $this->status,
+            'analysis_record_id' => $this->requested_analysis_record_id,
             'model' => $this->model, 'prompt_version' => $this->prompt_version,
             'error_code' => $this->error_code, 'experimental' => true,
             'assistant_message' => $this->assistantMessage?->toPublicArray(),
