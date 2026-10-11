@@ -276,6 +276,12 @@ Files: tests/smoke scripts dan docs API/architecture/checkpoint.
       output shape/dtype/preprocessing sama dan hasil numerik/paritas tercatat.
 - [ ] Bedakan fixture/mock, build, benchmark dan UAT GPU nyata dalam laporan.
 
+Jika memakai prefix API staging, uji asset/storage dan signed download juga:
+redirect hasil besar dari BFF tidak boleh membuang prefix dan menuju path
+API produksi pada hostname ngrok yang sama. URL builder, proxy prefix dan
+validasi tanda tangan harus konsisten sebelum ingress publik diubah. Pengujian
+ini memakai APP_KEY/database/storage staging tersendiri dan payload miliknya.
+
 ### Task 7: Review dan rilis bertahap
 
 Files: workflow/deploy instructions dan docs/checkpoint.
