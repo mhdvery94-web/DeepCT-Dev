@@ -2,6 +2,7 @@ import json
 import zipfile
 
 import h5py
+import numpy as np
 import pytest
 
 from app.loaders.tensorflow import screen_model
@@ -133,3 +134,73 @@ def test_keras_archive_rejects_symlink_metadata(tmp_path):
         archive.writestr(member, '/etc/passwd')
     with pytest.raises(ValueError, match='Unsafe archive member'):
         screen_model(path)
+
+
+def model_container(tmp_path, dtype, suffix, payload=None):
+    weights = tmp_path / 'model.h5'
+    hdf5(weights, graph())
+    with h5py.File(weights, 'a') as handle:
+        dataset = handle.create_dataset('weights', shape=(1,), dtype=dtype)
+        if payload is not None:
+            dataset[0] = payload
+    if suffix == '.h5':
+        return weights
+    path = tmp_path / 'model.keras'
+    with zipfile.ZipFile(path, 'w') as archive:
+        archive.writestr('config.json', json.dumps(graph()))
+        archive.write(weights, 'model.weights.h5')
+    return path
+
+
+def forbid_dataset_reads(monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail('screening decoded an HDF5 dataset payload')
+    monkeypatch.setattr(h5py.Dataset, '__getitem__', forbidden)
+    monkeypatch.setattr(h5py.Dataset, 'read_direct', forbidden)
+    monkeypatch.setattr(h5py.Dataset, '__array__', forbidden)
+
+
+@pytest.mark.parametrize('suffix', ['.h5', '.keras'])
+def test_variable_length_payload_rejected_before_decoding(tmp_path, monkeypatch, suffix):
+    path = model_container(tmp_path, h5py.vlen_dtype(np.dtype('uint8')), suffix,
+                           payload=np.zeros(4096, dtype='uint8'))
+    if suffix == '.h5':
+        with h5py.File(path, 'r') as handle:
+            assert handle['weights'].nbytes == 8
+        # Reproduce the undercount directly; the archive additionally has its
+        # own on-disk size budget, independent of decoded dataset allocation.
+        monkeypatch.setattr('app.loaders.tensorflow.MAX_EXPANDED', 1024)
+    forbid_dataset_reads(monkeypatch)
+    with pytest.raises(ValueError, match='Unsupported HDF5 weight datatype'):
+        screen_model(path)
+
+
+@pytest.mark.parametrize('dtype', [
+    h5py.string_dtype(),
+    h5py.ref_dtype,
+    h5py.regionref_dtype,
+    np.dtype([('payload', h5py.vlen_dtype(np.dtype('uint8')))]),
+    np.dtype((h5py.vlen_dtype(np.dtype('uint8')), (2,))),
+    np.dtype([('nested', [('references', h5py.ref_dtype, (2,))])]),
+    np.dtype('S16'),
+    np.dtype('V16'),
+    np.dtype([('numeric', 'f4')]),
+    np.dtype(('f4', (2,))),
+    h5py.enum_dtype({'one': 1, 'two': 2}, basetype='i4'),
+], ids=['vlen-string', 'reference', 'region-reference', 'compound-vlen',
+        'array-vlen', 'nested-compound-array-reference', 'fixed-string', 'opaque',
+        'numeric-compound', 'numeric-array', 'enum'])
+@pytest.mark.parametrize('suffix', ['.h5', '.keras'])
+def test_unsupported_weight_datatypes_rejected_without_reading(tmp_path, monkeypatch, dtype, suffix):
+    path = model_container(tmp_path, dtype, suffix)
+    forbid_dataset_reads(monkeypatch)
+    with pytest.raises(ValueError, match='Unsupported HDF5 weight datatype'):
+        screen_model(path)
+
+
+@pytest.mark.parametrize('dtype', ['f4', 'f8', 'i8', 'u2', 'bool', 'c8'])
+@pytest.mark.parametrize('suffix', ['.h5', '.keras'])
+def test_fixed_numeric_weights_remain_accepted_without_reading(tmp_path, monkeypatch, dtype, suffix):
+    path = model_container(tmp_path, np.dtype(dtype), suffix)
+    forbid_dataset_reads(monkeypatch)
+    screen_model(path)

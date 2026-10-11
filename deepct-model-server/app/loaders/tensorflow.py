@@ -97,6 +97,13 @@ def _screen_hdf5(path, require_graph):
                 if isinstance(child, h5py.Group):
                     visit(child, depth + 1)
                 elif isinstance(child, h5py.Dataset):
+                    dtype = child.dtype
+                    # nbytes bounds decoded data only for fixed numeric elements.
+                    # Reject whole compound/array datatypes, including any nested
+                    # vlen/reference fields; weight tensor axes belong in shape.
+                    if (dtype.kind not in 'biufc' or dtype.fields is not None
+                            or dtype.subdtype is not None or dtype.metadata):
+                        raise ValueError('Unsupported HDF5 weight datatype')
                     expanded += child.nbytes
                     if expanded > MAX_EXPANDED:
                         raise ValueError('HDF5 expansion limit exceeded')
