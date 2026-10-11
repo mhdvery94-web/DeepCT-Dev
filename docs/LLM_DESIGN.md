@@ -129,6 +129,8 @@ services AiContext/OllamaClient; API routes; tests `AiAssistantTest.php`.
 Interfaces: authenticated GET/POST `/ai/conversations`, GET detail/history,
 POST `/{id}/messages` menerima `{content, idempotency_key, analysis_record_id?}`,
 GET `/ai/requests/{id}`, POST `/ai/requests/{id}/cancel`. Envelope existing success/data.
+GET `/ai/status` mengembalikan enabled/model/prompt_version/batas konfigurasi,
+tanpa URL internal atau token; klien dapat menonaktifkan send secara jujur.
 POST messages menjawab 202 dengan request queued; detail berisi messages
 dan request status queued/processing/completed/failed/cancelled. History paginated.
 - [ ] RED: anon ditolak, ownership lintas akun 404, disabled 503, input kosong 422,
@@ -137,8 +139,12 @@ dan request status queued/processing/completed/failed/cancelled. History paginat
 - [ ] GREEN: context 2048, output budget 768 token termasuk reasoning,
       paling banyak 8 history messages / 6000 karakter, satu worker `--queue=llm`;
       timeout 300, tries 1; limit queue 10 dan per user 20 request/hari atomik.
+      Ikuti rekomendasi resmi R1: instruksi di user prompt, bukan system prompt;
+      temperature 0.6. Pisahkan `<think>...</think>`; thinking tidak disimpan atau ditampilkan.
 - [ ] Model tag/prompt version, Ollama token/duration dan error aman dicatat.
       Metrik/sumber metadata ditampilkan terpisah dari jawaban generatif.
+- [ ] QueueHealth CT hanya menghitung queue default; pekerjaan LLM tidak
+      menyembunyikan CT yang stalled atau memunculkan alarm CT palsu.
 - [ ] Suite backend lulus, benchmark Pi dilaporkan nyata, bukan asumsi dari ukuran bobot.
 - [ ] Commit hanya task ini; jangan mengaktifkan fitur produksi sebelum gate.
 
@@ -156,6 +162,22 @@ Interfaces: gunakan API Task 2, kedua role memiliki percakapan sendiri.
 - [ ] Flutter analyze/tests dan Next lint/typecheck/tests/build lulus.
 - [ ] Commit task UI.
 
+Regenerasi memakai pertanyaan dan selection prediksi original, bukan konteks
+composer saat ini. Request menyimpan `requested_analysis_record_id` immutable
+melalui migration additive dan mengembalikannya sebagai `analysis_record_id`.
+FK prediksi yang menjadi null setelah penghapusan tidak boleh menghilangkan
+pilihan original. Worker memeriksa ulang ownership/keberadaan original sebelum
+provider dan publikasi; resource hilang ditolak, bukan menjadi konteks kosong.
+History gagal/cancelled dan request tanpa konteks memiliki regression tests
+di kedua frontend, termasuk ketika dibuka melalui prediksi lain.
+
+Checkpoint 11 Oktober 2026: Task 1–3 sudah diimplementasikan dan review clean.
+Perbaikan terakhir menggunakan tes terfokus backend 23/316 assertions,
+Flutter 23 + analyze clean, Next 5 unit + check dan 8 kelompok uji browser.
+Suite/build lengkap sebelum perbaikan tetap tercatat terpisah; integrasi API
+nyata, parity GPU dan penerimaan kualitas LLM masih gate Task 6/7. Fitur
+produksi belum diaktifkan, dan Git/Vercel belum menerima rilis perubahan ini.
+
 ### Task 4: Registry model TUF berversi
 
 Files: `deepct-model-server/app/{main,registry}.py`, loaders/tensorflow.py,
@@ -171,6 +193,26 @@ legacy 1024x1024, range 0..65535, t=0.5 dan custom TimeMean/TimeLast/SkipFusion.
 - [ ] Copy bobot existing tanpa menghapus sumber; SHA256 diverifikasi. Jangan swap
       production worker sebelum parity inference nyata dan kapasitas GPU tersedia.
 - [ ] Python suite lulus; commit code terpisah dari bobot/secret.
+
+Kontrak migrasi registry: manifest schema_version 1 memakai `model_id`, versi
+stabil `major.minor.patch`, `name`, `description`, `framework=tensorflow`,
+`adapter=ginet-tcd-v1`, `weight_file`, SHA256/size_bytes dan input
+1024x1024/uint16/t=0.5. Model awal yang benar-benar tersedia bernama
+`ginet-tcd-revisi`, bukan model contoh STUNet. Katalog memakai nama mesin
+`<model_id>-v<major>-<minor>-<patch>`, display_name terpisah, identitas model_id
+dan version serta endpoint berversi. Keberadaan file tidak otomatis mengaktifkan
+model. Metadata aktivasi disimpan di luar direktori versi immutable.
+Root health tidak membocorkan path/secret; katalog/prediksi membutuhkan bearer
+inference, management memakai bearer berbeda. Tidak ada secret default yang
+membuat server terbuka. HDF5 dan Keras diperiksa graph/config allowlist sebelum
+load; safe_mode saja tidak mengamankan HDF5. Katalog tidak membaca keseluruhan
+bobot; integritas diverifikasi sebelum load/publikasi dan invalidasi cache
+menggunakan perubahan file. Jalankan worker satu proses tanpa reload otomatis.
+Tolak external/soft links HDF5 dan anggota arsip Keras berbahaya atau ekspansi
+tidak terbatas sebelum load. Allowlist memeriksa graph bersarang, bukan hanya
+nama layer paling luar. Dua bearer wajib berbeda; credential kosong tidak
+boleh membuka akses. Input inference tetap multipart `file_t0`, `file_t2`,
+`time_scalar=0.5`, output `image/tiff`, sesuai klien Laravel existing.
 
 ### Task 5: Upload model langsung ke TUF
 
@@ -189,6 +231,41 @@ dengan offset. Server tidak menerima path/adaptor source dari klien.
       Atomic publish dan admin activation terpisah; registry DB idempotent mempertahankan display metadata.
 - [ ] Suite Python/backend/frontend lulus; commit task upload.
 
+Batas awal transport model 10 GiB, potongan maksimum 4 MiB, disk headroom
+minimal 2 GiB ditambah sisa upload aktif. Ini bukan janji bahwa model 10 GiB
+dapat dimuat GPU 8 GiB. Kedua klien menghitung SHA256 bertahap dari file, tidak
+memuat seluruh file untuk hash/upload. UI memperlihatkan tahap hashing lalu
+upload; resume meminta pemilihan ulang file dan memverifikasi identitas/digest.
+File yang tidak didukung ditolak sebelum upload. Untuk Flutter Web, jangan
+mengizinkan upload model besar lewat picker yang memuat semua byte; gunakan
+file slice browser atau jelaskan batas dan arahkan ke Next.js/native.
+
+Sesi Laravel menyimpan pemilik dan identitas TUF, bukan bobot. URL internal TUF,
+URL publik HTTPS dan dua worker token hanya berasal dari konfigurasi backend.
+Token scoped upload berumur 15 menit hanya memberi hak menulis sesi tertentu;
+setelah role dicabut tidak boleh renew/finalize/test/publish/activate. Capability
+yang sudah diterbitkan mungkin masih menerima byte sampai expiry, tetapi tidak
+bisa mempublikasikan atau mengaktifkan model. State upload terpisah dari state
+registry. Test kompatibilitas/shape bukan validasi ilmiah model. Versi baru tetap
+nonaktif setelah publish; activation terpisah menjaga versi sebelumnya sebagai
+opsi rollback. Model registry tidak boleh diedit melalui form endpoint manual.
+Sinkronisasi harus memakai tuple model_id/version, tidak menimpa versi lama atau
+metadata display yang sudah diedit admin; model endpoint legacy tetap tersedia.
+
+Provenance hasil harus tetap benar setelah aktivasi/rollback atau perubahan
+nama display. Tambahkan snapshot metadata model yang aman pada awal inference:
+ID registry, nama/slug, versi, serta model_id/digest untuk model managed.
+Jangan menyimpan token atau URL internal di snapshot. AiContext menggunakan
+snapshot tersebut untuk hasil baru, bukan metadata relasi yang dapat berubah.
+Snapshot legacy diberi provenance `legacy_registry_metadata`, bukan klaim hash
+bobot terverifikasi. Record lama tanpa snapshot tidak boleh diberi versi/hash
+historis hasil rekonstruksi dari katalog saat ini; tampilkan batas provenance.
+Uji bahwa edit display/aktivasi versi baru tidak mengganti sumber hasil lama.
+Aktivasi/rollback tidak boleh menggagalkan job CT yang sudah pending/processing
+pada versi sebelumnya. Serialisasi atau tolak perubahan availability yang
+berbenturan dengan job tersebut; jangan hanya mengandalkan current_jobs_count
+karena belum mencakup pekerjaan yang masih menunggu antrean.
+
 ### Task 6: Integrasi dan penerimaan
 
 Files: tests/smoke scripts dan docs API/architecture/checkpoint.
@@ -206,3 +283,19 @@ Files: workflow/deploy instructions dan docs/checkpoint.
 - [ ] Deploy staging dengan database/storage sendiri, backup dan fitur flags rollback.
 - [ ] Promosi develop ke staging; produksi main hanya setelah gate UAT terpenuhi.
 - [ ] Catat commit, CI, HTTP/runtime checks, rollback dan semua blocker yang belum selesai.
+
+Prasyarat rilis operasional: CI harus mencakup suite registry/upload Python
+CPU-only selain suite Laravel, Flutter, dan Next.js. Passing CI tersebut tidak
+menggantikan uji parity GPU nyata atau evaluasi kualitas DeepSeek. Deployment
+staging memakai direktori aplikasi, database, storage/cache, credential dan
+antrean sendiri; jangan mengkloning secret atau data akun produksi untuk seed.
+Jika akun ngrok gratis hanya menyediakan URL statis existing, ingress lokal
+dapat memakai prefix staging/registry dengan default route tetap ke layanan
+legacy. Verifikasi route lama/baru dan rollback sebelum perubahan upstream
+tunnel; jangan menganggap endpoint publik/domain tambahan tersedia.
+Dokumentasi ngrok Free yang diperiksa 11 Oktober 2026 mencantumkan data transfer
+out 1 GB/bulan, 20.000 HTTP request/bulan, satu dev domain dan sampai tiga
+online endpoint. Itu batas paket dokumentasi, bukan verifikasi saldo/plan akun
+pengguna. URL statis tidak menghilangkan quota tersebut. Catat penggunaan
+aktual akun sebelum menyebut layanan siap untuk beban besar berkelanjutan.
+Sumber: https://ngrok.com/docs/pricing-limits/free-plan-limits.
