@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "model_id": "ginet-tcd-revisi",
+  "version": "1.0.0",
+  "name": "GINet TC-D Revisi",
+  "description": "Model interpolasi titik tengah frame Neutron CT. Versi impor dari worker TUF yang sudah digunakan; kelayakan ilmiah tetap memerlukan validasi peneliti.",
+  "framework": "tensorflow",
+  "adapter": "ginet-tcd-v1",
+  "weight_file": "model.h5",
+  "sha256": "255fc3d26f8579deafa6312e7e041584a9c113e5ea51517a57059faaccbfe345",
+  "size_bytes": 87796792,
+  "input": {"width": 1024, "height": 1024, "dtype": "uint16", "time_scalar": 0.5}
+}
