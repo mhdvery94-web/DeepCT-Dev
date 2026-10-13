@@ -73,3 +73,41 @@ def test_registry_error_does_not_leak_filesystem_paths(model_tree):
         response = client.get('/models', headers={'Authorization': 'Bearer test-inference-token'})
         assert response.status_code == 503
         assert str(root) not in response.text
+
+
+def test_unexpected_inference_failure_logs_safe_identity_and_category(model_tree, caplog, monkeypatch):
+    root, activation, _, _ = model_tree
+    registry = Registry(root, activation)
+    def fail(*args):
+        raise RuntimeError('/private/model.keras bearer-secret uploaded-patient-data')
+    monkeypatch.setattr(registry, 'predict', fail)
+    frame = io.BytesIO()
+    tifffile.imwrite(frame, np.zeros((2, 2), dtype=np.uint16))
+    files = {key: ('frame.tiff', frame.getvalue(), 'image/tiff') for key in ['file_t0', 'file_t2']}
+    with TestClient(create_app(settings(root, activation), registry)) as client:
+        response = client.post('/predict/ginet-tcd-revisi/1.0.0', files=files,
+            data={'time_scalar': '0.5'}, headers={'Authorization': 'Bearer test-inference-token'})
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'Inference unavailable'}
+    records = [record for record in caplog.records if record.name == 'app.main']
+    assert len(records) == 1
+    assert records[0].getMessage() == 'Inference failed model=ginet-tcd-revisi version=1.0.0 category=RuntimeError'
+    assert records[0].exc_info is None
+    for secret in ['/private', 'bearer-secret', 'uploaded-patient-data', 'test-inference-token']:
+        assert secret not in caplog.text and secret not in response.text
+
+
+def test_unexpected_failure_log_sanitizes_untrusted_route_identifiers(model_tree, caplog, monkeypatch):
+    root, activation, _, _ = model_tree
+    registry = Registry(root, activation)
+    monkeypatch.setattr(registry, 'predict', lambda *args: (_ for _ in ()).throw(RuntimeError('private')))
+    frame = io.BytesIO()
+    tifffile.imwrite(frame, np.zeros((2, 2), dtype=np.uint16))
+    files = {key: ('frame.tiff', frame.getvalue(), 'image/tiff') for key in ['file_t0', 'file_t2']}
+    with TestClient(create_app(settings(root, activation), registry)) as client:
+        response = client.post('/predict/secret%0Ainjected/not-version', files=files,
+            data={'time_scalar': '0.5'}, headers={'Authorization': 'Bearer test-inference-token'})
+    assert response.status_code == 503
+    records = [record for record in caplog.records if record.name == 'app.main']
+    assert len(records) == 1
+    assert records[0].getMessage() == 'Inference failed model=invalid version=invalid category=RuntimeError'

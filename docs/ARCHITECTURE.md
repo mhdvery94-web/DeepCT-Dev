@@ -84,3 +84,30 @@ dukungan reduced motion. Flutter mempertahankan temanya.
 Editor berita mengatur teks/publikasi; Manage media menyediakan kartu gambar
 dan video terpisah dengan preview serta upload/hapus masing-masing.
 Aset aktif tersimpan di `fe_web/public/assets/` dan `fe/assets/`.
+
+## Integrasi assistant dan registry model
+
+Assistant eksperimental menyimpan conversation/message/request milik akun dan
+menjalankan generation pada connection/queue `llm` terpisah dari CT. Jawaban
+provider dan evidence CT otoritatif ditampilkan terpisah. Role admin tidak
+melewati kepemilikan conversation. Akun nonaktif ditolak segera; request gagal
+provider tidak menghasilkan jawaban buatan. Pagination pesan lama mempertahankan
+posisi baca pada viewport web. Fitur tetap nonaktif secara default karena gate
+kualitas candidate Pi belum lulus; kontrak detail ada di
+[AI_ASSISTANT_API.md](AI_ASSISTANT_API.md).
+
+Upload model admin memakai Laravel hanya untuk manifest/control/status. Byte
+langsung menuju TUF dengan capability sesi, tanpa cookie atau bearer Laravel.
+Resume memerlukan pemilihan ulang file dan SHA256 yang sama, offset durable,
+dan kapabilitas baru. Validasi, uji runtime, publikasi immutable nonaktif, serta
+aktivasi adalah tahap terpisah. Uji child mempertahankan strict GPU placement,
+memanggil model dengan tensor langsung (tanpa dataset CPU dari `predict`), dan
+menolak output/bobot pada CPU. Error inference publik tetap generik; diagnostic
+internal hanya mencatat identitas tersanitasi dan kategori exception.
+
+Harness opt-in [be/tests/Acceptance](../be/tests/Acceptance/README.md) memakai
+database/key/storage/akun sintetis terisolasi serta HTTP Laravel, Next BFF,
+worker, dan antrean nyata. Eksekusi model dan provider diganti fixture CPU/HTTP;
+hasilnya membuktikan integrasi, bukan mutu scientific, performa GPU, keamanan
+arbitrary model upload, atau kesiapan ingress produksi. Satu process worker
+tetap batas deployment lock registry/upload.

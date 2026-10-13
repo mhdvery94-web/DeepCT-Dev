@@ -1,5 +1,7 @@
 """Factory: uvicorn app.main:create_app --factory --workers 1 (no reload)."""
 import secrets
+import logging
+import re
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, Response
@@ -8,6 +10,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from .adapters.ginet_tcd import encode_prediction, prepare_inputs
 from .config import Settings
 from .registry import Registry, RegistryError
+
+logger = logging.getLogger(__name__)
+
+
+def diagnostic_identity(value, pattern):
+    return value if re.fullmatch(pattern, value) else 'invalid'
 
 
 def bearer_dependency(expected):
@@ -56,7 +64,13 @@ def create_app(settings=None, registry=None):
             image = encode_prediction(output)
         except RegistryError:
             raise HTTPException(status_code=409, detail='Model version unavailable or invalid') from None
-        except Exception:
+        except Exception as exc:
+            # Never log exception text/tracebacks: loaders may include paths,
+            # credentials or input data. Route identifiers are untrusted too.
+            logger.error('Inference failed model=%s version=%s category=%s',
+                diagnostic_identity(model_id, r'[a-z0-9][a-z0-9-]{0,79}'),
+                diagnostic_identity(version, r'\d{1,10}\.\d{1,10}\.\d{1,10}'),
+                diagnostic_identity(type(exc).__name__, r'[A-Za-z][A-Za-z0-9_]{0,79}'))
             raise HTTPException(status_code=503, detail='Inference unavailable') from None
         return Response(image, media_type='image/tiff', headers={
             'Content-Disposition': f'attachment; filename="{model_id}-v{version}-prediction.tif"',

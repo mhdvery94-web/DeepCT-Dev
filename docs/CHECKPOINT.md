@@ -1,5 +1,27 @@
 # Checkpoint proyek — 9 Oktober 2026
 
+## Tambahan integrasi lokal — 13 Oktober 2026
+
+Task 6 memakai base reviewed Task 5 `3191695`; hasil sesi 9 Oktober di bawah
+adalah riwayat rilis, bukan status publikasi perubahan ini. Assistant/chat,
+registry upload dan source fixes baru belum dipush atau dideploy oleh Task 6.
+
+HTTP Laravel/MySQL, Next BFF, upload TUF dan kedua role diuji terisolasi dengan
+akun/key/storage sendiri. Browser memeriksa 1366/768/390 px, posisi baca pesan
+lama, signed archive besar berprefix, signature invalid, asset/media, resume
+setelah reload, cancel, duplicate/hash mismatch, revocation dan outage.
+Job LLM serta CT berjalan terpisah dan memakai boundary model/provider sintetis.
+Detail perintah dan jumlah hasil ada di harness README dan ledger Task 6.
+
+Fix child menggunakan tensor langsung dengan placement GPU strict dan cek
+device output/bobot; CPU regression tidak membuktikan runtime GPU. Controller
+mencatat parity real compiled versus legacy: output 1024×1024 uint16,
+maxabs 1, MAE 0.0001201629638671875, 126/1048576 piksel berbeda, cold load/JIT
+13.021 s. Trusted direct child 9.331 s. Angka ini bukti migrasi, bukan exact
+parity atau toleransi scientific yang disetujui. UAT arbitrary model upload,
+ingress publik, Pi/TUF live dan gate kualitas LLM tetap terpisah. Candidate
+DeepSeek Pi belum lulus; assistant production tetap nonaktif secara default.
+
 ## Keadaan aplikasi
 
 Training sudah dipensiunkan di frontend, API, database dan storage legacy.

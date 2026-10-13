@@ -1,7 +1,8 @@
 # Kontrak API
 
 Base URL berakhiran `/api`. Sumber route otoritatif:
-[`be/routes/api.php`](../be/routes/api.php). Endpoint LLM belum tersedia.
+[`be/routes/api.php`](../be/routes/api.php). Kontrak assistant eksperimental:
+[AI_ASSISTANT_API.md](AI_ASSISTANT_API.md); fitur tetap nonaktif secara default.
 
 ## Autentikasi dan respons
 
@@ -70,6 +71,11 @@ Model yang dilihat researcher tidak memuat worker URL atau kredensial.
 
 Download besar di web diarahkan ke signed API URL lima menit untuk menghindari
 batas respons Vercel. API memeriksa kepemilikan, status akun, expiry dan checksum.
+Jika base API memakai prefix ingress (contoh `/staging/api`), BFF mempertahankan
+prefix pada redirect signed `/api/downloads/...`. Ingress menghapus `/staging`
+sebelum validasi Laravel; query signed tidak diubah. Asset Next dan media API
+tetap memakai jalurnya masing-masing. Jangan mengubah ingress publik sebelum
+uji redirect, byte hasil, signature expired/tampered, image dan video lulus.
 Pending/processing dilindungi dari cleanup.
 Detail menyertakan file_name, queue_position, estimated_wait_minutes dan status.
 Next.js menghapus aksi compare/rerun dari UI; endpoint lama tetap tersedia.

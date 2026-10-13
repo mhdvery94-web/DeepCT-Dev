@@ -26,8 +26,17 @@ def main():
             return 1
         model = TensorFlowLoader().load(sys.argv[1])
         pair = np.zeros((1, 2, 1024, 1024, 1), dtype=np.float32)
-        output = model.predict([pair, np.array([[0.5]], dtype=np.float32)], verbose=0)
-        encode_prediction(output)  # real adapter shape/finite/output validation
+        # predict() builds a CPU-only RangeDataset under this strict GPU scope.
+        # A direct tensor call preserves strict placement without a data pipeline.
+        output = model([
+            tf.convert_to_tensor(pair),
+            tf.convert_to_tensor(np.array([[0.5]], dtype=np.float32)),
+        ], training=False)
+        if 'GPU:0' not in output.device or any(
+            'GPU:0' not in weight.value.device for weight in model.weights
+        ):
+            return 1
+        encode_prediction(output.numpy())  # real adapter shape/finite/output validation
     return 0
 
 

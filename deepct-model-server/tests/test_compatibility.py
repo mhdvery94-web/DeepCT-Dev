@@ -1,6 +1,9 @@
 """Containment fails closed without ever importing or invoking real TensorFlow."""
 import subprocess
 import sys
+from types import SimpleNamespace
+
+import numpy as np
 
 import pytest
 from fastapi import HTTPException
@@ -8,6 +11,64 @@ from fastapi import HTTPException
 from app.compatibility import Compatibility
 from app.registry import Registry
 from app.config import Settings
+
+
+@pytest.mark.parametrize('cpu_output,cpu_weight', [(False, False), (True, False), (False, True)])
+def test_child_calls_tensor_model_without_cpu_dataset_and_rejects_cpu_placement(monkeypatch, cpu_output, cpu_weight):
+    """CPU-only boundary double: predict's dataset path is forbidden.
+
+    Real child control flow and adapter encoding run; no TensorFlow/GPU load.
+    Returning a CPU output or weight must fail even when the probe is GPU.
+    """
+    from app import compatibility_child
+
+    class Tensor:
+        def __init__(self, data, cpu=False):
+            self.data = np.asarray(data)
+            self.device = '/job:localhost/replica:0/task:0/device:' + ('CPU:0' if cpu else 'GPU:0')
+
+        def numpy(self):
+            return self.data
+
+    class Device:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    class Model:
+        weights = [SimpleNamespace(value=Tensor([1], cpu_weight))]
+
+        def predict(self, *args, **kwargs):
+            pytest.fail('model.predict creates a CPU-only RangeDataset under strict GPU placement')
+
+        def __call__(self, inputs, *, training):
+            assert training is False
+            assert all(isinstance(value, Tensor) for value in inputs)
+            assert inputs[0].data.shape == (1, 2, 1024, 1024, 1)
+            assert inputs[0].data.dtype == np.float32
+            assert inputs[1].data.tolist() == [[0.5]]
+            return Tensor(np.zeros((1, 1024, 1024, 1), dtype=np.float32), cpu_output)
+
+    def strict(value):
+        assert value is False, 'Never allow CPU fallback'
+
+    tf = SimpleNamespace(
+        config=SimpleNamespace(list_physical_devices=lambda kind: ['gpu'],
+            set_visible_devices=lambda *args: None,
+            set_logical_device_configuration=lambda *args: None,
+            LogicalDeviceConfiguration=lambda **kwargs: kwargs,
+            set_soft_device_placement=strict),
+        device=lambda name: Device(), ones=lambda shape: Tensor(np.ones(shape)),
+        linalg=SimpleNamespace(matmul=lambda *args: Tensor([[1]])),
+        convert_to_tensor=Tensor,
+    )
+    monkeypatch.setitem(sys.modules, 'tensorflow', tf)
+    monkeypatch.setattr('app.loaders.tensorflow.TensorFlowLoader.load', lambda *args: Model())
+    monkeypatch.setattr(compatibility_child.resource, 'setrlimit', lambda *args: None)
+    monkeypatch.setattr(sys, 'argv', ['child', '/private/model.keras', str(1024**3), str(2 * 1024**3)])
+    assert compatibility_child.main() == (1 if cpu_output or cpu_weight else 0)
 
 
 def test_unconfigured_address_limit_never_starts_gpu_probe(model_tree, monkeypatch):
