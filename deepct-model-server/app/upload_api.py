@@ -2,6 +2,7 @@
 from fastapi import BackgroundTasks, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from .registry import Manifest
 from .uploads import CHUNK_BYTES, Uploads
@@ -31,11 +32,16 @@ def install_upload_routes(app, registry, origins=(), compatibility=None):
     @app.put('/uploads/{identifier}')
     async def chunk(identifier: str, request: Request, upload_offset: int = Header(...), authorization: str = Header('')):
         token = authorization.removeprefix('Bearer ') if authorization.startswith('Bearer ') else ''
-        with registry.lock:
-            uploads.authorize(uploads.read(identifier), token)
+        def authorize():
+            with registry.lock:
+                uploads.authorize(uploads.read(identifier), token)
+
+        await run_in_threadpool(authorize)
         data = bytearray()
         async for piece in request.stream():
             if len(data) + len(piece) > CHUNK_BYTES:
                 raise HTTPException(413, 'Chunk exceeds 4 MiB')
             data.extend(piece)
-        return uploads.chunk(identifier, token, upload_offset, data)
+        # chunk reauthorizes and checks the current offset under both locks.
+        # Neither lock contention nor synchronous disk/fsync may block ASGI.
+        return await run_in_threadpool(uploads.chunk, identifier, token, upload_offset, data)

@@ -56,25 +56,30 @@ class Uploads:
         self.clock = time.time
         self.free_bytes = lambda: shutil.disk_usage(self.root).free
         self.compatibility = compatibility or self.unavailable
+        # Session transactions use this short metadata lock. When both locks
+        # are needed, acquire registry.lock first; never wait for it here.
+        # Validation/inference may hold the registry lock for a long time,
+        # while status must remain able to read a running operation.
         self.control_lock = RLock()
         # No background work survives restart; reconcile committed byte offsets
         # and return interrupted validation/testing to a retryable state.
-        for path in self.root.iterdir():
-            if not path.is_dir() or not (path / 'session.json').exists():
-                continue
-            session = self.read(path.name)
-            weights = path / 'candidate' / session['manifest']['weight_file']
-            if weights.exists() and weights.stat().st_size > session['offset']:
-                with weights.open('r+b') as handle:
-                    handle.truncate(session['offset'])
-                    handle.flush()
-                    os.fsync(handle.fileno())
-            operation = session.pop('operation', None)
-            if session['state'] == 'validating':
-                session['state'] = 'uploaded'
-            if operation:
-                session['last_error'] = 'interrupted_retry_required'
-            self.save(session)
+        with self.control_lock:
+            for path in self.root.iterdir():
+                if not path.is_dir() or not (path / 'session.json').exists():
+                    continue
+                session = self.read(path.name)
+                weights = path / 'candidate' / session['manifest']['weight_file']
+                if weights.exists() and weights.stat().st_size > session['offset']:
+                    with weights.open('r+b') as handle:
+                        handle.truncate(session['offset'])
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                operation = session.pop('operation', None)
+                if session['state'] == 'validating':
+                    session['state'] = 'uploaded'
+                if operation:
+                    session['last_error'] = 'interrupted_retry_required'
+                self.save(session)
 
     @staticmethod
     def unavailable(directory):
@@ -89,6 +94,10 @@ class Uploads:
         return self.root / identifier
 
     def read(self, identifier):
+        with self.control_lock:
+            return self._read(identifier)
+
+    def _read(self, identifier):
         path = self.path(identifier)
         if not (path / 'session.json').exists():
             raise HTTPException(404, 'Upload not found')
@@ -109,15 +118,19 @@ class Uploads:
         return session
 
     def save(self, session):
-        atomic_json(self.path(session['id']) / 'session.json', session)
+        # Callers doing read/modify/write must hold this lock for the entire
+        # transaction, not just this final save, to avoid stale overwrites.
+        with self.control_lock:
+            atomic_json(self.path(session['id']) / 'session.json', session)
 
     @staticmethod
     def public(session):
         return {key: value for key, value in session.items() if key != 'token_hash'}
 
     def sessions(self):
-        return [self.read(path.name) for path in self.root.iterdir()
-                if path.is_dir() and (path / 'session.json').exists()]
+        with self.control_lock:
+            return [self.read(path.name) for path in self.root.iterdir()
+                    if path.is_dir() and (path / 'session.json').exists()]
 
     def disk_guard(self, additional=0):
         remaining = sum(s['manifest']['size_bytes'] - s['offset'] for s in self.sessions()
@@ -135,7 +148,7 @@ class Uploads:
         return self.public(session) | {'token': token}
 
     def create(self, manifest):
-        with self.registry.lock:
+        with self.registry.lock, self.control_lock:
             try:
                 self.registry.assert_version_available(*manifest.key)
             except RegistryError:
@@ -163,7 +176,7 @@ class Uploads:
             raise HTTPException(401, 'Invalid or expired upload capability')
 
     def chunk(self, identifier, token, offset, data):
-        with self.registry.lock:
+        with self.registry.lock, self.control_lock:
             session = self.read(identifier)
             self.authorize(session, token)
             if session['state'] != 'uploading' or offset != session['offset']:
@@ -188,21 +201,23 @@ class Uploads:
             session = self.read(identifier)
             if session.get('operation'):
                 raise HTTPException(409, 'An operation is already running; poll status')
-            if action not in {'finalize', 'test', 'publish'}:
-                return self.action(identifier, action), 200
-            expected = {'finalize': 'uploaded', 'test': 'ready_for_test', 'publish': 'ready_for_activate'}
-            if session['state'] != expected[action]:
-                raise HTTPException(409, 'Session is not ready for this operation')
-            session['operation'] = action
-            session.pop('last_error', None)
-            self.save(session)
-            background.add_task(self.complete, identifier, action)
-            return self.public(session), 202
+            if action in {'finalize', 'test', 'publish'}:
+                expected = {'finalize': 'uploaded', 'test': 'ready_for_test', 'publish': 'ready_for_activate'}
+                if session['state'] != expected[action]:
+                    raise HTTPException(409, 'Session is not ready for this operation')
+                session['operation'] = action
+                session.pop('last_error', None)
+                self.save(session)
+                background.add_task(self.complete, identifier, action)
+                return self.public(session), 202
+        # Release metadata before waiting for registry; action rechecks the
+        # operation marker after acquiring both locks in the canonical order.
+        return self.action(identifier, action), 200
 
     def complete(self, identifier, action):
         error = None
         try:
-            self.action(identifier, action)
+            self.action(identifier, action, completing=True)
         except HTTPException as exc:
             error = 'unavailable' if exc.status_code in {503, 507} else 'validation_failed'
         except (RegistryError, OSError):
@@ -217,66 +232,85 @@ class Uploads:
                     session['last_error'] = error
                 self.save(session)
 
-    def action(self, identifier, action):
+    def action(self, identifier, action, *, completing=False):
         with self.registry.lock:
-            session = self.read(identifier)
-            directory = self.path(identifier) / 'candidate'
-            manifest = Manifest.model_validate(session['manifest'])
-            if action == 'renew':
-                return self.renew(session)
-            if action == 'cancel':
-                if session['published']:
-                    raise HTTPException(409, 'Published versions are immutable')
-                session['state'] = 'cancelled'
-                self.save(session)
-                # Only this incoming session; never remove published weights.
-                shutil.rmtree(directory, ignore_errors=True)
-            elif action == 'finalize':
-                if session['state'] != 'uploaded':
-                    raise HTTPException(409, 'Upload must be complete')
-                session['state'] = 'validating'
-                self.save(session)
-                try:
-                    self.disk_guard(manifest.size_bytes)  # private verification copy
-                    self.registry.validate_candidate(directory)
-                except (RegistryError, OSError):
+            with self.control_lock:
+                session = self.read(identifier)
+                operation = session.get('operation')
+                if operation and (not completing or operation != action):
+                    raise HTTPException(409, 'An operation is already running; poll status')
+                directory = self.path(identifier) / 'candidate'
+                manifest = Manifest.model_validate(session['manifest'])
+                expected = {'finalize': 'uploaded', 'test': 'ready_for_test', 'publish': 'ready_for_activate'}
+                if action in expected and session['state'] != expected[action]:
+                    raise HTTPException(409, 'Session is not ready for this operation')
+                if action == 'finalize':
+                    session['state'] = 'validating'
+                    self.save(session)
+                if action not in expected:
+                    return self._commit_action(identifier, action, directory, manifest)
+
+            # The registry lock excludes competing byte/control mutations;
+            # the durable operation marker rejects new scheduled work. Keep
+            # potentially long verification/GPU work outside the metadata lock.
+            try:
+                if action in {'finalize', 'test'} or (action == 'publish' and not session['published']):
+                    self.disk_guard(manifest.size_bytes)
+                    if action == 'test':
+                        self.compatibility(directory)
+                    else:
+                        self.registry.validate_candidate(directory)
+            except (RegistryError, OSError):
+                if action != 'finalize':
+                    raise
+                with self.control_lock:
+                    session = self.read(identifier)
                     session['state'] = 'failed'
                     self.save(session)
-                    raise HTTPException(422, 'Model integrity or format validation failed') from None
-                session['state'] = 'ready_for_test'
-            elif action == 'test':
-                if session['state'] != 'ready_for_test':
-                    raise HTTPException(409, 'Model is not ready for compatibility testing')
-                self.disk_guard(manifest.size_bytes)
-                self.compatibility(directory)
-                session['compatibility'] = 'structural_shape_passed_not_scientific_validation'
-                session['state'] = 'ready_for_activate'
-            elif action == 'publish':
-                if session['state'] != 'ready_for_activate':
-                    raise HTTPException(409, 'A successful compatibility test is required')
-                if not session['published']:
-                    self.disk_guard(manifest.size_bytes)
-                    self.registry.validate_candidate(directory)
-                    target = self.registry.assert_version_available(*manifest.key)
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    fsync_directory(self.registry.root)
-                    try:
-                        publish_no_replace(directory, target)
-                    except FileExistsError:
-                        raise HTTPException(409, 'Immutable version already exists') from None
-                    session['published'] = True
-            elif action in {'activate', 'deactivate'}:
-                if not session['published'] or session['state'] not in {'ready_for_activate', 'active'}:
-                    raise HTTPException(409, 'Publish tested model before activation')
-                active = self.registry.active_versions()
-                if action == 'activate':
-                    active.add(manifest.key)
-                    session['state'] = 'active'
-                else:
-                    active.discard(manifest.key)
-                    session['state'] = 'ready_for_activate'
-                atomic_json(self.registry.activation_file, {'active': [dict(model_id=m, version=v) for m, v in sorted(active)]})
-            else:
-                raise HTTPException(404, 'Unknown upload action')
+                raise HTTPException(422, 'Model integrity or format validation failed') from None
+
+            with self.control_lock:
+                return self._commit_action(identifier, action, directory, manifest)
+
+    def _commit_action(self, identifier, action, directory, manifest):
+        # Both locks are held; reload to preserve any reconciled metadata.
+        session = self.read(identifier)
+        if action == 'renew':
+            return self.renew(session)
+        if action == 'cancel':
+            if session['published']:
+                raise HTTPException(409, 'Published versions are immutable')
+            session['state'] = 'cancelled'
             self.save(session)
-            return self.public(session)
+            # Only this incoming session; never remove published weights.
+            shutil.rmtree(directory, ignore_errors=True)
+        elif action == 'finalize':
+            session['state'] = 'ready_for_test'
+        elif action == 'test':
+            session['compatibility'] = 'structural_shape_passed_not_scientific_validation'
+            session['state'] = 'ready_for_activate'
+        elif action == 'publish':
+            if not session['published']:
+                target = self.registry.assert_version_available(*manifest.key)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                fsync_directory(self.registry.root)
+                try:
+                    publish_no_replace(directory, target)
+                except FileExistsError:
+                    raise HTTPException(409, 'Immutable version already exists') from None
+                session['published'] = True
+        elif action in {'activate', 'deactivate'}:
+            if not session['published'] or session['state'] not in {'ready_for_activate', 'active'}:
+                raise HTTPException(409, 'Publish tested model before activation')
+            active = self.registry.active_versions()
+            if action == 'activate':
+                active.add(manifest.key)
+                session['state'] = 'active'
+            else:
+                active.discard(manifest.key)
+                session['state'] = 'ready_for_activate'
+            atomic_json(self.registry.activation_file, {'active': [dict(model_id=m, version=v) for m, v in sorted(active)]})
+        else:
+            raise HTTPException(404, 'Unknown upload action')
+        self.save(session)
+        return self.public(session)
