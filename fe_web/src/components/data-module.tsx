@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { ModelUploadForm } from "@/components/model-upload-form";
 import { NewsMediaManager } from "@/components/news-media-manager";
 import { Modal } from "@/components/modal";
 import { asRow, asRows, backend, bytes, display, type ApiResult, type Row } from "@/lib/client-api";
@@ -90,7 +91,7 @@ export function DataModule({ title }: { title: string }) {
       payload = data;
     } else {
       payload = Object.fromEntries(data);
-      for (const field of config.fields ?? []) {
+      for (const field of (editing?.managed_model_id ? [name, description] : config.fields) ?? []) {
         if (field.type === "checkbox") payload[field.name] = data.has(field.name);
         if (field.type === "number") payload[field.name] = Number(data.get(field.name) || 0);
       }
@@ -102,6 +103,7 @@ export function DataModule({ title }: { title: string }) {
 
   const closeDetail = () => setDetail(undefined);
   return <div className="data-module" aria-busy={loading || busy}>
+    {title === "Model management" && <ModelUploadForm />}
     <div className="module-toolbar">
       <form onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(query); }}><label className="sr-only" htmlFor="module-search">Search</label><input id="module-search" placeholder="Search records" value={query} onChange={(event) => setQuery(event.target.value)} /><button className="button button--secondary" disabled={busy}>Search</button></form>
       {config.filters && <select aria-label="Filter by status" value={status} onChange={(event) => { setPage(1); setStatus(event.target.value); }}><option value="">All statuses</option>{config.filters.map((value) => <option key={value}>{value}</option>)}</select>}
@@ -128,13 +130,13 @@ export function DataModule({ title }: { title: string }) {
           <button disabled={busy} onClick={() => void view(row)}>Details</button>
           {config.fields && <button disabled={busy} onClick={() => setEditing(row)}>{title === "Research news" ? "Edit article" : "Edit"}</button>}
           {title === "Research news" && <button disabled={busy} onClick={async () => { try { setMedia(asRow((await backend(`/admin/news/${row.id}`)).data)); } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to load media."); } }}>Manage media</button>}
-          {["User management", "Model management", "Research news"].includes(title) && <button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/toggle`, "PATCH", {}, "Change availability of this record?")}>{row.is_active === false || row.is_published === false ? "Enable" : "Disable"}</button>}
+          {["User management", "Model management", "Research news"].includes(title) && !row.managed_model_id && <button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/toggle`, "PATCH", {}, "Change availability of this record?")}>{row.is_active === false || row.is_published === false ? "Enable" : "Disable"}</button>}
           {title === "User management" && <><button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/reset-password`, "POST", {}, "Reset this account to its default password and revoke its sessions?")}>Reset password</button><button disabled={busy} onClick={() => { setDetail(row); }}>Profile</button></>}
-          {title === "Model management" && <><button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/health-check`, "POST", {})}>Health check</button><button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/test`, "POST", {}, "Run an inference test using the GPU worker?")}>Test</button></>}
+          {title === "Model management" && !row.managed_model_id && <><button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/health-check`, "POST", {})}>Health check</button><button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/test`, "POST", {}, "Run an inference test using the GPU worker?")}>Test</button></>}
           {title === "Access requests" && row.status === "pending" && <><button disabled={busy} onClick={() => void action(`${config.path}/${row.id}/approve`, "POST", {}, "Approve this request and issue an account?")}>Approve</button><button disabled={busy} onClick={() => { const note = window.prompt("Reason for rejection (optional)"); if (note !== null) void action(`${config.path}/${row.id}/reject`, "POST", { note }); }}>Reject</button></>}
           {title === "Support inbox" && <button disabled={busy} onClick={() => void action(`${config.path}/${row.id}`, "PATCH", { is_archived: !row.is_archived })}>{row.is_archived ? "Restore" : "Archive"}</button>}
           {title === "Notifications" && row.read === false && <button disabled={busy} onClick={() => void action(`/notifications/${row.id}/read`, "POST", {})}>Mark read</button>}
-          {!config.readOnly && title !== "Messages" && <button className="danger-action" disabled={busy} onClick={() => void action(`${config.path}/${row.id}`, "DELETE", undefined, "Permanently delete this record and its application files?")}>Delete</button>}
+          {!config.readOnly && title !== "Messages" && !row.managed_model_id && <button className="danger-action" disabled={busy} onClick={() => void action(`${config.path}/${row.id}`, "DELETE", undefined, "Permanently delete this record and its application files?")}>Delete</button>}
         </div></td></tr>)}
         {!rows.length && <tr><td colSpan={config.columns.length + 1}>{loading ? "Loading records…" : error ? "Unable to load records. Use Refresh to try again." : "No records found."}</td></tr>}
       </tbody></table></div>
@@ -145,7 +147,7 @@ export function DataModule({ title }: { title: string }) {
     {editing !== undefined && <Modal labelledBy="edit-title" onClose={() => setEditing(undefined)} busy={busy}><h2 id="edit-title">{title === "Research news" ? editing ? "Edit article" : "Create article" : editing ? "Edit record" : "Create record"}</h2>
       {title === "Research news" && <p className="module-note">Save your article first, then use Manage media to upload its image and video separately.</p>}
       <form className="module-form" onSubmit={save}>
-        {config.fields?.map((field) => <label key={field.name}><span>{field.label}</span>{field.type === "textarea" ? <textarea name={field.name} rows={field.name === "body" ? 10 : 3} defaultValue={editing ? String(editing[field.name] ?? "") : ""} required={field.required} maxLength={field.max} /> : field.options ? <select name={field.name} defaultValue={String(editing?.[field.name] ?? field.options[0])}>{field.options.map((option) => <option key={option}>{option}</option>)}</select> : field.type === "checkbox" ? <input name={field.name} type="checkbox" defaultChecked={field.name === "verify_tls" ? editing?.verify_tls !== false : Boolean(editing?.[field.name])} /> : <input name={field.name} type={field.type ?? "text"} defaultValue={field.type === "file" || field.type === "password" ? undefined : String(editing?.[field.name] ?? (field.type === "number" ? 0 : ""))} maxLength={field.max} required={field.required} autoComplete={field.type === "password" ? "new-password" : undefined} />}</label>)}
+        {(editing?.managed_model_id ? [name, description] : config.fields)?.map((field) => <label key={field.name}><span>{field.label}</span>{field.type === "textarea" ? <textarea name={field.name} rows={field.name === "body" ? 10 : 3} defaultValue={editing ? String(editing[field.name] ?? "") : ""} required={field.required} maxLength={field.max} /> : field.options ? <select name={field.name} defaultValue={String(editing?.[field.name] ?? field.options[0])}>{field.options.map((option) => <option key={option}>{option}</option>)}</select> : field.type === "checkbox" ? <input name={field.name} type="checkbox" defaultChecked={field.name === "verify_tls" ? editing?.verify_tls !== false : Boolean(editing?.[field.name])} /> : <input name={field.name} type={field.type ?? "text"} defaultValue={field.type === "file" || field.type === "password" ? undefined : String(editing?.[field.name] ?? (field.type === "number" ? 0 : ""))} maxLength={field.max} required={field.required} autoComplete={field.type === "password" ? "new-password" : undefined} />}</label>)}
         {error && <p className="form-message form-message--error" role="alert">{error}</p>}
         <div className="module-actions"><button className="button button--primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button><button className="button button--secondary" type="button" disabled={busy} onClick={() => setEditing(undefined)}>Cancel</button></div>
       </form></Modal>}

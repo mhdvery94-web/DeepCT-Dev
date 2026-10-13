@@ -14,7 +14,7 @@ virtual environment can alternatively install it with
 `uv pip sync --require-hashes requirements.lock`. This export has been checked,
 but the TensorFlow deployment installation and live loading have not been run.
 
-Configure the four environment variables in `.env.example` through the process
+Configure the environment variables in `.env.example` through the process
 supervisor. Both bearer tokens are required, nonempty and distinct. The app
 does not read `.env` automatically. Run exactly one process, without reload:
 
@@ -38,7 +38,7 @@ Each published directory is exactly
 The example manifest records the imported legacy version's verified checksum,
 not a newly validated scientific release. No weights are stored in Git.
 Treat published directories as immutable and make them read-only to the worker.
-Only a future management publisher may write new version directories. Invalid
+Only the management publisher may write new version directories. Invalid
 registry metadata fails the catalog closed; catalog reads small manifests and
 file stats only, without hashing weights or importing TensorFlow.
 
@@ -48,21 +48,59 @@ Activation is separate, outside this root, with an initially absent/empty file:
 {"active": []}
 ```
 
-After an authorized compatibility test, future management code can atomically
+After an authorized compatibility test, management code can atomically
 replace that file with explicit identities, for example
 `{"active":[{"model_id":"ginet-tcd-revisi","version":"1.0.0"}]}`.
 Publication alone never activates a version; ordinary inference refuses every
 inactive version. The catalog includes inactive versions with `active: false`.
 Activation is distinct from the one model currently resident in GPU memory.
 
-Task 5 integration seams: `validate_candidate(directory)` validates a staging
+Management integration seams: `validate_candidate(directory)` validates a staging
 directory and returns its manifest; `verified_snapshot(directory)` yields a
 private, hashed and screened copy usable for pre-activation compatibility tests;
 `assert_version_available(id, version)` performs preflight checks. Publication
 must implement atomic no-replace semantics and revalidation; the preflight is
 not a concurrency guarantee. Use `registry.lock` for management changes that
 must not race inference. `app.state.management_auth` is the separate bearer
-dependency; there are deliberately no upload, publish or activation routes yet.
+dependency. Management uses durable resumable sessions in the sibling `.incoming`
+directory. `POST /management/uploads` accepts a strict manifest (maximum 10 GiB),
+and returns a 15-minute session-scoped capability. Laravel owns admin/ownership
+authorization and renewal. Clients PUT at most 4 MiB directly to
+`/uploads/{uuid}` with `Authorization: Bearer <capability>` and `Upload-Offset`.
+No login credential or byte stream goes through Laravel. Configure exact browser
+origins with `DEEPCT_UPLOAD_ORIGINS`; HTTPS ingress must forward the upload route,
+allow these headers and PUT/OPTIONS, and enforce a 4 MiB request body limit for it.
+Management routes must remain on the trusted internal service path.
+
+`GET /management/uploads/{uuid}` reconciles durable state. POST actions are
+`renew`, `cancel`, `finalize`, `test`, `publish`, `activate`, `deactivate`.
+Validation/test/publication return 202 and run as owned background work; poll
+until `operation` disappears and inspect `last_error`. Restart returns interrupted
+validation to a retryable state; committed offsets survive, and uncommitted tail
+bytes are truncated. Disk admission reserves 2 GiB plus all outstanding upload
+bytes and any verification snapshot. Publication is atomic Linux rename-no-replace,
+retains immutable tuple identity, and leaves the candidate inactive.
+
+Compatibility requires positive trusted `DEEPCT_COMPATIBILITY_GPU_BYTES` and
+`DEEPCT_COMPATIBILITY_ADDRESS_BYTES`. Missing/invalid budgets, unverifiable GPU
+capacity, timeout or nonzero child exit leave compatibility unavailable. Before
+NumPy/TensorFlow imports the owned child sets RLIMIT_AS and RLIMIT_CORE=0, then
+sets TensorFlow's logical GPU memory limit before initialization and refuses CPU
+placement. The 60-second child timeout terminates only that owned child.
+RLIMIT_AS bounds virtual address space, not resident RAM or CUDA mappings. The
+budgets have no guessed defaults: Task 6 must validate safe workable mappings;
+otherwise retain unavailable until tested cgroup/container containment exists.
+GPU preflight is not a reservation against unrelated processes. Compatibility
+is runtime/shape evidence, never scientific acceptance or automatic activation.
+
+Laravel config uses `TUF_INTERNAL_URL` (root-only), `TUF_PUBLIC_UPLOAD_URL`
+(HTTPS; an ingress prefix is allowed), `TUF_MANAGEMENT_TOKEN`, and
+`TUF_INFERENCE_TOKEN`. The credentials must differ. Availability changes commit
+a local admission barrier before remote mutation. Timeout leaves it in place;
+configured authenticated catalog reconciliation clears it only after observing
+the exact tuple's desired availability. An old-state observation is insufficient.
+Existing manually registered aliases block availability changes with a conflict;
+their history is never relinked. Pending/processing CT jobs block deactivation.
 
 Only the selected model is loaded. Its checksum and graph are checked before
 load, from a private snapshot to avoid a source-replacement race. Manifest and

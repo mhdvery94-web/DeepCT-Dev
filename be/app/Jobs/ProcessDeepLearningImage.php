@@ -88,7 +88,8 @@ class ProcessDeepLearningImage implements ShouldQueue
             return;
         }
 
-        $this->record->update(['status' => 'processing', 'time_scalar' => 0.5]);
+        $this->record->update(['status' => 'processing', 'time_scalar' => 0.5,
+            'model_snapshot' => $this->record->model_snapshot ?? app(\App\Services\ModelAdmission::class)->snapshot($model)]);
         $model->increment('current_jobs_count');
 
         try {

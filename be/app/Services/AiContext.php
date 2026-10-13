@@ -26,7 +26,6 @@ class AiContext
                 $metrics[$key] = $value;
             }
         }
-        $model = $record->model()->first(['id', 'name', 'slug', 'version']);
         $provenance = [];
         foreach (array_slice($record->frame_provenance ?? [], 0, 8) as $row) {
             if (is_array($row)) {
@@ -41,9 +40,9 @@ class AiContext
             'output_files_count' => $record->output_files_count,
             'processing_time_seconds' => $record->processing_time_seconds,
             'expired' => $record->isExpired(), 'files_deleted' => $record->files_deleted_at !== null,
-            'model' => $model ? ['id' => $model->id, 'name' => mb_substr($model->name, 0, 120),
-                'slug' => $model->slug === null ? null : mb_substr($model->slug, 0, 120),
-                'version' => mb_substr($model->version, 0, 64)] : null,
+            'model' => $record->model_snapshot
+                ? array_intersect_key($record->model_snapshot, array_flip(['id', 'name', 'slug', 'version', 'model_id', 'sha256', 'provenance']))
+                : ['id' => $record->model_id, 'provenance' => 'historical_model_snapshot_unavailable'],
             'metrics' => $metrics,
             'validation_provenance' => $this->numericProvenance($record->validation ?? []),
             'frame_provenance' => $provenance,

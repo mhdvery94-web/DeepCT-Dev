@@ -62,4 +62,7 @@ def create_app(settings=None, registry=None):
             'Content-Disposition': f'attachment; filename="{model_id}-v{version}-prediction.tif"',
         })
 
+    from .upload_api import install_upload_routes
+    from .compatibility import Compatibility
+    install_upload_routes(app, registry, settings.upload_origins, Compatibility(registry, settings.compatibility_gpu_bytes, settings.compatibility_address_bytes))
     return app

@@ -9,7 +9,7 @@ from conftest import activate
 
 
 def test_catalog_compatible_identity_without_loading_weights_or_tensorflow(model_tree, monkeypatch):
-    root, activation, directory, _ = model_tree
+    root, activation, directory, manifest = model_tree
     def forbidden(*args, **kwargs):
         pytest.fail('catalog opened weights')
     import h5py
@@ -20,7 +20,7 @@ def test_catalog_compatible_identity_without_loading_weights_or_tensorflow(model
     assert catalog['models'][0] == {
         'name': 'ginet-tcd-revisi-v1-0-0', 'display_name': 'GINet TC-D Revisi',
         'description': 'Imported test fixture', 'model_id': 'ginet-tcd-revisi',
-        'version': '1.0.0', 'file': 'model.h5',
+        'version': '1.0.0', 'file': 'model.h5', 'sha256': manifest['sha256'],
         'endpoint': '/predict/ginet-tcd-revisi/1.0.0', 'active': False,
     }
     assert 'tensorflow' not in sys.modules

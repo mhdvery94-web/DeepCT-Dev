@@ -78,6 +78,7 @@ class ModelController extends Controller
             ], 422);
         }
 
+        app(\App\Services\ManagedEndpointGuard::class)->assertManualTarget($request->endpoint_url);
         $model = Model::create([
             'name' => $request->name,
             'slug' => $this->uniqueSlug($request->name),
@@ -156,6 +157,7 @@ class ModelController extends Controller
             ], 422);
         }
 
+        app(\App\Services\ManagedEndpointGuard::class)->assertManualTarget($baseUrl, true);
         try {
             $result = $this->catalogSync->sync(
                 $baseUrl,
@@ -233,6 +235,11 @@ class ModelController extends Controller
             ], 422);
         }
 
+        abort_if($model->managed_model_id && array_diff(array_keys($request->all()), ['name', 'description']), 422, 'Managed identity is immutable; only display metadata may be edited.');
+        if ($request->has('endpoint_url')) {
+            app(\App\Services\ManagedEndpointGuard::class)->assertManualTarget($request->endpoint_url);
+        }
+
         $oldData = $model->only(['name', 'version', 'endpoint_url']);
         $model->update($request->only(['name', 'version', 'description']));
 
@@ -287,6 +294,8 @@ class ModelController extends Controller
     {
         $model = Model::findOrFail($id);
 
+        abort_if($model->managed_model_id, 409, 'Managed versions are retained for provenance and rollback.');
+
         // Check if model has active jobs
         if ($model->current_jobs_count > 0) {
             return response()->json([
@@ -296,7 +305,7 @@ class ModelController extends Controller
         }
 
         $modelName = $model->name;
-        $model->delete();
+        app(\App\Services\ModelAdmission::class)->delete($model);
 
         // Log activity
         UserActivity::create([
@@ -324,6 +333,8 @@ class ModelController extends Controller
     {
         $model = Model::findOrFail($id);
 
+        abort_if($model->managed_model_id, 409, 'Use managed activation controls.');
+
         // Check if has active jobs
         if ($model->is_active && $model->current_jobs_count > 0) {
             return response()->json([
@@ -332,8 +343,7 @@ class ModelController extends Controller
             ], 403);
         }
 
-        $model->is_active = !$model->is_active;
-        $model->save();
+        $model = app(\App\Services\ModelAdmission::class)->toggle($model);
 
         // Log activity
         UserActivity::create([

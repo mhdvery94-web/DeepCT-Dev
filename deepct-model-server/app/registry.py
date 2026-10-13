@@ -18,7 +18,7 @@ class RegistryError(ValueError):
 
 MODEL_ID = r'[a-z0-9]+(?:-[a-z0-9]+)*'
 VERSION = r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)'
-MAX_WEIGHTS = 2 * 1024**3
+MAX_WEIGHTS = 10 * 1024**3
 
 
 class StrictModel(BaseModel):
@@ -182,7 +182,7 @@ class Registry:
             rows.append({
                 'name': f'{manifest.model_id}-v{manifest.version.replace(".", "-")}',
                 'display_name': manifest.name, 'description': manifest.description,
-                'model_id': manifest.model_id, 'version': manifest.version,
+                'model_id': manifest.model_id, 'version': manifest.version, 'sha256': manifest.sha256,
                 'file': manifest.weight_file,
                 'endpoint': f'/predict/{manifest.model_id}/{manifest.version}',
                 'active': manifest.key in active,

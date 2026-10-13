@@ -3,6 +3,7 @@
 /// Models are deployed remotely (FastAPI worker). Several rows may
 /// share [baseUrl] while each keeps its own [endpoint] prediction path.
 class ModelInfo {
+  final String? managedModelId;
   final int id;
   final String name;
   final String version;
@@ -49,6 +50,7 @@ class ModelInfo {
   final bool verifyTls;
 
   const ModelInfo({
+    this.managedModelId,
     required this.id,
     required this.name,
     required this.version,
@@ -100,6 +102,7 @@ class ModelInfo {
 
   factory ModelInfo.fromJson(Map<String, dynamic> json) {
     return ModelInfo(
+      managedModelId: json['managed_model_id']?.toString(),
       id: _toInt(json['id']),
       name: json['name']?.toString() ?? '-',
       version: json['version']?.toString() ?? '-',

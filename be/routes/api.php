@@ -131,6 +131,13 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
         Route::post('/users/{id}/avatar', [AvatarController::class, 'updateFor'])->name('api.admin.users.avatar.update');
         Route::delete('/users/{id}/avatar', [AvatarController::class, 'destroyFor'])->name('api.admin.users.avatar.destroy');
         
+        $uploads = \App\Http\Controllers\API\ModelUploadController::class;
+        Route::get('/model-uploads', [$uploads, 'index']);
+        Route::post('/model-uploads', [$uploads, 'store']);
+        Route::post('/model-uploads/sync', [$uploads, 'sync']);
+        Route::get('/model-uploads/{id}', [$uploads, 'show'])->whereNumber('id');
+        Route::post('/model-uploads/{id}/{action}', [$uploads, 'action'])->whereNumber('id');
+
         // Model management
         Route::get('/models', [ModelController::class, 'index'])->name('api.admin.models.index');
         Route::post('/models', [ModelController::class, 'store'])->name('api.admin.models.store');

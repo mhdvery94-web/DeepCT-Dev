@@ -430,24 +430,31 @@ class AnalysisController extends Controller
         $jobId = (string) \Illuminate\Support\Str::uuid();
         $base = "predictions/{$original->user_id}/{$jobId}";
 
-        foreach (Storage::files($original->input_folder) as $file) {
-            Storage::copy($file, "{$base}/input/" . basename($file));
+        try {
+            foreach (Storage::files($original->input_folder) as $file) {
+                Storage::copy($file, "{$base}/input/" . basename($file));
+            }
+
+            Storage::makeDirectory("{$base}/output");
+
+            $rerun = app(\App\Services\ModelAdmission::class)->createPending($model, [
+                'job_id' => $jobId,
+                'user_id' => $original->user_id,
+                'model_id' => $model->id,
+                'rerun_of_id' => $original->rerun_of_id ?? $original->id,
+                'file_name' => $original->file_name,
+                'input_folder' => "{$base}/input",
+                'output_folder' => "{$base}/output",
+                'input_files_count' => $original->input_files_count,
+                'status' => 'pending',
+                'expires_at' => now()->addHours(24),
+            ]);
+        } catch (\Throwable $error) {
+            // This request owns only the new copy. Admission can be rejected
+            // after a concurrent availability change; preserve original input.
+            Storage::deleteDirectory($base);
+            throw $error;
         }
-
-        Storage::makeDirectory("{$base}/output");
-
-        $rerun = AnalysisRecord::create([
-            'job_id' => $jobId,
-            'user_id' => $original->user_id,
-            'model_id' => $model->id,
-            'rerun_of_id' => $original->rerun_of_id ?? $original->id,
-            'file_name' => $original->file_name,
-            'input_folder' => "{$base}/input",
-            'output_folder' => "{$base}/output",
-            'input_files_count' => $original->input_files_count,
-            'status' => 'pending',
-            'expires_at' => now()->addHours(24),
-        ]);
 
         ProcessDeepLearningImage::dispatch($rerun);
 
@@ -605,7 +612,7 @@ class AnalysisController extends Controller
             ], 409);
         }
 
-        $prediction->update(['status' => 'pending']);
+        $prediction = app(\App\Services\ModelAdmission::class)->start($prediction);
 
         ProcessDeepLearningImage::dispatch($prediction);
 

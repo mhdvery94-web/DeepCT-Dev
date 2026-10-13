@@ -152,6 +152,29 @@ class PredictionPipelineTest extends TestCase
 
     // ---------------------------------------------------------------- tests
 
+    public function test_queued_selected_version_retains_snapshot_after_display_edit_and_new_version(): void
+    {
+        Queue::fake();
+        $this->fakeWorkerReturnsFrames();
+        $this->model->update(['version' => '1.0.0', 'managed_model_id' => 'fixture', 'worker_active' => true,
+            'weight_sha256' => str_repeat('a', 64), 'endpoint_url' => 'https://worker.example/predict/fixture/1.0.0']);
+        $this->upload();
+        $record = AnalysisRecord::firstOrFail();
+        $this->assertSame('pending', $record->status);
+        $this->model->update(['name' => 'Edited after admission']);
+        Model::create(['name' => 'New version', 'version' => '2.0.0', 'managed_model_id' => 'fixture',
+            'weight_sha256' => str_repeat('b', 64), 'is_active' => true, 'worker_active' => true,
+            'endpoint_url' => 'https://worker.example/predict/fixture/2.0.0']);
+        (new ProcessDeepLearningImage($record))->handle();
+        $record->refresh();
+        $this->assertSame('completed', $record->status, $record->error_message ?? '');
+        $this->assertSame('Test Model', $record->model_snapshot['name']);
+        $this->assertSame('1.0.0', $record->model_snapshot['version']);
+        $this->assertSame(str_repeat('a', 64), $record->model_snapshot['sha256']);
+        Http::assertSent(fn ($request) => $request->url() === 'https://worker.example/predict/fixture/1.0.0');
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/2.0.0'));
+    }
+
     public function test_upload_queues_a_job(): void
     {
         $this->fakeWorkerReturnsFrames();
@@ -469,6 +492,7 @@ class PredictionPipelineTest extends TestCase
             'name' => 'Second opinion',
             'version' => '2.0',
             'endpoint_url' => 'https://worker.example/predict',
+            'status' => 'online',
             'is_active' => true,
         ]);
 
@@ -502,6 +526,7 @@ class PredictionPipelineTest extends TestCase
             'name' => 'Second opinion',
             'version' => '2.0',
             'endpoint_url' => 'https://worker.example/predict',
+            'status' => 'online',
             'is_active' => true,
         ]);
 

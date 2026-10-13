@@ -322,3 +322,9 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 8px 12px
   .button, input, select, textarea, .row-actions button, .row-actions a { transition: none; }
   .button:not(:disabled):hover { transform: none; }
 }
+
+.model-upload-panel { margin-bottom: 24px; padding: 24px; border: 1px solid #cbd5e1; border-top: 4px solid #B91C1C; background: #fff; color: #0f172a; }
+.model-upload-panel button, .model-upload-panel input, .model-upload-panel select { min-height: 44px; }
+.model-upload-panel .module-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.model-upload-panel progress { width: 100%; accent-color: #B91C1C; }
+.model-upload-panel select { max-width: 100%; }

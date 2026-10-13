@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Model as EloquentModel;
 class Model extends EloquentModel
 {
     protected $fillable = [
+        'managed_model_id',
+        'weight_sha256',
+        'availability_transition',
         'name',
         'slug',
         'version',
@@ -63,6 +66,7 @@ class Model extends EloquentModel
     }
 
     protected $casts = [
+        'availability_transition' => 'array',
         // Encrypted at rest: a database dump should not hand over the key to
         // someone else's GPU.
         'auth_token' => 'encrypted',

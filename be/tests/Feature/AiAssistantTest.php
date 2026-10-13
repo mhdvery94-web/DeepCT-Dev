@@ -443,6 +443,7 @@ class AiAssistantTest extends TestCase
         ]);
         $record = AnalysisRecord::create([
             'user_id' => $this->owner->id, 'model_id' => $model->id, 'job_id' => 'expired-context',
+            'model_snapshot' => app(\App\Services\ModelAdmission::class)->snapshot($model),
             'status' => 'completed', 'expires_at' => now()->subDay(), 'files_deleted_at' => now(),
             'input_files_count' => 2, 'output_files_count' => 1, 'processing_time_seconds' => 12,
             'frame_provenance' => array_fill(0, 12, ['index' => 4, 'from' => [2, 6], 'generation' => 1,

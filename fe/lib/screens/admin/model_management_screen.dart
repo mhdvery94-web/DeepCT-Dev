@@ -8,6 +8,7 @@ import '../../services/admin_model_service.dart';
 import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_dialog.dart';
+import '../../widgets/model_upload_dialog.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
 import '../../widgets/model_status_strip.dart';
@@ -66,7 +67,6 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
       });
     }
   }
-
 
   /// Failures here are silent on purpose: this is a secondary panel, and a
   /// model worker that is unreachable must not take the model list with
@@ -257,9 +257,22 @@ class _ModelManagementScreenState extends State<ModelManagementScreen> {
           label: const Text('REFRESH'),
         ),
         ElevatedButton.icon(
+          onPressed: () async {
+            await showAppDialog<void>(
+              context: context,
+              barrierDismissible: false,
+              maxWidth: 640,
+              builder: (_) => const ModelUploadDialog(),
+            );
+            if (mounted) _load();
+          },
+          icon: const Icon(Icons.upload_file, size: 16),
+          label: const Text('UPLOAD MODEL TUF'),
+        ),
+        ElevatedButton.icon(
           onPressed: () => _openModelDialog(),
           icon: const Icon(Icons.add, size: 16),
-          label: const Text('ADD MODEL'),
+          label: const Text('ADD LEGACY ENDPOINT'),
         ),
       ],
     );
@@ -480,7 +493,9 @@ class _ModelCard extends StatelessWidget {
                         : 'Model must be online to test',
                     icon: const Icon(Icons.science_outlined, size: 18),
                     onPressed: model.isOnline && model.isActive
-                        ? onTestPrediction
+                        ? (model.managedModelId == null
+                              ? onTestPrediction
+                              : null)
                         : null,
                   ),
                 ],
@@ -496,7 +511,7 @@ class _ModelCard extends StatelessWidget {
                         ? AppTheme.success
                         : AppTheme.textMuted,
                   ),
-                  onPressed: onToggle,
+                  onPressed: model.managedModelId == null ? onToggle : null,
                 ),
                 IconButton(
                   tooltip: 'Edit',
@@ -510,7 +525,7 @@ class _ModelCard extends StatelessWidget {
                     size: 18,
                     color: AppTheme.error,
                   ),
-                  onPressed: onDelete,
+                  onPressed: model.managedModelId == null ? onDelete : null,
                 ),
               ],
             ),
@@ -617,17 +632,25 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
         await widget.service.update(
           id: widget.existing!.id,
           name: _name.text.trim(),
-          version: _version.text.trim(),
-          endpointUrl: _endpoint.text.trim(),
+          version: widget.existing!.managedModelId == null
+              ? _version.text.trim()
+              : null,
+          endpointUrl: widget.existing!.managedModelId == null
+              ? _endpoint.text.trim()
+              : null,
           description: _description.text.trim(),
           // Three meanings, and the difference matters: null leaves the
           // stored secret alone, '' clears it, and a string replaces it.
           // Sending the field unconditionally would wipe the credential every
           // time somebody fixed a typo in the description.
-          authToken: _clearAuthToken
+          authToken: widget.existing!.managedModelId != null
+              ? null
+              : _clearAuthToken
               ? ''
               : (typed.isEmpty ? null : typed),
-          verifyTls: _verifyTls,
+          verifyTls: widget.existing!.managedModelId == null
+              ? _verifyTls
+              : null,
         );
       } else {
         await widget.service.create(
@@ -697,89 +720,91 @@ class _ModelFormDialogState extends State<_ModelFormDialog> {
                       : null,
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: _version,
-                  decoration: const InputDecoration(
-                    labelText: 'VERSION',
-                    hintText: 'e.g. v3.0',
-                  ),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Version is required'
-                      : null,
-                ),
-                const SizedBox(height: 16),
+                if (widget.existing?.managedModelId == null) ...[
                   TextFormField(
-                  controller: _endpoint,
-                  decoration: const InputDecoration(
-                    labelText: 'ENDPOINT URL',
-                    helperText: 'Inference URL, e.g. .../predict',
+                    controller: _version,
+                    decoration: const InputDecoration(
+                      labelText: 'VERSION',
+                      hintText: 'e.g. v3.0',
+                    ),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Version is required'
+                        : null,
                   ),
-                  validator: (v) {
-                    final value = v?.trim() ?? '';
-                    if (value.isEmpty) return 'Endpoint URL is required';
-                    final uri = Uri.tryParse(value);
-                    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
-                      return 'Enter a full URL including https://';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _authToken,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: _isEdit && widget.existing!.hasAuthToken
-                        ? 'SHARED SECRET (LEAVE BLANK TO KEEP)'
-                        : 'SHARED SECRET (OPTIONAL)',
-                    helperText: _isEdit && widget.existing!.hasAuthToken
-                        ? 'A secret is set. Type a new one to replace it.'
-                        : 'Sent to the worker as Authorization: Bearer. '
-                              'Required once the worker is on a network other '
-                              'people can reach.',
-                    helperMaxLines: 3,
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _endpoint,
+                    decoration: const InputDecoration(
+                      labelText: 'ENDPOINT URL',
+                      helperText: 'Inference URL, e.g. .../predict',
+                    ),
+                    validator: (v) {
+                      final value = v?.trim() ?? '';
+                      if (value.isEmpty) return 'Endpoint URL is required';
+                      final uri = Uri.tryParse(value);
+                      if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+                        return 'Enter a full URL including https://';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-                if (_isEdit && widget.existing!.hasAuthToken) ...[
-                  const SizedBox(height: 4),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: () =>
-                          setState(() => _clearAuthToken = !_clearAuthToken),
-                      style: TextButton.styleFrom(
-                        foregroundColor: _clearAuthToken
-                            ? AppTheme.error
-                            : AppTheme.textMuted,
-                        padding: EdgeInsets.zero,
-                      ),
-                      child: Text(
-                        _clearAuthToken
-                            ? 'SECRET WILL BE REMOVED ON SAVE — UNDO'
-                            : 'REMOVE SECRET',
-                      ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _authToken,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: _isEdit && widget.existing!.hasAuthToken
+                          ? 'SHARED SECRET (LEAVE BLANK TO KEEP)'
+                          : 'SHARED SECRET (OPTIONAL)',
+                      helperText: _isEdit && widget.existing!.hasAuthToken
+                          ? 'A secret is set. Type a new one to replace it.'
+                          : 'Sent to the worker as Authorization: Bearer. '
+                                'Required once the worker is on a network other '
+                                'people can reach.',
+                      helperMaxLines: 3,
                     ),
                   ),
-                ],
+                  if (_isEdit && widget.existing!.hasAuthToken) ...[
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () =>
+                            setState(() => _clearAuthToken = !_clearAuthToken),
+                        style: TextButton.styleFrom(
+                          foregroundColor: _clearAuthToken
+                              ? AppTheme.error
+                              : AppTheme.textMuted,
+                          padding: EdgeInsets.zero,
+                        ),
+                        child: Text(
+                          _clearAuthToken
+                              ? 'SECRET WILL BE REMOVED ON SAVE — UNDO'
+                              : 'REMOVE SECRET',
+                        ),
+                      ),
+                    ),
+                  ],
 
-                const SizedBox(height: 8),
-                CheckboxListTile(
-                  value: _verifyTls,
-                  onChanged: (v) => setState(() => _verifyTls = v ?? false),
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('Verify TLS certificate'),
-                  // Checked by default when creating, so a new endpoint gets
-                  // the secure answer; a tunnel or a self-signed certificate
-                  // on the LAN is the case for turning it off, and that should
-                  // be a decision somebody makes on purpose.
-                  subtitle: Text(
-                    'Turn off only for a tunnel or a self-signed certificate.',
-                    style: Theme.of(context).textTheme.labelSmall,
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    value: _verifyTls,
+                    onChanged: (v) => setState(() => _verifyTls = v ?? false),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('Verify TLS certificate'),
+                    // Checked by default when creating, so a new endpoint gets
+                    // the secure answer; a tunnel or a self-signed certificate
+                    // on the LAN is the case for turning it off, and that should
+                    // be a decision somebody makes on purpose.
+                    subtitle: Text(
+                      'Turn off only for a tunnel or a self-signed certificate.',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
                   ),
-                ),
 
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                ],
                 TextFormField(
                   controller: _description,
                   maxLines: 3,
