@@ -54,18 +54,23 @@ expired dan permintaan tidak aman. Fitur asisten produksi tetap nonaktif.
 | Laravel staging Raspi | Login kedua role HTTP 200; management admin 200, user 403, anonim 401; history 200; `/ai/status` melaporkan `enabled=false`. Token smoke dicabut. Database, APP_KEY dan storage terpisah. |
 | Model CT di TUF | TensorFlow 2.17/Keras 3.15.1 berjalan di RTX 4060; ini jalur prediksi CT, bukan Ollama. Output reference 1024×1024 uint16 dibandingkan worker lama: selisih maksimum 1 pada 126 dari 1.048.576 piksel untuk jalur compiled. Belum merupakan penerimaan ilmiah atau exact match. |
 | Kompatibilitas model | Trusted checkpoint lulus pada runtime Conda lama dalam 9.331 detik dan venv staging baru dengan dependency CUDA terkunci dalam 8.367 detik. Batas GPU 5 GiB, virtual address 24 GiB, cgroup RAM 4 GiB dan swap nol. Ini tidak menyatakan model arbitrer atau bobot 10 GiB pasti dapat dimuat. |
-| Next.js | 20 tes dan build lulus; 66 pemeriksaan HTTP/browser nyata dengan API terisolasi pada 1366/768/390 px. Provider LLM dan eksekusi numerik pada harness diganti fixture; kualitas LLM tidak terbukti oleh UI. |
-| Flutter | Suite terdahulu 248 tes, analyze dan build JavaScript web lulus. Pemeriksaan browser 390 px menguji mobile web Next.js; belum merupakan UAT aplikasi Flutter pada perangkat fisik. |
+| Next.js | Suite final source 21 tes, check dan build lulus. Preview publik terproteksi juga diuji dengan login Laravel nyata kedua role pada 1366/768/390 px. Model asli selesai direct upload/resume, validasi, GPU compatibility dan publish nonaktif. Provider LLM tetap disabled; UI tidak membuktikan kualitasnya. |
+| Flutter | Suite final source 251 tes, analyze dan build JavaScript web lulus. Pemeriksaan browser 390 px menguji mobile web Next.js; belum merupakan UAT aplikasi Flutter pada perangkat fisik. |
 
-CI GitHub terakhir yang diperiksa masih menjalankan `main` pada baseline
-`29348144`; perubahan fitur ini berada pada branch pengembangan lokal.
-Deployment Vercel yang diperiksa berstatus READY, tetapi inspeksi tidak
-memberikan SHA Git. Status READY sendiri tidak membuktikan fitur baru telah
-dirilis. Runtime staging baru awalnya tidak mendeteksi GPU saat hanya memakai
+Pemeriksaan akhir GitHub melihat main tetap `29348144` dan dua workflow develop
+sukses pada baseline `1ceedb5`, bukan source fitur baru. Native API Vercel
+memverifikasi preview READY dengan metadata source `4f971be`, root `fe_web`,
+dan API staging terisolasi. Model tetap nonaktif; promosi GitHub menunggu variable
+API branch karena Actions Variables API ditolak 403. Detail transfer publik,
+backup/restore dan batas verifikasi ada di
+[DEPLOYMENT_CHECKPOINT.md](DEPLOYMENT_CHECKPOINT.md).
+Runtime staging baru awalnya tidak mendeteksi GPU saat hanya memakai
 TensorFlow base. Setelah memasang dependency resmi `tensorflow[and-cuda]`
 dengan hash terverifikasi, GPU terdeteksi dan uji child dengan checkpoint
 terverifikasi lulus. Penerimaan publik/staging, toleransi ilmiah dan kualitas
-provider tetap harus dicatat terpisah sebelum promosi produksi.
+provider tetap harus dicatat terpisah sebelum promosi produksi. Pemeriksaan SSH
+akhir kembali tidak melihat device node, PCIe atau modul Hailo; Ollama 0.11.4
+aktif tanpa model yang sedang dimuat setelah probe sebelumnya selesai.
 
 Sumber jawaban kurang tepat perlu diperiksa pada kapasitas model distil kecil,
 kuantisasi, konteks/prompt, anggaran reasoning dan grounding. Kecepatan CPU

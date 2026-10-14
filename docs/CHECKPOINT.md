@@ -1,5 +1,17 @@
 # Checkpoint proyek — 14 Oktober 2026
 
+## Staging aktual — 14 Oktober 2026
+
+Source reviewed `4f971be` sudah dipasang pada Laravel/TUF staging terisolasi dan
+preview Next.js Vercel. Trusted model 87.796.792 byte selesai resume, validasi,
+uji GPU, dan publish nonaktif. Unduhan signed ZIP 8.391.066 byte serta restore
+database/model/state terisi lulus. Source branch GitHub belum dipromosikan karena
+Actions Variables 403; LLM dan aktivasi produksi tetap tertutup oleh quality/
+scientific gates. Laporan lengkap, URL preview, checksum dan batas verifikasi:
+[DEPLOYMENT_CHECKPOINT.md](DEPLOYMENT_CHECKPOINT.md).
+
+Bagian di bawah mencatat keadaan saat persiapan dan riwayat rilis sebelumnya.
+
 ## Persiapan rilis — 14 Oktober 2026
 
 Task 7 berdasarkan `fcd6af9` menambah required Python 3.11 CPU job yang memakai

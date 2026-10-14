@@ -2,6 +2,11 @@
 
 ## Gate dan status
 
+Status staging aktual, transfer/GPU/restore dan penghalang promosi Git dicatat
+di [DEPLOYMENT_CHECKPOINT.md](DEPLOYMENT_CHECKPOINT.md). Bagian berikut menjelaskan
+prosedur dan keadaan saat persiapan Task 7; publikasi Vercel preview sudah
+diverifikasi terpisah dan tidak merupakan rilis produksi.
+
 Task 7 menyiapkan konfigurasi yang dapat ditinjau; perubahan source Tasks 1–7
 belum merupakan bukti deployment publik. Controller melakukan operasi Pi/TUF,
 review seluruh branch, promosi Git dan Vercel. Jangan membuat worktree baru;
