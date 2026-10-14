@@ -35,7 +35,7 @@ class AiContext
 
         return [[
             'type' => 'analysis_record', 'id' => $record->id,
-            'status' => in_array($record->status, ['pending', 'processing', 'completed', 'failed'], true) ? $record->status : 'unknown',
+            'status' => in_array($record->status, ['uploaded', 'pending', 'processing', 'completed', 'failed'], true) ? $record->status : 'unknown',
             'input_files_count' => $record->input_files_count,
             'output_files_count' => $record->output_files_count,
             'processing_time_seconds' => $record->processing_time_seconds,
@@ -71,6 +71,7 @@ class AiContext
         // metadata are data, not an authority to access files or run tools.
         $instruction = 'Anda asisten eksperimental DeepCT. Jawab ringkas dalam bahasa Indonesia. '
             .'Jawaban bukan nasihat ilmiah terverifikasi. Jangan mengarang hasil, status, atau metrik. '
+            .'Status uploaded berarti berkas tersedia untuk ditinjau dan menunggu Start; belum diproses. '
             .'Status pending berarti menunggu, bukan selesai. Gunakan hanya metadata server yang diberikan. '
             .'Anda tidak membaca byte TIFF; jika expired atau files_deleted, jelaskan bahwa hanya metadata tersimpan yang tersedia. '
             .'Jangan menjalankan alat, membaca file, atau meminta rahasia. '

@@ -135,3 +135,73 @@ def test_status_recovers_activation_file_committed_before_session_metadata(uploa
     assert client.get('/management/uploads/' + session['id'], headers=MGMT).json()['state'] == 'active'
     activation.write_text('{"active": []}')
     assert client.get('/management/uploads/' + session['id'], headers=MGMT).json()['state'] == 'ready_for_activate'
+
+
+def test_lost_create_response_replays_exact_intent_after_restart(upload_client):
+    client, app, manifest, data = upload_client
+    intent = '11111111-1111-4111-8111-111111111111'
+    headers = MGMT | {'Idempotency-Key': intent}
+    first = client.post('/management/uploads', json=manifest, headers=headers).json()
+    assert put(client, first, data[:100]).status_code == 200
+    restarted = create_app(settings(app.state.registry.root, app.state.registry.activation_file))
+    client = TestClient(restarted)
+    restarted.state.uploads.free_bytes = lambda: 0
+    replay = client.post('/management/uploads', json=manifest, headers=headers)
+    assert replay.status_code == 201, replay.text
+    assert replay.json()['id'] == first['id']
+    assert replay.json()['offset'] == 100
+    assert len(list(restarted.state.uploads.sessions())) == 1
+    assert client.post('/management/uploads', json=manifest | {'name': 'changed'}, headers=headers).status_code == 409
+    assert client.post('/management/uploads', json=manifest, headers=MGMT | {'Idempotency-Key': '22222222-2222-4222-8222-222222222222'}).status_code == 409
+
+
+def test_availability_revisions_ignore_delayed_old_targets(upload_client):
+    client, app, manifest, data = upload_client
+    session = begin(client, manifest)
+    put(client, session, data)
+    action(client, session, 'finalize')
+    app.state.uploads.compatibility = lambda _: None
+    action(client, session, 'test')
+    action(client, session, 'publish')
+    path = '/management/uploads/' + session['id']
+    assert client.post(path + '/activate', json={'revision': 1}, headers=MGMT).json()['state'] == 'active'
+    assert client.post(path + '/activate', json={'revision': 1}, headers=MGMT).json()['state'] == 'active'
+    assert client.post(path + '/deactivate', json={'revision': 1}, headers=MGMT).status_code == 409
+    assert client.post(path + '/deactivate', json={'revision': 2}, headers=MGMT).json()['state'] == 'ready_for_activate'
+    assert client.post(path + '/activate', json={'revision': 1}, headers=MGMT).json()['state'] == 'ready_for_activate'
+    assert app.state.registry.active_versions() == set()
+
+
+def test_availability_revision_survives_restart_before_activation_commit(upload_client, monkeypatch):
+    import app.uploads as module
+    client, app, manifest, data = upload_client
+    session = begin(client, manifest)
+    put(client, session, data)
+    action(client, session, 'finalize')
+    app.state.uploads.compatibility = lambda _: None
+    action(client, session, 'test')
+    action(client, session, 'publish')
+    path = '/management/uploads/' + session['id']
+    assert client.post(path + '/activate', json={'revision': 1}, headers=MGMT).status_code == 200
+    write = module.atomic_json
+    def fail_activation(target, payload):
+        if target == app.state.registry.activation_file:
+            raise OSError('interrupted before activation commit')
+        write(target, payload)
+    monkeypatch.setattr(module, 'atomic_json', fail_activation)
+    with pytest.raises(OSError):
+        client.post(path + '/deactivate', json={'revision': 2}, headers=MGMT)
+    monkeypatch.setattr(module, 'atomic_json', write)
+    restarted = create_app(settings(app.state.registry.root, app.state.registry.activation_file))
+    client = TestClient(restarted)
+    assert client.post(path + '/deactivate', json={'revision': 2}, headers=MGMT).json()['state'] == 'ready_for_activate'
+    assert client.post(path + '/activate', json={'revision': 1}, headers=MGMT).json()['state'] == 'ready_for_activate'
+    assert client.post(path + '/activate', headers=MGMT).status_code == 409
+    assert restarted.state.registry.active_versions() == set()
+
+
+def test_availability_revision_requires_integer_not_boolean(upload_client):
+    client, _, manifest, _ = upload_client
+    session = begin(client, manifest)
+    path = '/management/uploads/' + session['id'] + '/activate'
+    assert client.post(path, json={'revision': True}, headers=MGMT).status_code == 422

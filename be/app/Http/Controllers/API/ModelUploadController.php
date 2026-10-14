@@ -7,6 +7,7 @@ use App\Models\Model;
 use App\Models\ModelUpload;
 use App\Services\ModelUploads;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class ModelUploadController extends Controller
 {
@@ -14,14 +15,28 @@ class ModelUploadController extends Controller
 
     public function index(Request $request)
     {
-        return response()->json(['data' => ModelUpload::where('user_id', $request->user()->id)->latest()->limit(100)->get()]);
+        $input = $request->validate(['page' => 'sometimes|integer|min:1', 'search' => 'sometimes|nullable|string|max:80']);
+        $query = ModelUpload::where('user_id', $request->user()->id);
+        if (($input['search'] ?? '') !== '') {
+            $term = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $input['search']);
+            $query->where(function ($q) use ($term) {
+                $q->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(manifest, '$.model_id')) LIKE ? ESCAPE '!'", ['%'.$term.'%'])
+                    ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(manifest, '$.version')) LIKE ? ESCAPE '!'", ['%'.$term.'%']);
+            });
+        }
+        $page = $query->latest('id')->paginate(50);
+
+        return response()->json(['data' => $page->items(), 'pagination' => [
+            'current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'total' => $page->total(), 'per_page' => 50,
+        ]]);
     }
 
     public function store(Request $request)
     {
-        $fields = ['schema_version', 'model_id', 'version', 'name', 'description', 'framework', 'adapter', 'weight_file', 'sha256', 'size_bytes', 'input'];
+        $fields = ['creation_key', 'schema_version', 'model_id', 'version', 'name', 'description', 'framework', 'adapter', 'weight_file', 'sha256', 'size_bytes', 'input'];
         abort_if(array_diff(array_keys($request->all()), $fields), 422, 'Unknown manifest fields.');
         $manifest = $request->validate([
+            'creation_key' => 'sometimes|uuid',
             'schema_version' => 'required|integer|in:1', 'model_id' => ['required', 'string', 'max:80', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/D'],
             'version' => ['required', 'string', 'max:40', 'regex:/^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/D'],
             'name' => 'required|string|max:160', 'description' => 'nullable|string|max:4000', 'framework' => 'required|in:tensorflow',
@@ -30,9 +45,11 @@ class ModelUploadController extends Controller
             'input' => 'required|array:width,height,dtype,time_scalar', 'input.width' => 'required|integer|in:1024',
             'input.height' => 'required|integer|in:1024', 'input.dtype' => 'required|in:uint16', 'input.time_scalar' => 'required|numeric|in:0.5',
         ]);
+        $key = $manifest['creation_key'] ?? (string) Str::uuid();
+        unset($manifest['creation_key']);
         $manifest['description'] ??= '';
-        $data = $this->uploads->request('POST', '/management/uploads', $manifest);
-        $upload = ModelUpload::create(['user_id' => $request->user()->id, 'tuf_id' => $data['id'], 'manifest' => $manifest, 'state' => $data['state']]);
+        $upload = $this->uploads->creationIntent($request->user(), $key, $manifest);
+        $data = $this->uploads->completeCreation($upload);
 
         return response()->json(['data' => $this->uploads->present($upload, $data)], 201);
     }
@@ -40,7 +57,9 @@ class ModelUploadController extends Controller
     public function show(Request $request, int $id)
     {
         $upload = $this->owned($request, $id);
-        $data = $this->uploads->request('GET', '/management/uploads/'.$upload->tuf_id);
+        $data = $upload->tuf_id
+            ? $this->uploads->request('GET', '/management/uploads/'.$upload->tuf_id)
+            : $this->uploads->completeCreation($upload);
         $safe = $this->uploads->present($upload, $data);
         if ($data['published'] ?? false) {
             $model = Model::where('managed_model_id', $upload->manifest['model_id'])

@@ -55,6 +55,9 @@ class AssistantEvidence extends StatelessWidget {
                 'Model CT',
                 source['model'] == null
                     ? null
+                    : AiChatController.map(source['model'])['provenance'] ==
+                          'historical_model_snapshot_unavailable'
+                    ? 'Versi historis / provenans model tidak tersedia'
                     : '${AiChatController.map(source['model'])['name']} · ${AiChatController.map(source['model'])['version']}',
               ),
               fact('Berkas input', source['input_files_count']),

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Model;
 use App\Models\ModelUpload;
+use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -30,12 +31,12 @@ class ModelUploads
         return $config;
     }
 
-    public function request(string $method, string $path, array $body = []): array
+    public function request(string $method, string $path, array $body = [], array $headers = []): array
     {
         $config = $this->configuration();
         try {
-            $response = Http::withToken($config['management_token'])->acceptJson()->timeout(15)
-                ->withOptions(['allow_redirects' => false])->send($method, rtrim($config['internal_url'], '/').$path, ['json' => $body]);
+            $response = Http::withToken($config['management_token'])->withHeaders($headers)->acceptJson()->timeout(15)
+                ->withOptions(['allow_redirects' => false])->send($method, rtrim($config['internal_url'], '/').$path, $body ? ['json' => $body] : []);
         } catch (ConnectionException $e) {
             abort(503, 'Model upload worker unavailable; reconcile status before retrying.');
         }
@@ -43,6 +44,40 @@ class ModelUploads
             'Model upload operation rejected; reconcile session status.');
         $data = $response->json();
         abort_unless(is_array($data) && Str::isUuid($data['id'] ?? ''), 502, 'Invalid worker response.');
+
+        return $data;
+    }
+
+    public function creationIntent(User $owner, string $key, array $manifest): ModelUpload
+    {
+        // Serialize with account deletion and competing requests for this owner.
+        return DB::transaction(function () use ($owner, $key, $manifest) {
+            User::whereKey($owner->id)->lockForUpdate()->firstOrFail();
+            $upload = ModelUpload::where('user_id', $owner->id)->where('creation_key', $key)->first();
+            if ($upload) {
+                abort_unless($upload->manifest == $manifest, 409, 'Creation key belongs to a different manifest.');
+
+                return $upload;
+            }
+
+            return ModelUpload::create(['user_id' => $owner->id, 'creation_key' => $key,
+                'intent_id' => (string) Str::uuid(), 'manifest' => $manifest, 'state' => 'creating']);
+        });
+    }
+
+    public function completeCreation(ModelUpload $upload): array
+    {
+        if ($upload->tuf_id) {
+            return $this->request('GET', '/management/uploads/'.$upload->tuf_id);
+        }
+        $data = $this->request('POST', '/management/uploads', $upload->manifest, ['Idempotency-Key' => $upload->intent_id]);
+        abort_unless(($data['manifest'] ?? null) == $upload->manifest, 502, 'Worker session manifest mismatch.');
+        DB::transaction(function () use ($upload, $data) {
+            $fresh = ModelUpload::whereKey($upload->id)->lockForUpdate()->firstOrFail();
+            abort_if($fresh->tuf_id && $fresh->tuf_id !== $data['id'], 502, 'Worker session identity mismatch.');
+            $fresh->update(['tuf_id' => $data['id'], 'state' => $data['state']]);
+        });
+        $upload->refresh();
 
         return $data;
     }
@@ -65,22 +100,31 @@ class ModelUploads
 
     public function action(ModelUpload $upload, string $action): array
     {
+        abort_unless($upload->tuf_id, 409, 'Recover creation by selecting this session first.');
+        $body = [];
         if (in_array($action, ['activate', 'deactivate'])) {
-            DB::transaction(function () use ($upload, $action) {
+            $body = DB::transaction(function () use ($upload, $action) {
                 $model = Model::where('managed_model_id', $upload->manifest['model_id'])
                     ->where('version', $upload->manifest['version'])->lockForUpdate()->firstOrFail();
-                abort_if($model->availability_transition, 409, 'Availability is reconciling; synchronize before another change.');
+                $transition = $model->availability_transition;
+                abort_if($transition && $transition['target_active'] !== ($action === 'activate'), 409, 'A conflicting availability target is reconciling.');
                 app(ModelAdmission::class)->assertIdle($model);
                 app(ManagedEndpointGuard::class)->assertNoAliases($model);
                 $this->configuration();
                 // Commit before the remote call. A lost response cannot roll
                 // this admission barrier back while a delayed mutation runs.
-                $model->update(['is_active' => false, 'availability_transition' => [
-                    'id' => (string) Str::uuid(), 'target_active' => $action === 'activate',
-                ]]);
+                if (! $transition || ! isset($transition['revision'])) {
+                    $fresh = ModelUpload::whereKey($upload->id)->lockForUpdate()->firstOrFail();
+                    $fresh->increment('availability_revision');
+                    $transition = ['id' => $transition['id'] ?? (string) Str::uuid(), 'target_active' => $action === 'activate',
+                        'revision' => $fresh->availability_revision];
+                    $model->update(['is_active' => false, 'availability_transition' => $transition]);
+                }
+
+                return ['revision' => $transition['revision']];
             });
         }
-        $data = $this->request('POST', '/management/uploads/'.$upload->tuf_id.'/'.$action);
+        $data = $this->request('POST', '/management/uploads/'.$upload->tuf_id.'/'.$action, $body);
         $safe = $this->present($upload, $data);
         if (in_array($action, ['publish', 'activate', 'deactivate'])) {
             $this->synchronize();

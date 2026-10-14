@@ -1,11 +1,19 @@
 """Management JSON and independent capability-only byte transport."""
-from fastapi import BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi import BackgroundTasks, Body, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
+from pydantic import BaseModel, ConfigDict, Field
+from uuid import UUID
+
 from .registry import Manifest
 from .uploads import CHUNK_BYTES, Uploads
+
+
+class AvailabilityOperation(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    revision: int = Field(ge=1, le=9007199254740991)
 
 
 def install_upload_routes(app, registry, origins=(), compatibility=None):
@@ -17,16 +25,16 @@ def install_upload_routes(app, registry, origins=(), compatibility=None):
                            allow_methods=['PUT'], allow_headers=['Authorization', 'Upload-Offset', 'Content-Type'])
 
     @app.post('/management/uploads', dependencies=management, status_code=201)
-    def create(manifest: Manifest):
-        return uploads.create(manifest)
+    def create(manifest: Manifest, idempotency_key: UUID | None = Header(None)):
+        return uploads.create(manifest, str(idempotency_key) if idempotency_key else None)
 
     @app.get('/management/uploads/{identifier}', dependencies=management)
     def status(identifier: str):
         return uploads.public(uploads.read(identifier))
 
     @app.post('/management/uploads/{identifier}/{action}', dependencies=management)
-    def action(identifier: str, action: str, background: BackgroundTasks):
-        data, status = uploads.schedule(identifier, action, background)
+    def action(identifier: str, action: str, background: BackgroundTasks, operation: AvailabilityOperation | None = Body(None)):
+        data, status = uploads.schedule(identifier, action, background, operation.revision if operation else None)
         return JSONResponse(data, status_code=status)
 
     @app.put('/uploads/{identifier}')

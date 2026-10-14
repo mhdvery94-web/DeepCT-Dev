@@ -18,7 +18,9 @@ export function AssistantEvidence({ request }: { request: AiRequest }) {
             <dt>Model CT</dt>
             <dd>
               {source.model
-                ? `${source.model.name} · ${source.model.version}`
+                ? source.model.provenance === "historical_model_snapshot_unavailable"
+                  ? "Versi historis / provenans model tidak tersedia"
+                  : "name" in source.model ? `${source.model.name} · ${source.model.version}` : "Tidak tersedia"
                 : "Tidak tersedia"}
             </dd>
             <dt>Jumlah berkas input / hasil</dt>

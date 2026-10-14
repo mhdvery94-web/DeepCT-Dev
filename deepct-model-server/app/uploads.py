@@ -147,8 +147,16 @@ class Uploads:
         self.save(session)
         return self.public(session) | {'token': token}
 
-    def create(self, manifest):
+    def create(self, manifest, intent=None):
         with self.registry.lock, self.control_lock:
+            if intent:
+                for existing in self.sessions():
+                    if existing.get('creation_intent') == intent:
+                        if existing['manifest'] != manifest.model_dump():
+                            raise HTTPException(409, 'Creation intent manifest conflict')
+                        # Replay durable identity, then obtain a fresh capability
+                        # through the separate renew action before byte transfer.
+                        return self.public(self.read(existing['id']))
             try:
                 self.registry.assert_version_available(*manifest.key)
             except RegistryError:
@@ -162,7 +170,7 @@ class Uploads:
             directory.mkdir(parents=True, mode=0o700)
             atomic_json(directory / 'manifest.json', manifest.model_dump())
             (directory / manifest.weight_file).touch(mode=0o600)
-            session = {'id': identifier, 'manifest': manifest.model_dump(), 'offset': 0,
+            session = {'id': identifier, 'creation_intent': intent, 'manifest': manifest.model_dump(), 'offset': 0,
                        'state': 'uploading', 'published': False, 'compatibility': 'untested'}
             result = self.renew(session)
             # Persist the newly created session directory entry as well as its
@@ -196,7 +204,7 @@ class Uploads:
             self.save(session)
             return self.public(session)
 
-    def schedule(self, identifier, action, background):
+    def schedule(self, identifier, action, background, revision=None):
         with self.control_lock:
             session = self.read(identifier)
             if session.get('operation'):
@@ -212,7 +220,7 @@ class Uploads:
                 return self.public(session), 202
         # Release metadata before waiting for registry; action rechecks the
         # operation marker after acquiring both locks in the canonical order.
-        return self.action(identifier, action), 200
+        return self.action(identifier, action, revision=revision), 200
 
     def complete(self, identifier, action):
         error = None
@@ -232,7 +240,7 @@ class Uploads:
                     session['last_error'] = error
                 self.save(session)
 
-    def action(self, identifier, action, *, completing=False):
+    def action(self, identifier, action, *, completing=False, revision=None):
         with self.registry.lock:
             with self.control_lock:
                 session = self.read(identifier)
@@ -246,6 +254,22 @@ class Uploads:
                     raise HTTPException(409, 'Session is not ready for this operation')
                 if action == 'finalize':
                     session['state'] = 'validating'
+                    self.save(session)
+                if action in {'activate', 'deactivate'} and (revision is not None or session.get('availability_revision')):
+                    previous = session.get('availability_revision', 0)
+                    if revision is None:
+                        raise HTTPException(409, 'Availability revision required')
+                    if revision < previous:
+                        return self.public(session)
+                    target = action == 'activate'
+                    if revision == previous and session.get('availability_target') != target:
+                        raise HTTPException(409, 'Availability revision target conflict')
+                    if not session['published']:
+                        raise HTTPException(409, 'Publish tested model before activation')
+                    # Persist ordering before mutating activation. Same-revision
+                    # completion re-applies after interruption; older work cannot.
+                    session['availability_revision'] = revision
+                    session['availability_target'] = target
                     self.save(session)
                 if action not in expected:
                     return self._commit_action(identifier, action, directory, manifest)

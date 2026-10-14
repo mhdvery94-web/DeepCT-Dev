@@ -85,6 +85,8 @@ class User extends Authenticatable
     protected static function booted(): void
     {
         static::deleting(function (self $user) {
+            abort_if(ModelUpload::where('user_id', $user->id)->exists(), 409,
+                'This account owns retained model uploads and cannot be deleted.');
             // The database cascades prediction rows, but it cannot cascade
             // their files. Remove those before the rows disappear; a failed
             // storage operation leaves the account and its records available
@@ -112,6 +114,16 @@ class User extends Authenticatable
             if ($user->avatar_path && Storage::exists($user->avatar_path)) {
                 Storage::delete($user->avatar_path);
             }
+        });
+    }
+
+    public function delete()
+    {
+        return \Illuminate\Support\Facades\DB::transaction(function () {
+            // Creation intents take the same owner lock, so no new retained FK
+            // can arrive between the guard and irreversible file cleanup.
+            self::whereKey($this->id)->lockForUpdate()->firstOrFail();
+            return parent::delete();
         });
     }
 

@@ -6,7 +6,7 @@ export type AiSource = {
   type: "analysis_record"; id: number; status: string;
   input_files_count: number | null; output_files_count: number | null;
   processing_time_seconds: number | null; expired: boolean; files_deleted: boolean;
-  model: { id: number; name: string; slug: string | null; version: string } | null;
+  model: { id: number | null; provenance: "historical_model_snapshot_unavailable" } | { id: number; name: string; slug: string | null; version: string; provenance?: string; model_id?: string; sha256?: string } | null;
   metrics: Record<string, number | null>; validation_provenance: Record<string, unknown>; frame_provenance: Record<string, unknown>[];
 };
 export type AiRequest = { id: number; conversation_id: number; user_message_id: number; analysis_record_id: number | null; status: "queued" | "processing" | "completed" | "failed" | "cancelled"; error_code: string | null; model: string; prompt_version: string; experimental: true; assistant_message: AiMessage | null; sources: AiSource[]; metrics: Record<string, number> | null };

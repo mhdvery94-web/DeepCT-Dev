@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -30,12 +31,24 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
   int _progress = 0;
   String _phase = '';
   String? _error;
+  int _selectionRevision = 0;
+  int? _selectedId;
+  bool _selecting = false;
+  int _listRevision = 0;
+  int _page = 1;
+  int _lastPage = 1;
+  bool _listing = false;
+  final _query = TextEditingController();
+  String _search = '';
+  String? _creationManifest;
+  String? _creationKey;
 
   @override
   void initState() {
     super.initState();
     _reload();
     _poll = Timer.periodic(const Duration(seconds: 3), (_) async {
+      final revision = _selectionRevision;
       final selected = _session;
       if (selected == null) return;
       try {
@@ -44,21 +57,40 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
           'GET',
           null,
         );
-        if (mounted && _session?['id'] == selected['id']) {
+        if (mounted &&
+            revision == _selectionRevision &&
+            _selectedId == selected['id']) {
           setState(() => _session = fresh);
         }
       } catch (error) {
-        if (mounted) setState(() => _error = '$error');
+        if (mounted && revision == _selectionRevision) {
+          setState(() => _error = '$error');
+        }
       }
     });
   }
 
-  Future<void> _reload() async {
+  Future<void> _reload({int? page}) async {
+    final revision = ++_listRevision;
+    final target = page ?? _page;
+    setState(() => _listing = true);
     try {
-      final sessions = await _service.list();
-      if (mounted) setState(() => _sessions = sessions);
+      final sessions = await _service.list(page: target, search: _search);
+      if (mounted && revision == _listRevision) {
+        setState(() {
+          _sessions = sessions;
+          _page = target;
+          _lastPage = _service.lastPage;
+        });
+      }
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted && revision == _listRevision) {
+        setState(() => _error = '$error');
+      }
+    } finally {
+      if (mounted && revision == _listRevision) {
+        setState(() => _listing = false);
+      }
     }
   }
 
@@ -67,7 +99,7 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
     _poll?.cancel();
     _cancel?.cancel();
     _source?.close();
-    for (final controller in [_id, _version, _name, _description]) {
+    for (final controller in [_id, _version, _name, _description, _query]) {
       controller.dispose();
     }
     super.dispose();
@@ -98,34 +130,46 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
   }
 
   Future<void> _select(int? id) async {
-    await _source?.close();
-    _source = null;
-    if (id == null) {
-      setState(() {
-        _session = null;
-        _phase = '';
-      });
-      return;
-    }
+    final revision = ++_selectionRevision;
+    final source = _source;
+    setState(() {
+      _source = null;
+      _session = null;
+      _selectedId = id;
+      _selecting = id != null;
+      _phase = '';
+      _error = null;
+      if (id == null) {
+        for (final field in [_id, _version, _name, _description]) {
+          field.clear();
+        }
+      }
+    });
+    await source?.close();
+    if (id == null || !mounted || revision != _selectionRevision) return;
     try {
       final session = await _service.control(
         '/admin/model-uploads/$id',
         'GET',
         null,
       );
+      if (!mounted || revision != _selectionRevision) return;
       final manifest = session['manifest'] as Map;
-      if (!mounted) return;
       setState(() {
         _session = session;
         _id.text = manifest['model_id'];
         _version.text = manifest['version'];
         _name.text = manifest['name'];
         _description.text = manifest['description'];
-        _phase = '';
-        _error = null;
       });
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted && revision == _selectionRevision) {
+        setState(() => _error = '$error');
+      }
+    } finally {
+      if (mounted && revision == _selectionRevision) {
+        setState(() => _selecting = false);
+      }
     }
   }
 
@@ -157,7 +201,7 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
           hashing,
           cancellation: cancellation,
         );
-        session = await _service.control('/admin/model-uploads', 'POST', {
+        final manifest = <String, dynamic>{
           'schema_version': 1,
           'model_id': _id.text.trim(),
           'version': _version.text.trim(),
@@ -176,8 +220,22 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
             'dtype': 'uint16',
             'time_scalar': 0.5,
           },
+        };
+        final identity = jsonEncode(manifest);
+        if (_creationManifest != identity) {
+          _creationManifest = identity;
+          _creationKey = ModelUploadService.creationKey();
+        }
+        session = await _service.control('/admin/model-uploads', 'POST', {
+          ...manifest,
+          'creation_key': _creationKey,
         });
-        if (mounted) setState(() => _session = session);
+        if (mounted) {
+          setState(() {
+            _session = session;
+            _selectedId = session!['id'] as int;
+          });
+        }
         await _reload();
       }
       final done = await _service.upload(source, session, hashing, (value) {
@@ -242,7 +300,7 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
   }
 
   Widget _button(String label, String action) => OutlinedButton(
-    onPressed: _busy ? null : () => _action(action),
+    onPressed: _busy || _selecting ? null : () => _action(action),
     child: Text(label),
   );
 
@@ -253,8 +311,12 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
     final running = _session?['operation'] != null;
     final sessions = [
       ..._sessions,
-      if (_session != null && !_sessions.any((s) => s['id'] == _session!['id']))
-        _session!,
+      if (_selectedId != null && !_sessions.any((s) => s['id'] == _selectedId))
+        _session ??
+            {
+              'id': _selectedId,
+              'manifest': {'model_id': 'Sesi #$_selectedId', 'version': ''},
+            },
     ];
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -271,8 +333,43 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
             '.h5 / .keras · maksimum 10 GiB · adapter GINet TC-D. Publikasi dan aktivasi adalah langkah terpisah.',
           ),
           const SizedBox(height: 16),
+          TextField(
+            controller: _query,
+            maxLength: 80,
+            decoration: const InputDecoration(
+              labelText: 'Cari sesi model / versi',
+            ),
+          ),
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton(
+                onPressed: _busy || _listing
+                    ? null
+                    : () {
+                        _search = _query.text;
+                        _reload(page: 1);
+                      },
+                child: const Text('Cari sesi'),
+              ),
+              TextButton(
+                onPressed: _busy || _listing || _page <= 1
+                    ? null
+                    : () => _reload(page: _page - 1),
+                child: const Text('Sesi sebelumnya'),
+              ),
+              TextButton(
+                onPressed: _busy || _listing || _page >= _lastPage
+                    ? null
+                    : () => _reload(page: _page + 1),
+                child: const Text('Sesi berikutnya'),
+              ),
+            ],
+          ),
+          Text('Halaman $_page / $_lastPage'),
           DropdownButtonFormField<int>(
-            initialValue: _session?['id'] as int?,
+            key: ValueKey(_selectedId),
+            initialValue: _selectedId,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Sesi tersimpan'),
             items: [
@@ -292,6 +389,7 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
             ],
             onChanged: _busy ? null : _select,
           ),
+          if (_selecting) const Text('Memuat sesi terpilih…'),
           const SizedBox(height: 16),
           if (kIsWeb)
             const Text(
@@ -346,14 +444,16 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
                   if (_session == null ||
                       ['uploading', 'uploaded'].contains(state)) ...[
                     OutlinedButton(
-                      onPressed: _busy ? null : _pick,
+                      onPressed: _busy || _selecting ? null : _pick,
                       child: Text(
                         _source?.filename ??
                             'Pilih ulang file bobot untuk upload / resume',
                       ),
                     ),
                     ElevatedButton(
-                      onPressed: _busy || _source == null ? null : _upload,
+                      onPressed: _busy || _selecting || _source == null
+                          ? null
+                          : _upload,
                       child: const Text('Verifikasi SHA256 & upload'),
                     ),
                   ],
@@ -408,11 +508,13 @@ class _ModelUploadDialogState extends State<ModelUploadDialog> {
                   _button('Batalkan sesi', 'cancel'),
               ],
               TextButton(
-                onPressed: _busy ? null : _synchronize,
+                onPressed: _busy || _selecting ? null : _synchronize,
                 child: const Text('Sinkronisasi katalog TUF'),
               ),
               TextButton(
-                onPressed: _busy ? null : () => Navigator.pop(context),
+                onPressed: _busy || _selecting
+                    ? null
+                    : () => Navigator.pop(context),
                 child: const Text('Tutup'),
               ),
             ],
