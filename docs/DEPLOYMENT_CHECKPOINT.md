@@ -141,10 +141,25 @@ ke direktori baru yang tidak dipakai layanan mencocokkan 173 file Raspi dan
 dua sesi upload pulih, tidak ada model aktif dan inferensi nonaktif ditolak.
 Restore tidak memuat GPU atau memodifikasi path aplikasi live.
 
-Dependency venv/vendor direproduksi dari lock; backup ini tidak menyertakan
-binary dependency atau model produksi. Service hasil restore belum dijalankan
-dan physical reboot belum diuji. Keberhasilan data/file/catalog restore tidak
-diklaim sebagai full disaster-recovery rehearsal.
+Pemeriksaan berikutnya menjalankan API hasil restore pada port loopback 8004
+Raspi dan socket baru TUF. Laravel memakai user DB baru yang hanya dapat mengakses
+database hasil restore, storage/cache pada root restore, APP_KEY snapshot dan
+LLM tetap disabled. Login kedua role/history 200, kontrol admin 200/user 403;
+token live staging tetap nol. TUF hasil restore memberi health/catalog 200,
+anonim atau bearer yang salah 401, sesi published tetap `ready_for_activate`
+dengan offset lengkap, dan tidak memuat GPU. Kedua unit transient dihentikan
+setelah pemeriksaan; queue/scheduler restore tidak dijalankan.
+
+Script audit awal tidak mempertahankan kutip nilai `.env` yang mengandung spasi,
+sehingga bootstrap salinan restore gagal parse. Helper diperbaiki dan pemeriksaan
+di atas diulang hingga lulus. Source/env/layanan live tidak diubah oleh koreksi
+helper tersebut. File metadata/config pada salinan restore dapat berubah saat
+runtime probe; checksum arsip dan pencocokan byte awal tetap dicatat terpisah.
+
+Backup tidak menyertakan venv/vendor atau model produksi. Probe memakai dependency
+terpasang yang sesuai lock. Reproduksi dependency dari nol, pemulihan queue,
+physical reboot dan simulasi kehilangan seluruh host belum diuji; pemeriksaan
+API/catalog ini tidak diklaim sebagai full disaster-recovery rehearsal.
 
 ## Gate yang masih terbuka
 
@@ -162,8 +177,8 @@ diklaim sebagai full disaster-recovery rehearsal.
    penggantian/download model atau aktivasi provider diam-diam. Audit Hailo ada
    di [AI_HARDWARE_AUDIT.md](AI_HARDWARE_AUDIT.md).
 4. Penerimaan ilmiah parity, arbitrary-model acceptance, UAT Flutter perangkat
-   fisik, branch protection/environment approval, serta uji restore layanan dan
-   physical reboot belum diterima. Tidak ada hasil fixture yang menggantikannya.
+   fisik, branch protection/environment approval, pemulihan queue dan physical
+   reboot belum diterima. Tidak ada hasil fixture yang menggantikannya.
 5. Quota akun ngrok aktual belum diketahui. Dokumentasi Free yang diperiksa
    mencantumkan 1 GB outbound/bulan dan 20.000 request/bulan. URL statis tidak
    membuktikan kesiapan traffic besar berkelanjutan.
