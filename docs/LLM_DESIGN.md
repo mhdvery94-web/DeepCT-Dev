@@ -99,6 +99,13 @@ assistant_sessions di atas adalah usulan lama, bukan nama tabel yang dibuat.
 - Satu generasi LLM aktif; antrean terpisah. Existing CT endpoint tetap tersedia selama migrasi.
 - Tidak ada penghapusan model/data produksi atau penghentian proses GPU lain. Promosi develop, staging, main hanya setelah pemeriksaan lulus.
 
+Pengecualian yang diotorisasi pengguna pada13Oktober2026: controller boleh
+membebaskan GPU TUF dengan menghentikan proses notebook yang terbukti menjadi
+penghalang, lalu menjalankan uji model nyata. Periksa identitas/ownership
+proses terlebih dahulu; jangan memakai penghentian massal atau mengganggu
+worker CT existing. Otorisasi ini menggantikan pilihan lama pengguna untuk
+membebaskan GPU sendiri, bukan izin menghapus notebook/model/data.
+
 ### Review Focus
 
 1. Pencabutan akun setelah antrean masuk: worker tidak boleh mengirim konteksnya.
