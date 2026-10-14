@@ -56,7 +56,10 @@ class StagingGateway(unittest.TestCase):
         worker = UnixHTTP(cls.socket_path, Upstream)
         legacy = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Upstream)
         legacy.identity = 'legacy'
-        for server in (worker, legacy):
+        # Pi forwards to its Laravel HTTP listener, not TUF's IP-matched Caddy site.
+        api = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Upstream)
+        api.identity = 'worker'
+        for server in (worker, legacy, api):
             threading.Thread(target=server.serve_forever, daemon=True).start()
             cls.resources.callback(server.server_close)
             cls.resources.callback(server.shutdown)
@@ -69,14 +72,14 @@ class StagingGateway(unittest.TestCase):
         tuf = (ROOT / 'deepct-model-server/deploy/Caddyfile.staging').read_text()
         tuf = tuf.replace('100.85.210.125:8001', f'127.0.0.1:{private}')
         tuf = tuf.replace('bind 100.85.210.125', 'bind 127.0.0.1')
-        tuf = tuf.replace('127.0.0.1:8003', f'127.0.0.1:{public}')
+        tuf = tuf.replace(':8003', f':{public}')
         tuf = tuf.replace('/home/jihyo-yue/deepct-model-staging/state/worker.sock', cls.socket_path)
         tuf = tuf.replace('127.0.0.1:8000', f'127.0.0.1:{legacy.server_port}')
         pi_config = (ROOT / 'be/deploy/staging/Caddyfile.staging').read_text()
         # Combine site blocks with one global block; staging Pi upstream is a fixture.
-        pi_config = pi_config[pi_config.index('http://'):]
-        pi_config = pi_config.replace('127.0.0.1:8003', f'127.0.0.1:{pi}')
-        pi_config = pi_config.replace('100.85.94.74:8001', f'127.0.0.1:{private}')
+        pi_config = pi_config[pi_config.index('}') + 1:]
+        pi_config = pi_config.replace(':8003', f':{pi}')
+        pi_config = pi_config.replace('100.85.94.74:8001', f'127.0.0.1:{api.server_port}')
         pi_config = pi_config.replace('127.0.0.1:8000', f'127.0.0.1:{legacy.server_port}')
         config = Path(cls.directory) / 'Caddyfile'
         config.write_text(tuf + '\n' + pi_config)
@@ -104,9 +107,10 @@ class StagingGateway(unittest.TestCase):
     def tearDownClass(cls):
         cls.resources.close()
 
-    def request(self, port, path, data=None):
+    def request(self, port, path, data=None, host=None):
         request = urllib.request.Request(f'http://127.0.0.1:{port}{path}', data=data,
-                                         method='PUT' if data is not None else 'GET')
+                                         method='PUT' if data is not None else 'GET',
+                                         headers={'Host': host} if host else {})
         try:
             with self.http.open(request, timeout=5) as response:
                 return response.status, response.read()
@@ -134,6 +138,31 @@ class StagingGateway(unittest.TestCase):
         status, body = self.request(pi, '/staging/api/health')
         self.assertEqual((status, json.loads(body)),
                          (200, {'upstream': 'worker', 'path': '/api/health'}))
+
+    def test_tunnel_host_reaches_real_bodies_prefixes_and_public_denials(self):
+        _, public, pi = self.ports
+        host = 'public.ngrok.example'
+        for port in (public, pi):
+            with self.subTest(port=port, path='/'):
+                status, body = self.request(port, '/', host=host)
+                self.assertEqual(status, 200)
+                self.assertTrue(body, 'Tunnel Host must reach the legacy upstream, not an empty Caddy response')
+                self.assertEqual(json.loads(body), {'upstream': 'legacy', 'path': '/'})
+        for port, path, data, forwarded in (
+            (public, '/registry/uploads/example', b'chunk', '/uploads/example'),
+            (pi, '/staging/api/health', None, '/api/health'),
+        ):
+            with self.subTest(port=port, path=path):
+                status, body = self.request(port, path, data, host=host)
+                self.assertEqual(status, 200)
+                self.assertTrue(body, 'Tunnel Host must select the prefix route')
+                self.assertEqual(json.loads(body), {'upstream': 'worker', 'path': forwarded})
+        for path in ('/registry/management/uploads/example', '/registry/models', '/registry'):
+            with self.subTest(path=path):
+                status, body = self.request(public, path, host=host)
+                self.assertEqual(status, 404)
+                self.assertEqual(body, b'Not found')
+        self.assertEqual(self.request(pi, '/staging', host=host), (404, b'Not found'))
 
     def test_public_chunk_limit_accepts_exactly_four_mib(self):
         self.assertEqual(self.request(self.ports[1], '/registry/uploads/example',

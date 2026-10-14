@@ -13,7 +13,7 @@ http://100.85.210.125:8001 {
 }
 
 # Existing public TLS tunnel targets this loopback gateway only after checks.
-http://127.0.0.1:8003 {
+:8003 {
 	bind 127.0.0.1
 	handle_path /registry/* {
 		@uploads path /uploads/*

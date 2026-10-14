@@ -4,7 +4,7 @@
 }
 
 # Existing Pi public TLS tunnel can target this gateway after route validation.
-http://127.0.0.1:8003 {
+:8003 {
 	bind 127.0.0.1
 	handle_path /staging/* {
 		reverse_proxy 100.85.94.74:8001
