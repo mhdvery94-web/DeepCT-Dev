@@ -81,6 +81,10 @@ env:
         || '' }}
 
 jobs:
+  test-model-cpu:
+    name: Tests (registry/upload CPU)
+    uses: ./.github/workflows/model-cpu.yml
+
   # Ten seconds that stop a ten-minute build from producing clients nobody can
   # use. The address is compiled in, so a wrong one is not discovered until
   # somebody installs the APK and every request 404s — which is exactly how
@@ -244,7 +248,7 @@ jobs:
 
   vercel:
     name: Deploy to Vercel
-    needs: web
+    needs: [web, test, test-backend, test-model-cpu]
     runs-on: ubuntu-latest
     # Vercel's own Git integration is not used: on the Hobby plan with a private
     # repository it refuses any commit whose author is not the account owner,
@@ -343,8 +347,8 @@ jobs:
 
   raspi:
     name: Deploy backend to Raspberry Pi
-    # `test-backend`, not `test`: this job ships `be/` and nothing else.
-    needs: [test-backend]
+    # Registry/upload regressions must block backend rollout too.
+    needs: [test-backend, test, test-model-cpu]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     # The Pi is behind NetBird, so a GitHub-hosted runner cannot SSH to it.
     # Running the deploy on the Pi also removes the need to store an SSH key in
@@ -832,7 +836,7 @@ jobs:
     # `test` is here rather than in front of the builds. Nothing is published
     # from a tree that does not pass its own tests; the builds simply no longer
     # queue behind the suite to find that out.
-    needs: [test, web, android, linux, apple]
+    needs: [test, test-backend, test-model-cpu, web, android, linux, apple]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:

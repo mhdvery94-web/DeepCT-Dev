@@ -3,14 +3,8 @@ name: Next.js Web
 on:
   pull_request:
     branches: [develop, staging, main]
-    paths:
-      - 'fe_web/**'
-      - '.github/workflows/web-next.yml'
   push:
     branches: [develop, staging, main]
-    paths:
-      - 'fe_web/**'
-      - '.github/workflows/web-next.yml'
   workflow_dispatch:
 
 concurrency:
@@ -21,6 +15,10 @@ permissions:
   contents: read
 
 jobs:
+  test-model-cpu:
+    name: Tests (registry/upload CPU)
+    uses: ./.github/workflows/model-cpu.yml
+
   verify:
     name: Verify Next.js
     runs-on: ubuntu-latest
@@ -54,7 +52,7 @@ jobs:
 
   deploy:
     name: Deploy Next.js to Vercel
-    needs: verify
+    needs: [verify, test-model-cpu]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:

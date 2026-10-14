@@ -1,0 +1,18 @@
+[Unit]
+Description=DeepCT isolated staging CT queue
+After=network-online.target mariadb.service
+
+[Service]
+User=jihyo
+WorkingDirectory=/home/jihyo/deepct-staging/app
+ExecStart=/usr/bin/php -d memory_limit=1G artisan queue:work database --queue=default --sleep=3 --timeout=7200 --tries=1 --memory=768
+Restart=on-failure
+RestartSec=3
+MemoryMax=1536M
+MemorySwapMax=0
+CPUQuota=100%
+KillMode=control-group
+TimeoutStopSec=7300
+
+[Install]
+WantedBy=multi-user.target

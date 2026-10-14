@@ -1,0 +1,19 @@
+[Unit]
+Description=DeepCT staging private and public-prefix gateway
+After=network-online.target deepct-model-staging.service
+Requires=deepct-model-staging.service
+
+[Service]
+WorkingDirectory=/home/jihyo-yue/deepct-model-staging
+ExecStart=/home/jihyo-yue/deepct-model-staging/bin/caddy run --config /home/jihyo-yue/deepct-model-staging/Caddyfile --adapter caddyfile
+Restart=on-failure
+RestartSec=3
+UMask=0077
+MemoryMax=128M
+MemorySwapMax=0
+TasksMax=32
+KillMode=control-group
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

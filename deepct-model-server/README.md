@@ -6,13 +6,20 @@ also supports Python 3.12. The inference extra pins the inspected TUF runtime,
 TensorFlow 2.17.0 and Keras 3.15.1. Install it only in a separately prepared
 worker environment with `uv sync --locked --extra inference --no-dev`.
 No dependency installation into the existing production worker is implied.
+Required CI uses Python 3.11 and `requirements-cpu.lock` with `--require-hashes`;
+TensorFlow/NVIDIA are forbidden in that job. The optional Linux GPU staging
+profile `requirements-cuda.lock` adds official `tensorflow[and-cuda]` extras
+while preserving all existing inference pins. See [release instructions](../docs/RELEASE.md)
+for isolated installation, containment, Unix-socket gateways and rollback.
 `uv.lock` is the authoritative hashed resolution; `requirements.lock` exports
 the deployment profile including inference (not development dependencies).
 Regenerate it with `uv export --locked --extra inference --no-dev --format
 requirements-txt --no-header --output-file requirements.lock --quiet`. A prepared deployment
 virtual environment can alternatively install it with
 `uv pip sync --require-hashes requirements.lock`. This export has been checked,
-but the TensorFlow deployment installation and live loading have not been run.
+but neither export nor `pip check` proves that CUDA is available in a new venv.
+The controller records live device/loader/parity evidence separately; base TF
+without the CUDA extras returned an empty GPU device list in staging.
 
 Configure the environment variables in `.env.example` through the process
 supervisor. Both bearer tokens are required, nonempty and distinct. The app
@@ -88,8 +95,9 @@ NumPy/TensorFlow imports the owned child sets RLIMIT_AS and RLIMIT_CORE=0, then
 sets TensorFlow's logical GPU memory limit before initialization and refuses CPU
 placement. The 60-second child timeout terminates only that owned child.
 RLIMIT_AS bounds virtual address space, not resident RAM or CUDA mappings. The
-budgets have no guessed defaults: Task 6 must validate safe workable mappings;
-otherwise retain unavailable until tested cgroup/container containment exists.
+budgets have no guessed defaults: the tested staging profile uses GPU 5 GiB,
+AS 24 GiB, cgroup RAM 4 GiB/no swap/128 tasks. Preserve containment and validate
+the new venv device/child path before enabling compatibility.
 GPU preflight is not a reservation against unrelated processes. Compatibility
 is runtime/shape evidence, never scientific acceptance or automatic activation.
 
@@ -120,6 +128,8 @@ untrusted models. A separate constrained worker remains appropriate defense
 in depth before enabling remote management uploads.
 
 The deployed graph fixture contains metadata only. Adapter tests use generated
-uint16 TIFFs and CPU arithmetic. Actual TensorFlow deserialization, GPU capacity,
-real image parity and scientific acceptance remain Task 6 gates. Do not swap the
+uint16 TIFFs and CPU arithmetic. Actual TensorFlow deserialization and device
+placement require controller runtime
+evidence. The measured compiled/legacy maxabs 1 is not accepted scientific
+parity; arbitrary-model UAT and scientific acceptance remain release gates. Do not swap the
 production worker, delete original weights, or stop notebook GPU processes.

@@ -1,0 +1,37 @@
+{
+	admin off
+	auto_https off
+}
+
+# Caddy and worker run as the same staging user; no TCP self-100IP hop.
+http://100.85.210.125:8001 {
+	bind 100.85.210.125
+	request_body {
+		max_size 65MiB
+	}
+	reverse_proxy unix//home/jihyo-yue/deepct-model-staging/state/worker.sock
+}
+
+# Existing public TLS tunnel targets this loopback gateway only after checks.
+http://127.0.0.1:8003 {
+	bind 127.0.0.1
+	handle_path /registry/* {
+		@uploads path /uploads/*
+		handle @uploads {
+			request_body {
+				max_size 4MiB
+			}
+			reverse_proxy unix//home/jihyo-yue/deepct-model-staging/state/worker.sock
+		}
+		# Management/catalog/prediction remain on the trusted private path.
+		handle {
+			respond "Not found" 404
+		}
+	}
+	handle /registry {
+		respond "Not found" 404
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8000
+	}
+}

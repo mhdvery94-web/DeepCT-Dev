@@ -1,0 +1,4 @@
+# Linux x86_64 / Python 3.11 optional GPU deployment profile.
+# Preserve every existing inference/core pin; add only official TF CUDA extras.
+-r requirements.lock
+tensorflow[and-cuda]==2.17.0

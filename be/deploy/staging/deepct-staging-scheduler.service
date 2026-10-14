@@ -1,0 +1,18 @@
+[Unit]
+Description=DeepCT isolated staging scheduler
+After=network-online.target mariadb.service
+
+[Service]
+User=jihyo
+WorkingDirectory=/home/jihyo/deepct-staging/app
+ExecStart=/usr/bin/php -d memory_limit=256M artisan schedule:work --no-interaction
+Restart=on-failure
+RestartSec=3
+MemoryMax=384M
+MemorySwapMax=0
+CPUQuota=50%
+KillMode=control-group
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=DeepCT Pi staging prefix gateway
+After=network-online.target deepct-staging-api.service
+
+[Service]
+User=jihyo
+WorkingDirectory=/home/jihyo/deepct-staging
+ExecStart=/home/jihyo/deepct-staging/bin/caddy run --config /home/jihyo/deepct-staging/Caddyfile --adapter caddyfile
+Restart=on-failure
+RestartSec=3
+MemoryMax=128M
+MemorySwapMax=0
+TasksMax=32
+KillMode=control-group
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

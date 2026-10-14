@@ -10,8 +10,9 @@
 | GPU inference | Host terpisah; registry model menyimpan endpoint |
 
 GitHub `main` memicu `web-next.yml` (Next.js) dan `release.yml`
-(Flutter/artifact/Pi). Deploy Pi memerlukan backend tests lulus. Next deploy
-memerlukan lint/typecheck/test/build/audit lulus. Root Vercel auto-deploy
+(Flutter/artifact/Pi). Deploy Pi/Flutter memerlukan Laravel, Flutter dan registry/upload Python CPU
+lulus. Next deploy memerlukan lint/typecheck/test/build/audit dan Python CPU
+lulus. Model-only pushes juga menjalankan workflow Next tanpa path filter. Root Vercel auto-deploy
 dinonaktifkan; workflow mengendalikan project dan domain.
 
 Variable `RASPI_API_BASE_URL` harus menunjuk HTTPS publik berakhiran /api.
@@ -129,3 +130,9 @@ Probe pertama: `curl -fsS https://zestfully-usable-pledge.ngrok-free.dev/api/hea
   route/TCP grant. Sinkronisasi laptop hanya dilakukan setelah SSH dapat diakses.
 
 Bukti rilis terakhir dan pekerjaan terbuka: [CHECKPOINT.md](CHECKPOINT.md).
+
+## Rilis registry/upload Task 7
+
+Lock CPU/CUDA, konfigurasi staging Pi/TUF, Unix socket gateway, gate promosi,
+backup dan rollback: [RELEASE.md](RELEASE.md). Dokumen checkpoint memisahkan
+source yang sudah diuji dari deployment publik dan gate scientific/quality.

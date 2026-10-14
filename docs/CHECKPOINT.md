@@ -1,4 +1,28 @@
-# Checkpoint proyek — 9 Oktober 2026
+# Checkpoint proyek — 14 Oktober 2026
+
+## Persiapan rilis — 14 Oktober 2026
+
+Task 7 berdasarkan `fcd6af9` menambah required Python 3.11 CPU job yang memakai
+lock hash dan menahan deploy Next/Flutter/Pi serta publish jika suite gagal.
+Local reinstall hash-verified + pip check + CPU guard lulus; **142 Python tests**
+lulus. Model-only changes menjalankan Next pada develop/staging/main. Enam
+checks konfigurasi/Caddy lokal meliputi failure propagation, trigger branch,
+Unix socket, prefix, legacy fallback, boundary management dan limit 4MiB.
+
+Konfigurasi/instruksi reusable ada di [RELEASE.md](RELEASE.md). Core runtime
+52 pins dipertahankan, profil CUDA menambah 12 NVIDIA extras resmi TF 2.17.
+Base TF staging sebelumnya melaporkan GPU `[]`; CUDA installation/device/parity
+harus dibuktikan controller. Systemd units menggunakan AS 24 GiB/GPU 5 GiB dan
+cgroup 4 GiB/no swap/128 tasks, satu worker. Gateway memakai UDS untuk local hop;
+Pi -> TUF private 8001 health 200 terbukti, self-100IP TUF bermasalah. Public
+prefix/tunnel cutover, promosi Git/Vercel, whole-branch review, UAT/restore masih
+external gates. Task 7 implementer tidak menjalankan operasi live tersebut.
+
+Production assistant tetap disabled; lima real quality cases DeepSeek gagal.
+Numeric maxabs 1/126 pixels berbeda belum memiliki toleransi scientific yang
+accepted. No physical Flutter-device UAT. Node module-type, Flutter Wasm dan
+GSAP warnings ditriase/ditunda dengan alasan di RELEASE.md. Hasil publikasi
+9 Oktober di bagian historis tidak membuktikan rilis source Tasks 1–7.
 
 ## Tambahan integrasi lokal — 13 Oktober 2026
 
@@ -22,7 +46,9 @@ parity atau toleransi scientific yang disetujui. UAT arbitrary model upload,
 ingress publik, Pi/TUF live dan gate kualitas LLM tetap terpisah. Candidate
 DeepSeek Pi belum lulus; assistant production tetap nonaktif secara default.
 
-## Keadaan aplikasi
+## Riwayat rilis 9 Oktober 2026
+
+### Keadaan aplikasi
 
 Training sudah dipensiunkan di frontend, API, database dan storage legacy.
 Migrasi historis tetap tersedia untuk upgrade. News memiliki editor teks dan

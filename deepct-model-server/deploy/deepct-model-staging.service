@@ -1,0 +1,20 @@
+[Unit]
+Description=DeepCT isolated model registry staging (single process)
+After=network-online.target
+
+[Service]
+WorkingDirectory=/home/jihyo-yue/deepct-model-staging
+EnvironmentFile=/home/jihyo-yue/deepct-model-staging/staging.env
+ExecStart=/home/jihyo-yue/deepct-model-staging/.venv/bin/python -m uvicorn app.main:create_app --factory --workers 1 --uds /home/jihyo-yue/deepct-model-staging/state/worker.sock --no-access-log
+UMask=0077
+Restart=on-failure
+RestartSec=3
+MemoryMax=4G
+MemorySwapMax=0
+TasksMax=128
+CPUQuota=400%
+KillMode=control-group
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target
