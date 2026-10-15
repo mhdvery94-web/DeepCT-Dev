@@ -323,7 +323,9 @@ def test_legacy_proxy_rejects_arbitrary_paths(tmp_path, legacy, suffix):
     assert legacy['requests'] == []
 
 
-def test_legacy_proxy_refuses_wrong_auth_and_gpu_overlap(tmp_path, legacy):
+def test_legacy_proxy_refuses_wrong_auth_and_gpu_overlap(tmp_path, legacy, monkeypatch):
+    from app import assistant
+    monkeypatch.setattr(assistant, 'LEGACY_LEASE_WAIT_SECONDS', .12)
     from app.gpu import GPULease
     settings = configured(tmp_path, legacy_proxy_enabled=True, legacy_inference_token='legacy-test')
     with TestClient(create_app(settings)) as client:
@@ -552,3 +554,125 @@ def test_compatibility_clears_residency_only_after_confirmed_child_exit(model_tr
         Compatibility(Registry(root, activation, gpu_lease_path=lock), 1024, 2048)(directory)
     assert failure.value.status_code == 503
     assert lock.read_bytes() == (b'' if outcome == 'failed' else b'unverified residency\n')
+
+# Metadata mode must reject profile escapes before the real HTTP provider boundary.
+METADATA_SCHEMA = {'type': 'object', 'properties': {'topic': {'type': 'string',
+    'enum': ['status', 'metrics', 'files', 'overview', 'scope']}},
+    'required': ['topic'], 'additionalProperties': False}
+METADATA_PAYLOAD = {**PAYLOAD, 'think': False, 'format': METADATA_SCHEMA,
+    'options': {'num_ctx': 16384, 'num_predict': 128, 'num_thread': 4}}
+
+
+def test_metadata_profile_forces_schema_without_thinking_and_preserves_completion_metrics(tmp_path, gpu_probe, provider):
+    provider['response_extra'] = {'message': {'role': 'assistant', 'content': '{"topic":"status"}',
+        'thinking': 'PRIVATE REASONING'}, 'done_reason': 'stop', 'eval_count': 0,
+        'prompt_eval_count': 35, 'total_duration': 123, 'load_duration': 1.5}
+    with TestClient(create_app(configured(tmp_path, assistant_metadata_mode=True))) as client:
+        response = client.post('/assistant/api/chat', json=METADATA_PAYLOAD, headers=AUTH)
+    assert response.status_code == 200
+    assert response.json() == {'model': 'deepseek-r1:7b', 'message': {'role': 'assistant',
+        'content': '{"topic":"status"}'}, 'done': True, 'done_reason': 'stop',
+        'eval_count': 0, 'prompt_eval_count': 35, 'total_duration': 123}
+    sent = provider['requests'][0][1]
+    assert sent['think'] is False and sent['format'] == METADATA_SCHEMA
+    assert sent['options'] == {'num_ctx': 16384, 'num_predict': 128, 'num_thread': 4}
+    assert sent['keep_alive'] == 0 and provider['resident'] is False
+
+
+@pytest.mark.parametrize('changes,omit', [
+    ({}, 'format'), ({}, 'think'), ({'think': True}, None), ({'think': 0}, None),
+    ({'format': 'json'}, None), ({'format': {}}, None),
+    ({'format': {**METADATA_SCHEMA, 'additionalProperties': True}}, None),
+    ({'format': {**METADATA_SCHEMA, 'required': []}}, None),
+    ({'format': {**METADATA_SCHEMA, 'properties': {'answer': {'type': 'string'}}}}, None),
+    ({'format': {**METADATA_SCHEMA, 'properties': {'topic': {'type': 'string', 'enum': ['scope']}}}}, None),
+    ({'format': {**METADATA_SCHEMA, 'extra': 'free prose'}}, None),
+    ({'options': {'num_predict': 129}}, None), ({'options': {'num_ctx': 16385}}, None),
+    ({'messages': [{'role': 'user', 'content': '界' * 4001}]}, None),
+    ({'model': 'deepseek-r1:1.5b'}, None), ({'answer': 'free prose'}, None),
+])
+def test_metadata_profile_rejects_escape_before_provider(tmp_path, provider, changes, omit):
+    payload = {**METADATA_PAYLOAD, **changes}
+    if omit:
+        payload.pop(omit)
+    with TestClient(create_app(configured(tmp_path, assistant_metadata_mode=True))) as client:
+        response = client.post('/assistant/api/chat', json=payload, headers=AUTH)
+    assert response.status_code == 422
+    assert response.json() == {'error_code': 'invalid_request'} and provider['requests'] == []
+
+
+def test_metadata_defaults_bound_output_and_freeform_profile_stays_separate(tmp_path, gpu_probe, provider):
+    with TestClient(create_app(configured(tmp_path, assistant_metadata_mode=True))) as client:
+        response = client.post('/assistant/api/chat', json={**METADATA_PAYLOAD, 'options': {}}, headers=AUTH)
+    assert response.status_code == 200
+    assert provider['requests'][0][1]['options'] == {'num_ctx': 16384, 'num_predict': 128}
+    provider['requests'].clear()
+    with TestClient(create_app(configured(tmp_path))) as client:
+        response = client.post('/assistant/api/chat', json=METADATA_PAYLOAD, headers=AUTH)
+    assert response.status_code == 422 and provider['requests'] == []
+
+
+def test_metadata_profile_is_opt_in_from_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv('DEEPCT_INFERENCE_TOKEN', 'test-inference')
+    monkeypatch.setenv('DEEPCT_MANAGEMENT_TOKEN', 'test-management')
+    monkeypatch.delenv('DEEPCT_ASSISTANT_METADATA_MODE', raising=False)
+    assert Settings.from_env().assistant_metadata_mode is False
+    monkeypatch.setenv('DEEPCT_ASSISTANT_METADATA_MODE', 'true')
+    assert Settings.from_env().assistant_metadata_mode is True
+
+
+def test_legacy_waits_for_short_generation_then_forwards_once_after_verified_idle(tmp_path, legacy):
+    import concurrent.futures
+    import time
+    from app.gpu import GPULease
+    settings = configured(tmp_path, legacy_proxy_enabled=True)
+    with TestClient(create_app(settings)) as client, concurrent.futures.ThreadPoolExecutor() as executor:
+        with GPULease(settings.gpu_lease_path) as held:
+            held.uncertain()
+            future = executor.submit(client.post, '/assistant/legacy/predict/gin-tcd', content=b'TIFF bytes')
+            time.sleep(.15)
+            assert not future.done(), 'Short assistant residency must not immediately fail an accepted CT job'
+            assert legacy['requests'] == []
+            held.verified_idle()
+        response = future.result(timeout=3)
+    assert response.status_code == 201 and response.content == b'II\x2a\x00legacy-image'
+    assert len(legacy['requests']) == 1 and legacy['requests'][0][3] == b'TIFF bytes'
+    assert competing_process(settings.gpu_lease_path) == 'acquired'
+
+
+@pytest.mark.parametrize('poisoned', [False, True])
+def test_legacy_wait_deadline_stays_busy_without_clearing_poison_or_overlapping(tmp_path, legacy, monkeypatch, poisoned):
+    import time
+    from app import assistant
+    from app.gpu import GPULease
+    monkeypatch.setattr(assistant, 'LEGACY_LEASE_WAIT_SECONDS', .12, raising=False)
+    settings = configured(tmp_path, legacy_proxy_enabled=True)
+    held = GPULease(settings.gpu_lease_path)
+    held.__enter__()
+    if poisoned:
+        held.uncertain()
+        held.__exit__(None, None, None)
+    try:
+        with TestClient(create_app(settings)) as client:
+            started = time.monotonic()
+            response = client.post('/assistant/legacy/predict/gin-tcd', content=b'TIFF')
+            elapsed = time.monotonic() - started
+        assert response.status_code == 503 and response.json() == {'error_code': 'generation_busy'}
+        assert .10 <= elapsed < 1.5
+        assert legacy['requests'] == []
+        if poisoned:
+            assert settings.gpu_lease_path.read_bytes() == b'unverified residency\n'
+    finally:
+        held.__exit__(None, None, None)
+
+
+def test_legacy_request_limit_fits_two_fifty_mib_frames_and_rejects_over_105_mib(tmp_path, legacy):
+    settings = configured(tmp_path, legacy_proxy_enabled=True)
+    chunk = b'x' * (1024 * 1024)
+    with TestClient(create_app(settings)) as client:
+        response = client.post('/assistant/legacy/predict/gin-tcd', content=(chunk for _ in range(101)))
+        assert response.status_code == 201
+        assert len(legacy['requests']) == 1 and len(legacy['requests'][0][3]) == 101 * 1024 * 1024
+        legacy['requests'].clear()
+        response = client.post('/assistant/legacy/predict/gin-tcd', content=(chunk for _ in range(106)))
+        assert response.status_code == 413 and legacy['requests'] == []

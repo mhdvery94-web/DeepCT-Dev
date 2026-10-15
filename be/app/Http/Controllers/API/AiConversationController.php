@@ -19,7 +19,8 @@ class AiConversationController extends Controller
     {
         return response()->json(['success' => true, 'data' => [
             'enabled' => config('ai.enabled'), 'model' => config('ai.model'),
-            'prompt_version' => config('ai.prompt_version'), 'experimental' => true,
+            'mode' => config('ai.metadata_mode') ? 'metadata' : 'freeform',
+            'prompt_version' => (config('ai.metadata_mode') ? 'deepct-metadata-v2' : config('ai.prompt_version')), 'experimental' => true,
             'limits' => [
                 'context_tokens' => config('ai.context_tokens'), 'output_tokens' => config('ai.output_tokens'),
                 'history_messages' => config('ai.history_messages'), 'history_characters' => config('ai.history_characters'),
@@ -135,7 +136,7 @@ class AiConversationController extends Controller
                         'user_id' => $user->id, 'ai_conversation_id' => $conversation->id, 'user_message_id' => $message->id,
                         'analysis_record_id' => $input['analysis_record_id'] ?? null, 'idempotency_key' => $input['idempotency_key'],
                         'requested_analysis_record_id' => $input['analysis_record_id'] ?? null,
-                        'payload_hash' => $hash, 'model' => config('ai.model'), 'prompt_version' => config('ai.prompt_version'), 'status' => 'queued',
+                        'payload_hash' => $hash, 'model' => config('ai.model'), 'prompt_version' => (config('ai.metadata_mode') ? 'deepct-metadata-v2' : config('ai.prompt_version')), 'status' => 'queued',
                     ]);
                     $conversation->touch();
                     // Same database connection and transaction: queue insertion

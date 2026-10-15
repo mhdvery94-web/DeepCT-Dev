@@ -28,6 +28,7 @@ class Settings:
     assistant_gpu_bytes: int | None = None
     assistant_timeout_seconds: float = 180
     assistant_cleanup_seconds: float = 10
+    assistant_metadata_mode: bool = False
 
     def __post_init__(self):
         for token in (self.inference_token, self.management_token):
@@ -53,6 +54,7 @@ class Settings:
         return cls(
             gpu_lease_path=Path(os.environ['DEEPCT_GPU_LEASE_PATH']) if os.environ.get('DEEPCT_GPU_LEASE_PATH') else None,
             assistant_token=os.environ.get('DEEPCT_ASSISTANT_TOKEN', ''),
+            assistant_metadata_mode=os.environ.get('DEEPCT_ASSISTANT_METADATA_MODE', '').lower() == 'true',
             legacy_inference_token=os.environ.get('DEEPCT_LEGACY_INFERENCE_TOKEN', ''),
             assistant_gpu_bytes=optional_budget('DEEPCT_ASSISTANT_GPU_BYTES'),
             assistant_timeout_seconds=optional_budget('DEEPCT_ASSISTANT_TIMEOUT_SECONDS') or 180,

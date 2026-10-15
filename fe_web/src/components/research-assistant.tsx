@@ -521,7 +521,9 @@ export function ResearchAssistant({
         </header>
         <div className="assistant-disclaimer" role="status">
           {status?.enabled
-            ? "DeepSeek eksperimental. Verifikasi jawaban sebelum digunakan dalam riset."
+            ? status.mode === "metadata"
+              ? "Asisten eksperimental menjelaskan status, metrik, dan ketersediaan berkas dari metadata analisis Anda. Asisten tidak membaca piksel TIFF atau menjalankan prediksi. Jawaban tidak menjamin kebenaran ilmiah hasil."
+              : "DeepSeek eksperimental. Verifikasi jawaban sebelum digunakan dalam riset."
             : "DeepSeek eksperimental belum tersedia sampai evaluasi kualitas lulus. Riwayat tetap dapat dibaca."}
         </div>
         <div

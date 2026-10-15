@@ -3,12 +3,13 @@
 return [
     // Activation requires a separate quality gate; disabled in every fresh environment.
     'enabled' => (bool) env('AI_ASSISTANT_ENABLED', false),
+    'metadata_mode' => (bool) env('AI_METADATA_MODE', false),
     'base_url' => env('AI_OLLAMA_BASE_URL', 'http://127.0.0.1:11434'),
     'token' => env('AI_OLLAMA_TOKEN'),
     // Enable only for the authenticated fixed-target DeepCT gateway.
     'gateway' => (bool) env('AI_OLLAMA_GATEWAY', false),
     'model' => env('AI_ASSISTANT_MODEL', 'deepseek-r1:1.5b'),
-    'prompt_version' => 'deepct-assistant-v1',
+    'prompt_version' => env('AI_METADATA_MODE', false) ? 'deepct-metadata-v2' : 'deepct-assistant-v1',
     'context_tokens' => (int) env('AI_CONTEXT_TOKENS', 2048),
     'output_tokens' => (int) env('AI_OUTPUT_TOKENS', 768),
     'history_messages' => 8,

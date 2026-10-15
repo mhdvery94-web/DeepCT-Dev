@@ -142,12 +142,32 @@ Laravel keeps user authorization and sends its metadata-only messages to
 `POST /assistant/api/chat` through the existing private UDS/Caddy ingress. Do not
 publish Ollama directly. The gateway connects only to `127.0.0.1:11435` using HTTP
 without environment proxies, and only runs the deployed `deepseek-r1:7b` model.
-It forces `think: true`, `stream: false`, `keep_alive: 0`; accepts at most 12,000
+The default freeform profile forces `think: true`, `stream: false`, `keep_alive: 0`; accepts at most 12,000
 UTF-8 bytes across message contents and a 64 KiB JSON body; and bounds context
 at 16,384, output at 2,048 and CPU threads at 16. Messages accept only text and
 system/user/assistant roles. Thinking fields and provider diagnostics are never
 returned or logged. Laravel removes a leading reasoning block if the provider
 includes one in content.
+
+The separate bounded metadata profile is opt-in with
+`DEEPCT_ASSISTANT_METADATA_MODE=true` (default false). Match it with Laravel's
+`AI_METADATA_MODE=true`, model `deepseek-r1:7b`, context 16,384, output 128 and
+threads 4. Keep assistant activation disabled until factual/API acceptance.
+This profile requires `think: false` and exactly this `format` schema:
+
+```json
+{"type":"object","properties":{"topic":{"type":"string","enum":["status","metrics","files","overview","scope"]}},"required":["topic"],"additionalProperties":false}
+```
+
+The gateway forces that schema and `think: false`, rejects omitted/modified
+schema or thinking settings, and limits output to 128 tokens. The same context,
+message byte, authentication, lease, cleanup and timeout bounds still apply.
+Laravel sends only the current question for classification and renders every
+answer from owned metadata in Indonesian templates. The classifier cannot grant
+access or perform actions; a wrong topic can still yield an irrelevant answer.
+This is not freeform model factual-quality acceptance. In the tested Ollama
+0.11.4 schema profile, thinking must be disabled to produce valid topic JSON;
+this is distinct from the earlier failed freeform evaluation with thinking off.
 
 Configure `DEEPCT_GPU_LEASE_PATH` to a local file in an existing private state
 directory and `DEEPCT_ASSISTANT_GPU_BYTES` to the measured free-VRAM admission
@@ -170,7 +190,12 @@ rewrites legacy `POST /predict/{model_name}` to
 this lease would cause nested acquisition. The legacy proxy targets only
 `127.0.0.1:8000/predict/{model_name}`, with a single validated name segment, and
 preserves request bytes/content type/optional bearer and upstream response status,
-bytes, content type and disposition. Request and response limits are 64 MiB.
+bytes, content type and disposition. The legacy request limit is 105 MiB, enough
+for the two accepted 50 MiB frames plus multipart overhead; responses remain
+bounded at 64 MiB. Only legacy prediction admission waits up to 15 seconds for
+the shared GPU lease, allowing a short assistant call to unload first. Waiting
+never clears poison or permits overlap; an expired wait returns busy. Assistant
+admission stays nonblocking. Registry upload limits are unchanged.
 Set `DEEPCT_LEGACY_INFERENCE_TOKEN` only if legacy inference already requires a
 bearer; empty preserves its original unauthenticated contract. This proxy does
 not expose legacy catalog, arbitrary URL or management routes.

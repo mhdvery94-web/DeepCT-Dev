@@ -14,11 +14,16 @@ class OllamaClient
             $client = $client->withToken(config('ai.token'));
         }
         try {
-            $response = $client->post(rtrim(config('ai.base_url'), '/').'/api/chat', [
+            $payload = [
                 'model' => $model, 'stream' => false, 'messages' => $messages, 'keep_alive' => 0,
                 'options' => ['num_ctx' => config('ai.context_tokens'), 'num_predict' => config('ai.output_tokens'),
                     'temperature' => config('ai.temperature'), 'num_thread' => config('ai.threads')],
-            ]);
+            ];
+            if (config('ai.metadata_mode')) {
+                $payload['think'] = false;
+                $payload['format'] = AiGroundedReply::SCHEMA;
+            }
+            $response = $client->post(rtrim(config('ai.base_url'), '/').'/api/chat', $payload);
         } catch (ConnectionException) {
             throw new AiProviderException('provider_timeout');
         }

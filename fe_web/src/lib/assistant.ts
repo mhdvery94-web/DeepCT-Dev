@@ -1,7 +1,7 @@
 export type AiMessage = { id: number; role: "user" | "assistant"; content: string; created_at: string };
 export type AiConversation = { id: number; title: string; created_at: string; updated_at: string };
 export type AiPagination = { current_page: number; last_page: number; per_page: number; total: number };
-export type AiStatus = { enabled: boolean; model: string; experimental: true; prompt_version: string; limits: { message_characters: number; requests_per_day: number; queue: number; context_tokens: number; output_tokens: number; history_messages: number; history_characters: number; active_requests_per_user: number } };
+export type AiStatus = { mode?: "metadata" | "freeform"; enabled: boolean; model: string; experimental: true; prompt_version: string; limits: { message_characters: number; requests_per_day: number; queue: number; context_tokens: number; output_tokens: number; history_messages: number; history_characters: number; active_requests_per_user: number } };
 export type AiSource = {
   type: "analysis_record"; id: number; status: string;
   input_files_count: number | null; output_files_count: number | null;

@@ -4,6 +4,7 @@ import json
 import socket
 import re
 import time
+from contextlib import contextmanager
 
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse, Response
@@ -14,6 +15,11 @@ from .gpu import GPULease, GPUUnavailable
 
 MODEL = 'deepseek-r1:7b'
 MAX_BODY = 65536
+LEGACY_MAX_BODY = 105 * 1024**2
+LEGACY_LEASE_WAIT_SECONDS = 15
+METADATA_SCHEMA = {'type': 'object', 'properties': {'topic': {'type': 'string',
+    'enum': ['status', 'metrics', 'files', 'overview', 'scope']}},
+    'required': ['topic'], 'additionalProperties': False}
 
 
 class ProviderUnavailable(RuntimeError):
@@ -43,10 +49,16 @@ def provider_request(method, path, body=None, timeout=10):
         connection.close()
 
 
-def bounded_payload(data):
-    if not isinstance(data, dict) or set(data) - {'model', 'messages', 'stream', 'keep_alive', 'options', 'think'}:
+def bounded_payload(data, metadata_mode=False):
+    allowed = {'model', 'messages', 'stream', 'keep_alive', 'options', 'think'}
+    if metadata_mode:
+        allowed.add('format')
+    if not isinstance(data, dict) or set(data) - allowed:
         raise ValueError()
     if data.get('model') != MODEL or data.get('stream', False) is not False or type(data.get('keep_alive', 0)) is not int or data.get('keep_alive', 0) != 0:
+        raise ValueError()
+    if metadata_mode and (data.get('think') is not False
+            or json.dumps(data.get('format'), sort_keys=True) != json.dumps(METADATA_SCHEMA, sort_keys=True)):
         raise ValueError()
     messages = data.get('messages')
     if not isinstance(messages, list) or not 1 <= len(messages) <= 128:
@@ -62,7 +74,8 @@ def bounded_payload(data):
     options = data.get('options', {})
     if not isinstance(options, dict) or set(options) - {'num_ctx', 'num_predict', 'num_thread', 'temperature', 'seed'}:
         raise ValueError()
-    for key, maximum in [('num_ctx', 16384), ('num_predict', 2048)]:
+    max_output = 128 if metadata_mode else 2048
+    for key, maximum in [('num_ctx', 16384), ('num_predict', max_output)]:
         value = options.get(key, maximum)
         if type(value) is not int or not 1 <= value <= maximum:
             raise ValueError()
@@ -72,8 +85,11 @@ def bounded_payload(data):
         raise ValueError()
     if 'seed' in options and (type(options['seed']) is not int or not 0 <= options['seed'] <= 2**31 - 1):
         raise ValueError()
-    return {'model': MODEL, 'messages': messages, 'stream': False, 'think': True, 'keep_alive': 0,
-            'options': {'num_ctx': 16384, 'num_predict': 2048, **options}}
+    payload = {'model': MODEL, 'messages': messages, 'stream': False, 'think': not metadata_mode, 'keep_alive': 0,
+               'options': {'num_ctx': 16384, 'num_predict': max_output, **options}}
+    if metadata_mode:
+        payload['format'] = METADATA_SCHEMA
+    return payload
 
 
 def unload(settings):
@@ -160,7 +176,7 @@ def install_assistant_routes(app, settings, bearer_dependency):
                 return error(413, 'invalid_request')
             raw.extend(chunk)
         try:
-            body = bounded_payload(json.loads(raw))
+            body = bounded_payload(json.loads(raw), settings.assistant_metadata_mode)
         except (ValueError, TypeError, UnicodeError, RecursionError):
             return error(422, 'invalid_request')
         # The synchronous worker owns the lease and cleanup. ASGI cancellation
@@ -168,9 +184,30 @@ def install_assistant_routes(app, settings, bearer_dependency):
         return await run_in_threadpool(generate, settings, body)
 
 
+@contextmanager
+def legacy_lease(path):
+    # Legacy CT jobs do not retry a replied busy response. Allow a short
+    # assistant generation to finish, but never bypass the shared poison check.
+    deadline = time.monotonic() + LEGACY_LEASE_WAIT_SECONDS
+    lease = GPULease(path)
+    while True:
+        try:
+            lease.__enter__()
+            break
+        except GPUUnavailable:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            time.sleep(min(.05, remaining))
+    try:
+        yield lease
+    finally:
+        lease.__exit__(None, None, None)
+
+
 def legacy_predict(settings, model_name, body, content_type, authorization):
     try:
-        with GPULease(settings.gpu_lease_path) as lease:
+        with legacy_lease(settings.gpu_lease_path) as lease:
             if settings.gpu_lease_path is None:
                 return error(503, 'provider_unavailable')
             connection = http.client.HTTPConnection('127.0.0.1', 8000, timeout=settings.assistant_timeout_seconds)
@@ -209,7 +246,7 @@ def install_legacy_route(app, settings, bearer_dependency):
             return error(422, 'invalid_request')
         raw = bytearray()
         async for chunk in request.stream():
-            if len(raw) + len(chunk) > 64 * 1024**2:
+            if len(raw) + len(chunk) > LEGACY_MAX_BODY:
                 return error(413, 'invalid_request')
             raw.extend(chunk)
         return await run_in_threadpool(legacy_predict, settings, model_name, bytes(raw),

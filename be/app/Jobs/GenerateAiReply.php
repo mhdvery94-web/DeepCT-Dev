@@ -7,6 +7,7 @@ use App\Models\AiMessage;
 use App\Models\AiRequest;
 use App\Models\User;
 use App\Services\AiContext;
+use App\Services\AiGroundedReply;
 use App\Services\AiProviderException;
 use App\Services\OllamaClient;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -70,6 +71,9 @@ class GenerateAiReply implements ShouldQueue
             }
             $sources = $context->sources($request);
             $reply = $client->generate($request->model, $context->messages($request, $sources));
+            if (config('ai.metadata_mode')) {
+                $reply['answer'] = app(AiGroundedReply::class)->render($reply['answer'], $sources);
+            }
             DB::transaction(function () use ($reply, $sources) {
                 $request = AiRequest::whereKey($this->requestId)->lockForUpdate()->first();
                 if (! $request || $request->status !== 'processing') {

@@ -20,9 +20,9 @@ class AiContext
         }
 
         $metrics = [];
-        foreach (['mae', 'psnr', 'rmse', 'pixels', 'reference_min', 'reference_max'] as $key) {
+        foreach (['mae', 'psnr', 'rmse', 'ssim', 'pixels', 'reference_min', 'reference_max'] as $key) {
             $value = $record->validation[$key] ?? null;
-            if (array_key_exists($key, $record->validation ?? []) && ($value === null || is_int($value) || is_float($value))) {
+            if (array_key_exists($key, $record->validation ?? []) && ($value === null || is_int($value) || (is_float($value) && is_finite($value)))) {
                 $metrics[$key] = $value;
             }
         }
@@ -89,6 +89,15 @@ class AiContext
         // byte-fallback tokenizer. Reserve room for its chat template too.
         $budget = min(12000, max(0, (int) config('ai.context_tokens') - (int) config('ai.output_tokens') - 64));
         try {
+            if (config('ai.metadata_mode')) {
+                $prompt = AiGroundedReply::INSTRUCTION."\nPertanyaan (JSON): "
+                    .json_encode($latest->content, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+                if (strlen($prompt) > $budget) {
+                    throw new AiProviderException('context_unavailable');
+                }
+
+                return [['role' => 'user', 'content' => $prompt]];
+            }
             $prefix = $instruction."\nMetadata server: ".json_encode($sources, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)
                 ."\nRiwayat/pertanyaan (JSON): ";
             $render = fn (array $selected) => $prefix.json_encode(array_reverse($selected), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
