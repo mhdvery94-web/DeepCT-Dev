@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\AiConversation;
+use App\Models\AiMessage;
 use App\Models\AiRequest;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
@@ -221,14 +223,19 @@ class FinalModelRecoveryTest extends TestCase
 
     public function test_uploaded_status_is_preserved_and_grounded(): void
     {
+        config(['ai.context_tokens' => 16384, 'ai.output_tokens' => 2048]);
         [$owner] = $this->admin();
         $model = Model::create(['name' => 'Fixture', 'version' => 'v1']);
         $record = AnalysisRecord::create(['user_id' => $owner->id, 'model_id' => $model->id, 'job_id' => uniqid(), 'status' => 'uploaded', 'input_folder' => 'input', 'output_folder' => 'output', 'expires_at' => now()->addDay()]);
-        $request = new AiRequest(['user_id' => $owner->id, 'requested_analysis_record_id' => $record->id, 'user_message_id' => 0]);
+        $conversation = AiConversation::create(['user_id' => $owner->id, 'title' => 'Grounded status']);
+        $message = AiMessage::create(['ai_conversation_id' => $conversation->id, 'role' => 'user', 'content' => 'Apa statusnya?']);
+        $request = new AiRequest(['user_id' => $owner->id, 'ai_conversation_id' => $conversation->id,
+            'requested_analysis_record_id' => $record->id, 'user_message_id' => $message->id]);
         $context = app(AiContext::class);
         $sources = $context->sources($request);
         $this->assertSame('uploaded', $sources[0]['status']);
-        $this->assertStringContainsString('uploaded', $context->messages($request, $sources)[0]['content']);
-        $this->assertStringContainsString('Start', $context->messages($request, $sources)[0]['content']);
+        [$metadata, $history] = explode("\nRiwayat/pertanyaan (JSON): ", explode("\nMetadata server: ", $context->messages($request, $sources)[0]['content'])[1]);
+        $this->assertSame('uploaded', json_decode($metadata, true, flags: JSON_THROW_ON_ERROR)[0]['status']);
+        $this->assertSame([['role' => 'user', 'content' => 'Apa statusnya?']], json_decode($history, true, flags: JSON_THROW_ON_ERROR));
     }
 }

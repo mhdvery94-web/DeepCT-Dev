@@ -15,7 +15,7 @@ class OllamaClient
         }
         try {
             $response = $client->post(rtrim(config('ai.base_url'), '/').'/api/chat', [
-                'model' => $model, 'stream' => false, 'messages' => $messages,
+                'model' => $model, 'stream' => false, 'messages' => $messages, 'keep_alive' => 0,
                 'options' => ['num_ctx' => config('ai.context_tokens'), 'num_predict' => config('ai.output_tokens'),
                     'temperature' => config('ai.temperature'), 'num_thread' => config('ai.threads')],
             ]);
@@ -23,6 +23,15 @@ class OllamaClient
             throw new AiProviderException('provider_timeout');
         }
         if (! $response->successful()) {
+            if (config('ai.gateway')) {
+                $code = $response->json('error_code');
+                if ($code === 'generation_busy' && in_array($response->status(), [409, 503], true)) {
+                    throw new AiProviderException('generation_busy');
+                }
+                if ($code === 'provider_timeout' && $response->status() === 504) {
+                    throw new AiProviderException('provider_timeout');
+                }
+            }
             throw new AiProviderException('provider_unavailable');
         }
         $body = $response->json();

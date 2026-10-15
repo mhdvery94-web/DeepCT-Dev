@@ -9,10 +9,14 @@ use App\Models\AnalysisRecord;
 use App\Models\Model;
 use App\Models\User;
 use App\Services\AiContext;
+use App\Services\AiProviderException;
+use App\Services\ModelAdmission;
+use App\Services\OllamaClient;
 use App\Services\QueueHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Queue\TimeoutExceededException;
+use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -53,6 +57,125 @@ class AiAssistantTest extends TestCase
     private function work(int $id): void
     {
         app()->call([new GenerateAiReply($id), 'handle']);
+    }
+
+    public function test_backend_gpu_profile_controls_the_provider_payload_and_discards_reasoning(): void
+    {
+        $overrides = ['AI_ASSISTANT_MODEL' => 'deepseek-r1:7b', 'AI_CONTEXT_TOKENS' => '16384',
+            'AI_OUTPUT_TOKENS' => '2048', 'AI_THREADS' => '4', 'AI_OLLAMA_GATEWAY' => 'true'];
+        $environment = Env::getRepository();
+        $original = [];
+        try {
+            foreach ($overrides as $key => $value) {
+                $original[$key] = $environment->get($key);
+                $environment->set($key, $value);
+            }
+            config(['ai' => require config_path('ai.php')]);
+        } finally {
+            foreach ($original as $key => $value) {
+                $value === null ? $environment->clear($key) : $environment->set($key, $value);
+            }
+        }
+        config(['ai.enabled' => true, 'ai.base_url' => 'https://gateway.test/assistant', 'ai.token' => 'test-only-token']);
+        Http::fake(['*' => Http::response(['done' => true, 'done_reason' => 'stop',
+            'message' => ['content' => 'Jawaban akhir.', 'thinking' => 'PRIVATE-REASONING']])]);
+        $requestId = $this->send($this->conversation(), extra: [
+            'model' => 'frontend-model', 'base_url' => 'https://untrusted.test',
+        ])->assertAccepted()->json('data.request.id');
+        $this->work($requestId);
+        Http::assertSent(function ($request) {
+            $this->assertSame('https://gateway.test/assistant/api/chat', $request->url());
+            $this->assertSame('deepseek-r1:7b', $request['model']);
+            $this->assertFalse($request['stream']);
+            $this->assertSame(0, $request->data()['keep_alive'] ?? null);
+            $this->assertSame(16384, $request['options']['num_ctx']);
+            $this->assertSame(2048, $request['options']['num_predict']);
+            $this->assertSame(4, $request['options']['num_thread']);
+            $this->assertTrue($request->hasHeader('Authorization', 'Bearer test-only-token'));
+
+            return true;
+        });
+        $this->assertSame('completed', AiRequest::findOrFail($requestId)->status);
+        $this->assertSame('Jawaban akhir.', AiMessage::where('role', 'assistant')->sole()->content);
+        $this->assertStringNotContainsString('PRIVATE-REASONING', AiRequest::findOrFail($requestId)->toJson());
+    }
+
+    public function test_prompt_byte_budget_keeps_latest_unicode_question_and_drops_oldest_history(): void
+    {
+        config(['ai.context_tokens' => 16384, 'ai.output_tokens' => 2048]);
+        $id = $this->conversation();
+        foreach (range(1, 12) as $index) {
+            AiMessage::create(['ai_conversation_id' => $id, 'role' => $index % 2 ? 'user' : 'assistant',
+                'content' => "History {$index} ".str_repeat('😀', 500)]);
+        }
+        $question = str_repeat('😀', 2000);
+        $requestId = $this->send($id, extra: ['content' => $question])->assertAccepted()->json('data.request.id');
+        AiMessage::create(['ai_conversation_id' => $id, 'role' => 'user', 'content' => 'FUTURE-MESSAGE']);
+        $sources = [['type' => 'analysis_record', 'id' => 42, 'model' => ['name' => 'Metadata lengkap 😀']]];
+        $messages = app(AiContext::class)->messages(AiRequest::findOrFail($requestId), $sources);
+        $this->assertLessThanOrEqual(12000, array_sum(array_map(fn ($m) => strlen($m['content']), $messages)));
+        $this->assertTrue(mb_check_encoding($messages[0]['content'], 'UTF-8'));
+        [$metadata, $encodedHistory] = explode("\nRiwayat/pertanyaan (JSON): ", explode("\nMetadata server: ", $messages[0]['content'])[1]);
+        $this->assertSame($sources, json_decode($metadata, true, flags: JSON_THROW_ON_ERROR));
+        $history = json_decode($encodedHistory, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertLessThanOrEqual(8, count($history));
+        $this->assertGreaterThan(1, count($history));
+        $this->assertSame($question, end($history)['content']);
+        $this->assertStringStartsWith('History 12 ', $history[count($history) - 2]['content']);
+        $this->assertStringNotContainsString('History 1 ', $messages[0]['content']);
+        $this->assertStringNotContainsString('FUTURE-MESSAGE', $messages[0]['content']);
+    }
+
+    public function test_current_question_is_not_truncated_by_the_history_character_limit(): void
+    {
+        config(['ai.context_tokens' => 16384, 'ai.output_tokens' => 2048, 'ai.history_characters' => 1]);
+        $question = str_repeat('漢', 2000);
+        $requestId = $this->send($this->conversation(), extra: ['content' => $question])->assertAccepted()->json('data.request.id');
+        $messages = app(AiContext::class)->messages(AiRequest::findOrFail($requestId), []);
+        $history = json_decode(explode('Riwayat/pertanyaan (JSON): ', $messages[0]['content'])[1], true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame([['role' => 'user', 'content' => $question]], $history);
+    }
+
+    public function test_required_context_that_cannot_fit_fails_without_calling_provider(): void
+    {
+        config(['ai.context_tokens' => 900, 'ai.output_tokens' => 768]);
+        $requestId = $this->send($this->conversation())->assertAccepted()->json('data.request.id');
+        $this->work($requestId);
+        $this->assertSame('context_unavailable', AiRequest::findOrFail($requestId)->error_code);
+        $this->assertSame(0, AiMessage::where('role', 'assistant')->count());
+        Http::assertNothingSent();
+    }
+
+    public function test_oversized_metadata_is_rejected_instead_of_silently_omitted(): void
+    {
+        config(['ai.context_tokens' => 16384, 'ai.output_tokens' => 2048]);
+        $requestId = $this->send($this->conversation())->assertAccepted()->json('data.request.id');
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('context_unavailable');
+        app(AiContext::class)->messages(AiRequest::findOrFail($requestId), [['model' => ['name' => str_repeat('x', 12000)]]]);
+    }
+
+    public function test_gateway_errors_are_mapped_only_for_the_trusted_profile_and_matching_status(): void
+    {
+        Http::fake(function () use (&$code, &$status) {
+            return Http::response(['error_code' => $code, 'error' => 'PRIVATE-UPSTREAM-DETAIL'], $status);
+        });
+        foreach ([[true, 503, 'generation_busy', 'generation_busy'],
+            [true, 409, 'generation_busy', 'generation_busy'],
+            [true, 504, 'provider_timeout', 'provider_timeout'],
+            [false, 503, 'generation_busy', 'provider_unavailable'],
+            [false, 504, 'provider_timeout', 'provider_unavailable'],
+            [true, 500, 'generation_busy', 'provider_unavailable'],
+            [true, 503, 'provider_timeout', 'provider_unavailable'],
+            [true, 503, 'PRIVATE-UPSTREAM-ERROR', 'provider_unavailable']] as [$trusted, $status, $code, $expected]) {
+            config(['ai.gateway' => $trusted]);
+            try {
+                app(OllamaClient::class)->generate('deepseek-r1:7b', [['role' => 'user', 'content' => 'Question']]);
+                $this->fail('Provider failure must not be accepted as a completed answer.');
+            } catch (AiProviderException $e) {
+                $this->assertSame($expected, $e->getMessage());
+            }
+        }
     }
 
     public function test_anonymous_and_foreign_owners_cannot_access_ai(): void
@@ -436,6 +559,7 @@ class AiAssistantTest extends TestCase
 
     public function test_expired_analysis_sources_include_safe_model_and_nullable_validation(): void
     {
+        config(['ai.context_tokens' => 16384, 'ai.output_tokens' => 2048]);
         $model = Model::create([
             'name' => str_repeat('CT', 100), 'slug' => 'ct-experiment', 'version' => 'v3',
             'file_path' => '/secret/model.bin', 'description' => 'PRIVATE-DESCRIPTION',
@@ -443,7 +567,7 @@ class AiAssistantTest extends TestCase
         ]);
         $record = AnalysisRecord::create([
             'user_id' => $this->owner->id, 'model_id' => $model->id, 'job_id' => 'expired-context',
-            'model_snapshot' => app(\App\Services\ModelAdmission::class)->snapshot($model),
+            'model_snapshot' => app(ModelAdmission::class)->snapshot($model),
             'status' => 'completed', 'expires_at' => now()->subDay(), 'files_deleted_at' => now(),
             'input_files_count' => 2, 'output_files_count' => 1, 'processing_time_seconds' => 12,
             'frame_provenance' => array_fill(0, 12, ['index' => 4, 'from' => [2, 6], 'generation' => 1,

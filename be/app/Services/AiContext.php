@@ -79,20 +79,45 @@ class AiContext
             .'Jika informasi tidak tersedia, nyatakan ketidakpastian. Berikan jawaban akhir setelah penalaran.';
         $history = AiMessage::where('ai_conversation_id', $request->ai_conversation_id)
             ->where('id', '<=', $request->user_message_id)->latest('id')
-            ->limit(config('ai.history_messages'))->get();
-        $remaining = config('ai.history_characters');
-        $selected = [];
-        foreach ($history as $message) {
-            if ($remaining <= 0) {
-                break;
-            }
-            $content = mb_substr($message->content, 0, $remaining);
-            $remaining -= mb_strlen($content);
-            $selected[] = ['role' => $message->role, 'content' => $content];
+            ->limit(max(1, (int) config('ai.history_messages')))->get();
+        $latest = $history->first();
+        if (! $latest || $latest->id !== $request->user_message_id || $latest->role !== 'user') {
+            throw new AiProviderException('context_unavailable');
         }
 
-        return [['role' => 'user', 'content' => $instruction
-            ."\nMetadata server: ".json_encode($sources, JSON_UNESCAPED_UNICODE)
-            ."\nRiwayat/pertanyaan (JSON): ".json_encode(array_reverse($selected), JSON_UNESCAPED_UNICODE)]];
+        // A UTF-8 byte is a conservative token upper bound for the deployed
+        // byte-fallback tokenizer. Reserve room for its chat template too.
+        $budget = min(12000, max(0, (int) config('ai.context_tokens') - (int) config('ai.output_tokens') - 64));
+        try {
+            $prefix = $instruction."\nMetadata server: ".json_encode($sources, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)
+                ."\nRiwayat/pertanyaan (JSON): ";
+            $render = fn (array $selected) => $prefix.json_encode(array_reverse($selected), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            $selected = [['role' => 'user', 'content' => $latest->content]];
+            $prompt = $render($selected);
+            if (strlen($prompt) > $budget) {
+                // Neither trusted evidence nor the current question may be
+                // silently shortened. The UI retains the original sources.
+                throw new AiProviderException('context_unavailable');
+            }
+            $remaining = max(0, (int) config('ai.history_characters') - mb_strlen($latest->content));
+            foreach ($history->skip(1) as $message) {
+                $length = mb_strlen($message->content);
+                if ($length > $remaining) {
+                    break;
+                }
+                $candidate = [...$selected, ['role' => $message->role, 'content' => $message->content]];
+                $candidatePrompt = $render($candidate);
+                if (strlen($candidatePrompt) > $budget) {
+                    break;
+                }
+                $selected = $candidate;
+                $prompt = $candidatePrompt;
+                $remaining -= $length;
+            }
+        } catch (\JsonException) {
+            throw new AiProviderException('context_unavailable');
+        }
+
+        return [['role' => 'user', 'content' => $prompt]];
     }
 }
