@@ -9,6 +9,8 @@ from pathlib import Path
 from threading import RLock
 from typing import Literal
 
+from .gpu import GPULease
+
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 
@@ -88,7 +90,7 @@ class Registry:
         self._check_identity(model_id, version)
         key = model_id, version
         # Covers activation check, verified loading, GPU switch and inference.
-        with self.lock:
+        with self.lock, GPULease(self.gpu_lease_path):
             if key not in self.active_versions():
                 raise RegistryError('Model version is not activated')
             entry = self.entries().get(key)
@@ -109,11 +111,12 @@ class Registry:
                 self._loaded_signature = signature
             return self._loaded.predict(inputs, verbose=0)
 
-    def __init__(self, root, activation_file, loader=None):
+    def __init__(self, root, activation_file, loader=None, gpu_lease_path=None):
         self.root = Path(root).absolute()
         self.activation_file = Path(activation_file).absolute()
         if self.activation_file.resolve().is_relative_to(self.root.resolve()):
             raise RegistryError('Activation must be outside immutable registry')
+        self.gpu_lease_path = gpu_lease_path
         self.loader = loader
         self.lock = RLock()
         self._loaded = None

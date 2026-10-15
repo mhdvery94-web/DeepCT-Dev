@@ -133,3 +133,82 @@ placement require controller runtime
 evidence. The measured compiled/legacy maxabs 1 is not accepted scientific
 parity; arbitrary-model UAT and scientific acceptance remain release gates. Do not swap the
 production worker, delete original weights, or stop notebook GPU processes.
+
+### Private GPU assistant gateway
+
+The assistant is disabled unless `DEEPCT_ASSISTANT_TOKEN` is configured. This
+bearer must differ from the inference, management and optional legacy credentials.
+Laravel keeps user authorization and sends its metadata-only messages to
+`POST /assistant/api/chat` through the existing private UDS/Caddy ingress. Do not
+publish Ollama directly. The gateway connects only to `127.0.0.1:11435` using HTTP
+without environment proxies, and only runs the deployed `deepseek-r1:7b` model.
+It forces `think: true`, `stream: false`, `keep_alive: 0`; accepts at most 12,000
+UTF-8 bytes across message contents and a 64 KiB JSON body; and bounds context
+at 16,384, output at 2,048 and CPU threads at 16. Messages accept only text and
+system/user/assistant roles. Thinking fields and provider diagnostics are never
+returned or logged. Laravel removes a leading reasoning block if the provider
+includes one in content.
+
+Configure `DEEPCT_GPU_LEASE_PATH` to a local file in an existing private state
+directory and `DEEPCT_ASSISTANT_GPU_BYTES` to the measured free-VRAM admission
+threshold. Missing GPU capacity/configuration fails closed; there is no CPU
+fallback. The same nonblocking file lease covers registry prediction (in addition
+to its existing registry lock), compatibility work including its owned child,
+assistant generation and legacy prediction forwarding. Registry/compatibility
+lock order is registry lock then GPU lease. The compatibility child does not
+reacquire the lease held by its parent. Before dispatch, compatibility persists
+the unsafe marker too; only a confirmed, reaped child exit clears it. Parent death,
+child timeout or ambiguous dispatch errors leave it intact. Use a local filesystem supporting `flock`;
+all cooperating processes must use the same file, and direct legacy prediction
+access must remain private. The lease coordinates work, not other processes'
+existing allocations: the free-VRAM check accounts for those allocations.
+
+Enable `DEEPCT_LEGACY_PROXY_ENABLED=true` only when the existing private ingress
+rewrites legacy `POST /predict/{model_name}` to
+`/assistant/legacy/predict/{model_name}` on this server. Forward new registry
+`/predict/{model_id}/{version}` directly to the registry route; proxying it through
+this lease would cause nested acquisition. The legacy proxy targets only
+`127.0.0.1:8000/predict/{model_name}`, with a single validated name segment, and
+preserves request bytes/content type/optional bearer and upstream response status,
+bytes, content type and disposition. Request and response limits are 64 MiB.
+Set `DEEPCT_LEGACY_INFERENCE_TOKEN` only if legacy inference already requires a
+bearer; empty preserves its original unauthenticated contract. This proxy does
+not expose legacy catalog, arbitrary URL or management routes.
+
+Busy/admission rejection returns 503 with `error_code: generation_busy`;
+provider timeout returns 504 with `error_code: provider_timeout`. Other provider
+failures return 503 with `error_code: provider_unavailable`. Validation errors
+return a safe fixed envelope without echoing messages. The synchronous worker
+owns generation, lease and cleanup even after an ASGI/browser disconnect. The
+request timeout defaults to 180 seconds and cleanup budget to 10 seconds via
+`DEEPCT_ASSISTANT_TIMEOUT_SECONDS` and `DEEPCT_ASSISTANT_CLEANUP_SECONDS`.
+
+Before generation the lease file records unverified residency durably. A
+successful generation must unload with `/api/generate` and observe `/api/ps`
+empty before clearing that marker and releasing the lease. A worker crash,
+provider failure/timeout or failed unload leaves the marker intact, so all GPU
+participants refuse new work across process restarts. A timeout or lost connection
+can leave work pending even after a temporarily empty `/api/ps`; automatic
+marker clearing in those cases would be unsafe. This favors CT safety over
+availability. The application never stops another process or runs a configurable
+shell hook.
+
+To recover a poisoned lease, first stop ingress/queued GPU jobs. Acquire an
+exclusive `flock` on the **existing lease file** and keep it held through recovery.
+Stop only the owned `deepct-ollama-staging` user service, verify it is inactive
+and that its owned runner processes have exited. Do not stop the legacy GPU
+process. If the failed request was legacy inference, independently verify that
+legacy inference has completed and is idle; stopping Ollama does not establish
+this. For failed compatibility work, verify its owned child has exited; a killed
+parent alone does not establish that. If the failed request source is unknown,
+verify both runtimes are idle and any owned compatibility child has exited.
+With those checks complete and the lock still held, truncate the existing
+file to zero bytes and fsync it. Never unlink or replace the lease file: that
+would create a second lock inode and permit overlap. Restart the owned Ollama
+service, verify its `/api/ps` is empty, then resume ingress. Do not clear the
+marker based solely on an unlocked file or a responding health endpoint.
+
+CPU transport/process tests validate this protocol without claiming model quality
+or GPU readiness. Staging requires separate checks of the pinned Ollama/runtime
+and model integrity, real GPU residency/unload and factual/reasoning behavior.
+The CT scientific acceptance and activation gate are unchanged.

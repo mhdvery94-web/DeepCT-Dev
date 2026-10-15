@@ -28,7 +28,7 @@ def bearer_dependency(expected):
 
 def create_app(settings=None, registry=None):
     settings = settings or Settings.from_env()
-    registry = registry or Registry(settings.models_root, settings.activation_file)
+    registry = registry or Registry(settings.models_root, settings.activation_file, gpu_lease_path=settings.gpu_lease_path)
     app = FastAPI(title='DeepCT Model Server', docs_url=None, redoc_url=None, openapi_url=None)
     inference = bearer_dependency(settings.inference_token)
     # Task 5 management routes must use this separate dependency.
@@ -76,6 +76,8 @@ def create_app(settings=None, registry=None):
             'Content-Disposition': f'attachment; filename="{model_id}-v{version}-prediction.tif"',
         })
 
+    from .assistant import install_assistant_routes
+    install_assistant_routes(app, settings, bearer_dependency)
     from .upload_api import install_upload_routes
     from .compatibility import Compatibility
     install_upload_routes(app, registry, settings.upload_origins, Compatibility(registry, settings.compatibility_gpu_bytes, settings.compatibility_address_bytes))
