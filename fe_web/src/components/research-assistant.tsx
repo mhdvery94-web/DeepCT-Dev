@@ -44,6 +44,11 @@ export function ResearchAssistant({
   const [knownActive, setKnownActive] = useState<AiRequest | null>(null);
   const [draft, setDraft] = useState("");
   const [contextId, setContextId] = useState(analysisRecordId);
+  const [analyses, setAnalyses] = useState<{ id: number; status: string }[]>([]);
+  const [analysisPage, setAnalysisPage] = useState<AiPagination>();
+  const [analysesLoading, setAnalysesLoading] = useState(false);
+  const [analysesError, setAnalysesError] = useState("");
+  const analysisOperation = useRef(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -83,6 +88,41 @@ export function ResearchAssistant({
     },
     [],
   );
+  const loadAnalyses = useCallback(async (page: number) => {
+    const signal = session.current?.signal;
+    if (!signal || signal.aborted || analysisOperation.current) return;
+    analysisOperation.current = true;
+    setAnalysesLoading(true);
+    setAnalysesError("");
+    try {
+      const result = await backend(
+        `/predictions?page=${page}&per_page=20`,
+        "GET",
+        undefined,
+        signal,
+      );
+      if (signal.aborted) return;
+      const incoming = result.data as { id: number; status: string }[];
+      setAnalyses((previous) => [
+        ...new Map(
+          [...previous, ...incoming].map((item) => [
+            item.id,
+            { id: item.id, status: item.status },
+          ]),
+        ).values(),
+      ]);
+      setAnalysisPage(result.pagination as AiPagination);
+    } catch (reason) {
+      if (!signal.aborted) setAnalysesError(messageOf(reason));
+    } finally {
+      analysisOperation.current = false;
+      if (!signal.aborted) setAnalysesLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (status?.mode === "metadata") void loadAnalyses(1);
+  }, [status?.mode, loadAnalyses]);
+
   const initialize = useCallback(
     async (signal: AbortSignal) => {
       setLoading(true);
@@ -220,7 +260,6 @@ export function ResearchAssistant({
     setError("");
     setLoading(true);
     setDraft("");
-    setContextId(analysisRecordId);
     try {
       const result = (
         await backend(
@@ -285,7 +324,6 @@ export function ResearchAssistant({
     setPollError("");
     setLoading(false);
     setDrawer(false);
-    setContextId(analysisRecordId);
   }
   async function send(submission?: AiSubmission) {
     if (
@@ -677,12 +715,73 @@ export function ResearchAssistant({
               </button>
             </div>
           )}
+          {status?.mode === "metadata" && (
+            <div className="assistant-analysis-picker">
+              <label htmlFor="assistant-analysis">Pilih analisis</label>
+              <select
+                id="assistant-analysis"
+                value={contextId ?? ""}
+                disabled={blocked}
+                onChange={(event) => {
+                  if (!blocked && !operations.current)
+                    setContextId(
+                      event.target.value ? Number(event.target.value) : undefined,
+                    );
+                }}
+              >
+                <option value="">Tanpa konteks analisis</option>
+                {contextId != null &&
+                  !analyses.some((item) => item.id === contextId) && (
+                    <option value={contextId}>
+                      Analisis #{contextId} · dipilih
+                    </option>
+                  )}
+                {analyses.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    Analisis #{item.id} · {item.status}
+                  </option>
+                ))}
+              </select>
+              {analysesLoading && <span role="status">Memuat analisis…</span>}
+              {analysesError && (
+                <div className="assistant-error" role="alert">
+                  <span>{analysesError}</span>
+                  <button
+                    disabled={analysesLoading || blocked}
+                    onClick={() =>
+                      void loadAnalyses((analysisPage?.current_page ?? 0) + 1)
+                    }
+                  >
+                    Coba muat analisis lagi
+                  </button>
+                </div>
+              )}
+              {!analysesLoading &&
+                !analysesError &&
+                analysisPage &&
+                analyses.length === 0 && (
+                  <span role="status">Belum ada analisis milik Anda.</span>
+                )}
+              {!analysesError &&
+                analysisPage &&
+                analysisPage.current_page < analysisPage.last_page && (
+                  <button
+                    disabled={analysesLoading || blocked}
+                    onClick={() => void loadAnalyses(analysisPage.current_page + 1)}
+                  >
+                    Muat analisis lainnya
+                  </button>
+                )}
+            </div>
+          )}
           {contextId && (
             <div className="assistant-context">
               Konteks prediksi #{contextId}
               <button
-                disabled={busy || !!pending}
-                onClick={() => setContextId(undefined)}
+                disabled={blocked}
+                onClick={() => {
+                  if (!blocked && !operations.current) setContextId(undefined);
+                }}
               >
                 Lepas konteks
               </button>

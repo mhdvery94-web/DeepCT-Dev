@@ -162,6 +162,85 @@ class _ResearchAssistantScreenState extends State<ResearchAssistantScreen> {
     ),
   );
 
+  Widget _analysisPicker() => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DropdownButtonFormField<int>(
+          key: const Key('ai-context-picker'),
+          initialValue: chat.contextId ?? 0,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Pilih analisis',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+          items: [
+            const DropdownMenuItem(
+              value: 0,
+              child: Text('Tanpa konteks analisis'),
+            ),
+            if (chat.contextId != null &&
+                !chat.analyses.any((row) => row['id'] == chat.contextId))
+              DropdownMenuItem(
+                value: chat.contextId,
+                child: Text('Analisis #${chat.contextId} · dipilih'),
+              ),
+            ...chat.analyses.map(
+              (row) => DropdownMenuItem<int>(
+                value: row['id'] as int,
+                child: Text(
+                  'Analisis #${row['id']} · ${row['status']}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
+          onChanged: chat.canSend
+              ? (id) => chat.selectContext(id == 0 ? null : id)
+              : null,
+        ),
+        if (chat.analysesLoading)
+          const Text(
+            'Memuat analisis…',
+            style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+          ),
+        if (chat.analysesError != null)
+          _error(
+            chat.analysesError!,
+            'Coba muat analisis lagi',
+            chat.canSend ? chat.loadAnalyses : null,
+          ),
+        if (!chat.analysesLoading &&
+            chat.analysesError == null &&
+            chat.analysisPage > 0 &&
+            chat.analyses.isEmpty)
+          const Text(
+            'Belum ada analisis milik Anda.',
+            style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+          ),
+        if (chat.analysesError == null &&
+            chat.analysisPage > 0 &&
+            chat.analysisPage < chat.analysisLast)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: chat.canSend && !chat.analysesLoading
+                  ? chat.loadAnalyses
+                  : null,
+              child: const Text(
+                'Muat analisis lainnya',
+                style: TextStyle(fontSize: 11),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+
   Widget _message(Map<String, dynamic> message) {
     final user = message['role'] == 'user';
     return Align(
@@ -294,6 +373,7 @@ class _ResearchAssistantScreenState extends State<ResearchAssistantScreen> {
             'Coba polling lagi',
             chat.busy ? null : chat.retryPoll,
           ),
+        if (chat.status?['mode'] == 'metadata') _analysisPicker(),
         if (chat.contextId != null)
           Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -307,9 +387,7 @@ class _ResearchAssistantScreenState extends State<ResearchAssistantScreen> {
                 ),
               ),
               TextButton(
-                onPressed: chat.busy || chat.pending != null
-                    ? null
-                    : chat.clearContext,
+                onPressed: chat.canSend ? chat.clearContext : null,
                 child: const Text(
                   'Lepas konteks',
                   style: TextStyle(fontSize: 11),

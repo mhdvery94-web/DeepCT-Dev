@@ -14,6 +14,15 @@ class AiService {
             ))['data']
             as Map,
       );
+
+  /// Owner-scoped analyses, including retained metadata after file expiry.
+  Future<Map<String, dynamic>> analyses({int page = 1}) =>
+      ApiClient.instance.get(
+        '/predictions',
+        query: {'page': page, 'per_page': 20},
+        cancelToken: _cancel,
+      );
+
   Future<Map<String, dynamic>> post(
     String path,
     Map<String, dynamic> data,

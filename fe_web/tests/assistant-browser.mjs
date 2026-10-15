@@ -7,7 +7,10 @@ import { mkdir } from 'node:fs/promises';
 import { chromium } from '/workspace/.browser-tools/node_modules/playwright-core/index.mjs';
 
 let enabled = false, state = 'completed', failSend = false, failPoll = false, refuseSend = false;
-let originalContextId = null;
+let originalContextId = null, mode;
+let failAnalyses = false, emptyAnalyses = false;
+const analysisCalls = [];
+let analysisGate;
 const sends = [];
 const date = '2026-10-10T12:00:00Z';
 const msg = (id, role, content) => ({ id, role, content, created_at: date });
@@ -18,7 +21,16 @@ const fixture = http.createServer(async (req, res) => {
   const page = Number(url.searchParams.get('page') || 1);
   let payload, status = 200;
   if (path === '/user') payload = {id:1,name:'Researcher Test',email:'fixture@example.test',role:req.headers.authorization === 'Bearer fake-admin' ? 'admin' : 'user',must_change_password:false};
-  else if (path === '/ai/status') payload = {enabled,model:'deepseek-r1:1.5b',prompt_version:'deepct-assistant-v1',experimental:true,limits:{message_characters:2000,requests_per_day:20,queue:10}};
+  else if (path === '/ai/status') payload = {mode,enabled,model:'deepseek-r1:1.5b',prompt_version:'deepct-assistant-v1',experimental:true,limits:{message_characters:2000,requests_per_day:20,queue:10}};
+  else if (path === '/predictions') {
+    analysisCalls.push(url.pathname + url.search);
+    if (analysisGate) await analysisGate;
+    if (failAnalyses) {status=502;payload={success:false,message:'Daftar analisis terputus'};}
+    else {
+      res.writeHead(200, {'Content-Type':'application/json'});
+      res.end(JSON.stringify({success:true,data:emptyAnalyses?[]:[{id:3,status:'completed',expired:true,files_deleted:true},...(page===2?[{id:24,status:'failed'}]:[])],pagination:{current_page:page,last_page:emptyAnalyses?1:2,per_page:20,total:emptyAnalyses?0:21}}));return;
+    }
+  }
   else if (path === '/ai/conversations' && req.method === 'GET') payload = {conversations:[{id:page === 1 ? 7 : 8,title:page === 1 ? 'Riwayat riset' : 'Percakapan lama',created_at:date,updated_at:date}],pagination:{current_page:page,last_page:2,per_page:20,total:21}};
   else if (path === '/ai/conversations' && req.method === 'POST') payload = {id:7,title:'Percakapan baru',created_at:date,updated_at:date};
   else if (/^\/ai\/conversations\/\d+$/.test(path)) payload = {id:7,title:'Riwayat riset',messages:[msg(page === 1 ? 100 : 90,'user',page === 1 ? 'Pertanyaan tersimpan' : 'Pesan lama'),...(state === 'completed' && page === 1 ? [msg(101,'assistant','Jawaban eksperimen')] : [])],pagination:{current_page:page,last_page:2,per_page:20,total:21},request:request()};
@@ -46,6 +58,88 @@ try {
   await context.grantPermissions(['clipboard-read','clipboard-write']);
   await context.addCookies([{name:'deepct_session',value:'fake-user',url:'http://127.0.0.1:3213',httpOnly:true}]);
   const page = await context.newPage();
+  mode='metadata'; enabled=true;
+  for (const token of ['fake-user','fake-admin']) {
+    await context.addCookies([{name:'deepct_session',value:token,url:'http://127.0.0.1:3213',httpOnly:true}]);
+    await page.goto('http://127.0.0.1:3213/workspace/assistant?analysis_record_id=99');
+    const picker=page.getByRole('combobox',{name:'Pilih analisis',exact:true});
+    await picker.waitFor({timeout:20000});
+    await page.getByRole('option',{name:'Analisis #3 · completed',exact:true}).waitFor({state:'attached'});
+    assert.equal(await picker.inputValue(),'99');
+    assert.equal(analysisCalls.at(-1),'/api/predictions?page=1&per_page=20');
+    failAnalyses=true;
+    await page.getByRole('button',{name:'Muat analisis lainnya',exact:true}).click();
+    await page.getByText('Daftar analisis terputus',{exact:true}).waitFor();
+    assert.equal(await picker.inputValue(),'99');
+    failAnalyses=false;
+    await page.getByRole('button',{name:'Coba muat analisis lagi',exact:true}).click();
+    await page.getByRole('option',{name:'Analisis #24 · failed',exact:true}).waitFor({state:'attached'});
+    assert.equal(analysisCalls.at(-1),'/api/predictions?page=2&per_page=20');
+    assert.equal(await picker.getByRole('option',{name:'Analisis #3 · completed',exact:true}).count(),1);
+    await picker.selectOption('24');
+    await page.getByRole('button',{name:'+ Chat baru',exact:true}).click();
+    assert.equal(await picker.inputValue(),'24');
+    await page.getByRole('button',{name:'Riwayat riset',exact:true}).click();
+    await page.getByText('Pertanyaan tersimpan',{exact:true}).waitFor();
+    assert.equal(await picker.inputValue(),'24');
+    failSend=true;
+    await page.getByRole('textbox',{name:'Pesan'}).fill('Konteks pilihan');
+    const before=sends.length;
+    await page.getByRole('button',{name:'Kirim',exact:true}).click();
+    await page.getByText('Jaringan terputus',{exact:true}).waitFor();
+    assert.equal(await picker.isDisabled(),true);
+    await page.getByRole('button',{name:'Coba kirim lagi',exact:true}).click();
+    await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
+    assert.deepEqual(sends[before],sends[before+1]);
+    assert.equal(sends[before].analysis_record_id,24);
+    assert.equal(await picker.isDisabled(),true);
+    assert.equal(await page.getByRole('button',{name:'Lepas konteks',exact:true}).isDisabled(),true);
+    await page.getByRole('button',{name:'+ Chat baru',exact:true}).click();
+    assert.equal(await picker.isDisabled(),true,'global unresolved active request blocks retargeting');
+    await page.getByRole('button',{name:'Buka permintaan aktif',exact:true}).click();
+    await page.getByRole('button',{name:'Batalkan',exact:true}).click();
+    await page.getByText('Dibatalkan',{exact:true}).waitFor();
+    await picker.selectOption('3');
+    await page.getByRole('button',{name:'Buat ulang jawaban',exact:true}).click();
+    await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
+    assert.equal(sends.at(-1).analysis_record_id,24,'regeneration retains admitted context after picker changes');
+    await page.getByRole('button',{name:'Batalkan',exact:true}).click();
+    await page.getByText('Dibatalkan',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Lepas konteks',exact:true}).click();
+    assert.equal(await picker.inputValue(),'');
+    await page.getByRole('textbox',{name:'Pesan'}).fill('Tanpa konteks');
+    await page.getByRole('button',{name:'Kirim',exact:true}).click();
+    await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
+    assert.equal(Object.hasOwn(sends.at(-1),'analysis_record_id'),false);
+    await page.getByRole('button',{name:'Batalkan',exact:true}).click();
+    await page.getByText('Dibatalkan',{exact:true}).waitFor();
+  }
+  let releaseAnalyses;
+  analysisGate=new Promise(resolve=>{releaseAnalyses=resolve;});
+  await page.goto('http://127.0.0.1:3213/workspace/assistant?analysis_record_id=99');
+  await page.getByText('Memuat analisis…',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Lepas konteks',exact:true}).click();
+  releaseAnalyses(); analysisGate=undefined;
+  await page.getByRole('option',{name:'Analisis #3 · completed',exact:true}).waitFor({state:'attached'});
+  assert.equal(await page.getByRole('combobox',{name:'Pilih analisis',exact:true}).inputValue(),'','late fetch cannot restore cleared selection');
+  analysisGate=new Promise(resolve=>{releaseAnalyses=resolve;});
+  await page.getByRole('button',{name:'Muat analisis lainnya',exact:true}).click();
+  await page.getByText('Memuat analisis…',{exact:true}).waitFor();
+  await page.goto('about:blank');
+  releaseAnalyses(); analysisGate=undefined;
+  failAnalyses=true;
+  await page.goto('http://127.0.0.1:3213/workspace/assistant?analysis_record_id=99');
+  await page.getByText('Daftar analisis terputus',{exact:true}).waitFor();
+  const picker=page.getByRole('combobox',{name:'Pilih analisis',exact:true});
+  assert.equal(await picker.inputValue(),'99');
+  failAnalyses=false;emptyAnalyses=true;
+  await page.getByRole('button',{name:'Coba muat analisis lagi',exact:true}).click();
+  await page.getByText('Belum ada analisis milik Anda.',{exact:true}).waitFor();
+  assert.equal(await picker.inputValue(),'99');
+  console.log('PASS both roles owner listing/pagination/deduplication/selection/clear, initial context, errors/retry/empty, immutable retry/regeneration, disabled global active context');
+  const callsBeforeLegacy=analysisCalls.length;
+  mode=undefined; enabled=false; emptyAnalyses=false; state='completed'; originalContextId=null; sends.length=0;
+  await context.addCookies([{name:'deepct_session',value:'fake-user',url:'http://127.0.0.1:3213',httpOnly:true}]);
   await page.goto('http://127.0.0.1:3213/workspace/assistant');
   await page.getByText(/belum tersedia/).waitFor({timeout:20000});
   await page.getByRole('button',{name:'Riwayat riset',exact:true}).click();
@@ -163,9 +257,10 @@ try {
   await page.goto('http://127.0.0.1:3213/workspace/assistant?analysis_record_id=9');
   await page.getByRole('button',{name:'Riwayat riset',exact:true}).click();
   await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
-  await page.getByRole('button',{name:'Lepas konteks',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Lepas konteks',exact:true}).isDisabled(),true);
   state='failed';
   await page.getByRole('button',{name:'Buat ulang jawaban',exact:true}).waitFor({timeout:12000});
+  await page.getByRole('button',{name:'Lepas konteks',exact:true}).click();
   const previousKey=sends.at(-1).idempotency_key;
   await page.getByRole('button',{name:'Buat ulang jawaban',exact:true}).click();
   await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
@@ -173,6 +268,7 @@ try {
   assert.notEqual(sends.at(-1).idempotency_key,previousKey);
   await page.getByRole('button',{name:'Batalkan',exact:true}).click();
   await page.getByText('Dibatalkan',{exact:true}).waitFor();
+  assert.equal(analysisCalls.length,callsBeforeLegacy,'legacy/default mode must not fetch analyses');
   console.log('PASS polling restores original context for regeneration after composer removal with a fresh key');
 } finally {
   await browser?.close();app.kill('SIGTERM');await new Promise(resolve=>fixture.close(resolve));

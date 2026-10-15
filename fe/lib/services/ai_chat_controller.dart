@@ -13,6 +13,10 @@ class AiChatController extends ChangeNotifier {
   Map<String, dynamic>? status, conversation, request, pending, knownActive;
   List<Map<String, dynamic>> conversations = [], messages = [];
   int historyPage = 1, historyLast = 1, messagePage = 1, messageLast = 1;
+  List<Map<String, dynamic>> analyses = [];
+  int analysisPage = 0, analysisLast = 1;
+  bool analysesLoading = false;
+  String? analysesError;
   bool loading = true, busy = false;
   String? error, pollError;
   Timer? _timer;
@@ -48,6 +52,9 @@ class AiChatController extends ChangeNotifier {
       final result = await service.get('status');
       if (_disposed) return;
       status = result;
+      if (status?['mode'] == 'metadata' && analysisPage == 0) {
+        unawaited(loadAnalyses());
+      }
       await loadHistory(1);
     } catch (e) {
       if (!_disposed) error = e.toString();
@@ -57,6 +64,38 @@ class AiChatController extends ChangeNotifier {
         _notify();
       }
     }
+  }
+
+  Future<void> loadAnalyses() async {
+    if (_disposed || analysesLoading) return;
+    analysesLoading = true;
+    analysesError = null;
+    _notify();
+    try {
+      final result = await service.analyses(page: analysisPage + 1);
+      if (_disposed) return;
+      final unique = {for (final row in analyses) row['id']: row};
+      for (final row in rows(result['data'])) {
+        unique[row['id']] = {'id': row['id'], 'status': row['status']};
+      }
+      analyses = unique.values.toList();
+      final pagination = map(result['pagination']);
+      analysisPage = pagination['current_page'] as int? ?? analysisPage + 1;
+      analysisLast = pagination['last_page'] as int? ?? analysisPage;
+    } catch (e) {
+      if (!_disposed) analysesError = e.toString();
+    } finally {
+      if (!_disposed) {
+        analysesLoading = false;
+        _notify();
+      }
+    }
+  }
+
+  void selectContext(int? id) {
+    if (_disposed || !canSend) return;
+    contextId = id;
+    _notify();
   }
 
   Future<void> loadHistory(int page) async {
@@ -306,10 +345,7 @@ class AiChatController extends ChangeNotifier {
   }
 
   void clearContext() {
-    if (!busy && pending == null) {
-      contextId = null;
-      _notify();
-    }
+    selectContext(null);
   }
 
   void reportError(String message) {

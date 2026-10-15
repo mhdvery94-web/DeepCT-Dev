@@ -5,8 +5,7 @@ export function AssistantEvidence({ request }: { request: AiRequest }) {
     <details className="assistant-evidence">
       <summary>Sumber dan metrik tepercaya</summary>
       <p>
-        Metadata dari server saat jawaban dibuat. Terpisah dari teks model;
-        berkas TIFF tidak dibaca oleh asisten.
+        Gunakan sumber ini untuk memeriksa jawaban; asisten tidak membaca piksel TIFF.
       </p>
       {request.sources.length === 0 && <p>Tidak ada konteks prediksi.</p>}
       {request.sources.map((source) => (

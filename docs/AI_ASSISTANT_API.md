@@ -1,10 +1,15 @@
 # Experimental assistant API and operations
 
-The assistant is disabled by default. The production activation gate has failed:
+The assistant is disabled by default. The earlier freeform production gate failed:
 the real Pi `deepseek-r1:1.5b` benchmarks took roughly 51–60 seconds, and both
 short Indonesian pending-status answers were incorrect or vague. Those results
-do not establish acceptable answer quality. This implementation uses provider
-fakes in tests and does not activate production or call the live Pi.
+do not establish acceptable answer quality. DeepSeek R1 7B on the TUF GPU also
+failed freeform factual-quality checks. Neither result authorizes freeform use.
+An independently evaluated, bounded metadata mode is enabled in isolated staging:
+DeepSeek selects a topic, and Laravel renders the answer from authorized metadata.
+See [GPU quality evidence and operations](AI_GPU_ASSISTANT_QUALITY.md). Fresh
+environments and production remain disabled; automated unit suites use fakes,
+while the separately recorded acceptance tests used the actual TUF GPU.
 
 All routes below use the `/api` prefix and require a Sanctum bearer token, an
 active account and completion of any required password change. Admins have the
@@ -13,7 +18,7 @@ analysis selections return 404. Successful responses use `{success:true,data:…
 
 | Method/path | Input | `data` / HTTP status |
 | --- | --- | --- |
-| GET `/ai/status` | none | `enabled`, `model`, `prompt_version`, `experimental:true`, `limits` / 200 |
+| GET `/ai/status` | none | `enabled`, `model`, `mode:freeform\|metadata`, `prompt_version`, `experimental:true`, `limits` / 200 |
 | GET `/ai/conversations` | optional `page`, `per_page` | `conversations:Conversation[]`, `pagination` / 200 |
 | POST `/ai/conversations` | optional `title` (1–120 characters) | `Conversation` / 201 |
 | GET `/ai/conversations/{id}` | optional `page`, `per_page` | `Conversation` plus `messages:Message[]`, `pagination`, `request:AiRequest|null` / 200 |
@@ -89,7 +94,7 @@ before that migration remain unknown/null, without inference from snapshots.
 it is a snapshot, not a live prediction poll. The CT model field is nullable,
 with names/slugs bounded to 120 characters and versions to 64. Source counts
 and processing time may be null. Validation metric keys are optional
-`mae`, `psnr`, `rmse`, `pixels`, `reference_min`, `reference_max`, with numeric or
+`mae`, `psnr`, `rmse`, `ssim`, `pixels`, `reference_min`, `reference_max`, with numeric or
 null values; missing/null data is not replaced with zero. Numeric validation
 provenance may contain `index` and a two-integer `from` array. At most eight
 frame provenance entries include only `index`, `from`, `generation` and
@@ -101,7 +106,7 @@ Provider metrics are optional nonnegative integer keys `prompt_eval_count`,
 `eval_count`, `total_duration`, `load_duration`, `prompt_eval_duration`,
 `eval_duration`. Duration units are Ollama nanoseconds. Metrics dictionaries
 serialize as objects, including `{}`. Display source/metric panels separately
-from the experimental generated answer; do not infer trusted facts from prose.
+from the experimental answer; verify its facts against the source snapshot.
 Never treat generated text as verified scientific advice or executable HTML.
 
 Message content allows 1–2000 characters; whitespace-only input is rejected.
@@ -132,8 +137,9 @@ remain terminal and are returned unchanged.
 
 Before any separately authorized activation, migrate the three AI tables and
 configure `AI_OLLAMA_BASE_URL`, optional `AI_OLLAMA_TOKEN`, and backend-only
-`AI_ASSISTANT_MODEL` (default `deepseek-r1:1.5b`). The fixed prompt version is
-`deepct-assistant-v1`. Keep `AI_ASSISTANT_ENABLED=false` until a new quality gate
+`AI_ASSISTANT_MODEL` (default `deepseek-r1:1.5b`). The freeform prompt version is
+`deepct-assistant-v1`; bounded metadata mode uses `deepct-metadata-v2`.
+Keep `AI_ASSISTANT_ENABLED=false` until the selected mode's quality gate
 passes. Client input cannot override the provider URL, credentials or model.
 Apply normal Laravel configuration refresh/restart practices for config changes.
 
@@ -148,10 +154,13 @@ php artisan queue:work llm --queue=llm --timeout=300 --tries=1
 ```
 
 Ollama must be configured with `OLLAMA_NUM_PARALLEL=1` and the approved model.
-The request sets `num_thread=2`, temperature 0.6, `num_ctx=2048` and
+The default freeform request sets `num_thread=2`, temperature 0.6, `num_ctx=2048` and
 `num_predict=768` (reasoning included). R1 instructions are in a user prompt,
 with at most eight historical messages and 6000 history characters including
-the current question. A non-streaming request has a 260-second HTTP timeout;
+the current question. Backend-only `AI_CONTEXT_TOKENS`, `AI_OUTPUT_TOKENS`, and
+`AI_THREADS` select a deployed profile; prompt contents are also bounded to
+12,000 UTF-8 bytes and the context/output budget, preserving the current question.
+A non-streaming request has a 260-second HTTP timeout;
 the job has a 300-second timeout, one try and timeout failure enabled; its queue
 lease is 360 seconds. The single generation lock has a 330-second lease.
 
@@ -171,3 +180,37 @@ CT queue health counts only `default` jobs, so an LLM reservation cannot mask
 a stalled CT queue or trigger a false CT stall alarm. Managed training remains
 retired; the assistant cannot execute tools, run jobs, inspect raw files or
 retrieve other accounts' data.
+
+## Bounded metadata profile
+
+Set `AI_METADATA_MODE=true` only with the matching authenticated fixed-target
+model gateway's `DEEPCT_ASSISTANT_METADATA_MODE=true`. The tested staging profile
+uses `deepseek-r1:7b`, context 16,384, output 128, four CPU threads, and
+`AI_OLLAMA_GATEWAY=true`. `AI_OLLAMA_BASE_URL` is the private model gateway base
+ending in `/assistant`; its bearer credential is backend-only. Never publish
+Ollama or put this bearer in either frontend.
+
+The request uses `think:false` and a strict topic schema: `status`, `metrics`,
+`files`, `overview`, or `scope`. Only the current question is sent to the model;
+analysis metadata, model names, filenames, previous messages, and TIFF bytes are
+not sent in this mode. Laravel validates the returned topic object, then renders
+Indonesian templates from the same authorized source snapshot exposed by the API.
+No provider prose or reasoning becomes the answer. Missing metrics remain
+unknown, zero remains zero, and completed processing never implies scientific
+approval. The classifier may select an irrelevant topic; it cannot select another
+owner's data, run actions, or invent template values. With no selection the reply
+asks the user to choose an owned analysis.
+
+Next.js and Flutter expose `Pilih analisis` using the existing owner-scoped
+`GET /predictions?page=N&per_page=20` list, for admins and users alike. Archived
+analyses remain selectable because their retained metadata can still be explained.
+The picker does not grant access to global admin analysis records. A later picker
+change applies to new messages; retry and regeneration retain their original
+admitted analysis selection.
+
+The model gateway coordinates a shared GPU file lease with CT work and verifies
+model unloading before releasing successful assistant generations. It preserves
+an uncertainty marker after ambiguous failures. Recovery requires checking the
+owned runtime and CT work under the existing lock; see the
+[model-server recovery procedure](../deepct-model-server/README.md#private-gpu-assistant-gateway).
+Do not clear that marker merely because a health endpoint responds.

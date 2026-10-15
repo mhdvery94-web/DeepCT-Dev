@@ -1,12 +1,45 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fe/screens/assistant/research_assistant_screen.dart';
 import 'package:fe/services/ai_service.dart';
+import 'package:fe/services/ai_chat_controller.dart';
 import 'package:fe/services/api_client.dart';
 
 class FakeAi extends AiService {
   bool enabled = false;
+  String? mode;
+  bool failAnalyses = false, emptyAnalyses = false;
+  Completer<Map<String, dynamic>>? delayedAnalyses;
+  final List<int> analysisPages = [];
+
+  @override
+  Future<Map<String, dynamic>> analyses({int page = 1}) async {
+    analysisPages.add(page);
+    if (delayedAnalyses != null) return delayedAnalyses!.future;
+    if (failAnalyses) throw const ApiException('Daftar analisis terputus');
+    return {
+      'data': emptyAnalyses
+          ? []
+          : [
+              {
+                'id': 3,
+                'status': 'completed',
+                'expired': true,
+                'files_deleted': true,
+              },
+              if (page == 2) {'id': 24, 'status': 'failed'},
+            ],
+      'pagination': {
+        'current_page': page,
+        'last_page': emptyAnalyses ? 1 : 2,
+        'per_page': 20,
+        'total': emptyAnalyses ? 0 : 21,
+      },
+    };
+  }
+
   String state = 'completed';
   bool failSend = false;
   bool failPoll = false;
@@ -42,6 +75,7 @@ class FakeAi extends AiService {
     if (path == 'status') {
       return {
         'enabled': enabled,
+        if (mode != null) 'mode': mode,
         'model': 'deepseek-r1:1.5b',
         'experimental': true,
         'limits': {},
@@ -136,6 +170,205 @@ void main() {
     () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, null),
   );
+  testWidgets(
+    'metadata picker admits second-page owned context, then clears it',
+    (tester) async {
+      final api = FakeAi()
+        ..enabled = true
+        ..mode = 'metadata';
+      await mount(tester, api, context: 99);
+      expect(api.analysisPages, [1]);
+      expect(find.textContaining('#99'), findsWidgets);
+      await tester.tap(find.text('Muat analisis lainnya'));
+      await tester.pumpAndSettle();
+      expect(api.analysisPages, [1, 2]);
+      await tester.tap(find.byKey(const Key('ai-context-picker')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Analisis #3 · completed').hitTestable(),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Analisis #24 · failed').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('ai-input')),
+        'Jelaskan analisis',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('ai-send')));
+      await tester.pump();
+      await tester.pump();
+      expect(api.sends.single['analysis_record_id'], 24);
+      expect(
+        tester
+            .widget<DropdownButtonFormField<int>>(
+              find.byKey(const Key('ai-context-picker')),
+            )
+            .onChanged,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<TextButton>(
+              find.widgetWithText(TextButton, 'Lepas konteks'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.text('Batalkan'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Lepas konteks'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('ai-input')),
+        'Tanpa konteks',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('ai-send')));
+      await tester.pump();
+      await tester.pump();
+      expect(api.sends.last.containsKey('analysis_record_id'), isFalse);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'metadata listing retry and empty state retain deep-link context',
+    (tester) async {
+      final api = FakeAi()
+        ..enabled = true
+        ..mode = 'metadata'
+        ..failAnalyses = true;
+      await mount(tester, api, context: 99);
+      expect(find.text('Daftar analisis terputus'), findsOneWidget);
+      expect(find.textContaining('#99'), findsWidgets);
+      api.failAnalyses = false;
+      api.emptyAnalyses = true;
+      await tester.tap(find.text('Coba muat analisis lagi'));
+      await tester.pumpAndSettle();
+      expect(find.text('Belum ada analisis milik Anda.'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('ai-input')), 'Konteks awal');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('ai-send')));
+      await tester.pump();
+      await tester.pump();
+      expect(api.sends.single['analysis_record_id'], 99);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets('late metadata list never updates disposed screen', (
+    tester,
+  ) async {
+    final api = FakeAi()
+      ..enabled = true
+      ..mode = 'metadata'
+      ..delayedAnalyses = Completer<Map<String, dynamic>>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ResearchAssistantScreen(service: api, analysisRecordId: 99),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Memuat analisis…'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    api.delayedAnalyses!.complete({
+      'data': [],
+      'pagination': {'current_page': 1, 'last_page': 1},
+    });
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+  test(
+    'selection guard preserves retry admission and unresolved global request context',
+    () async {
+      final api = FakeAi()
+        ..enabled = true
+        ..mode = 'metadata'
+        ..failSend = true;
+      final chat = AiChatController(api, contextId: 99);
+      addTearDown(chat.dispose);
+      await chat.initialize();
+      expect(await chat.send('Pertanyaan asli'), isFalse);
+      chat.selectContext(3);
+      chat.clearContext();
+      expect(chat.contextId, 99);
+      expect(await chat.send('Teks berbeda', retry: true), isTrue);
+      expect(api.sends[0], api.sends[1]);
+      chat.newChat();
+      chat.selectContext(24);
+      expect(chat.contextId, 99);
+      api.state = 'failed';
+      await chat.open({'id': 7});
+      chat.selectContext(24);
+      expect(chat.contextId, 24);
+      expect(await chat.regenerate(), isTrue);
+      expect(api.sends.last['analysis_record_id'], 99);
+    },
+  );
+  testWidgets(
+    'later page errors preserve explicit selection and retry same page',
+    (tester) async {
+      final api = FakeAi()
+        ..enabled = true
+        ..mode = 'metadata';
+      await mount(tester, api, context: 99);
+      await tester.tap(find.byKey(const Key('ai-context-picker')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Analisis #3 · completed').last);
+      await tester.pumpAndSettle();
+      api.failAnalyses = true;
+      await tester.tap(find.text('Muat analisis lainnya'));
+      await tester.pumpAndSettle();
+      expect(find.text('Daftar analisis terputus'), findsOneWidget);
+      expect(find.text('Konteks prediksi #3'), findsOneWidget);
+      api.failAnalyses = false;
+      await tester.tap(find.text('Coba muat analisis lagi'));
+      await tester.pumpAndSettle();
+      expect(api.analysisPages, [1, 2, 2]);
+      expect(find.text('Konteks prediksi #3'), findsOneWidget);
+      await tester.tap(find.text('Riwayat riset'));
+      await tester.pumpAndSettle();
+      expect(find.text('Konteks prediksi #3'), findsOneWidget);
+      await tester.tap(find.text('Chat baru'));
+      await tester.pumpAndSettle();
+      expect(find.text('Konteks prediksi #3'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets('metadata picker fits mobile keyboard without overflow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await mount(
+      tester,
+      FakeAi()
+        ..enabled = true
+        ..mode = 'metadata',
+      context: 99,
+    );
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getBottomLeft(find.byKey(const Key('ai-input'))).dy,
+      lessThan(544),
+    );
+    await tester.tap(find.byKey(const Key('ai-context-picker')));
+    await tester.pumpAndSettle();
+    expect(find.text('Analisis #3 · completed').hitTestable(), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('legacy mode does not fetch owned analyses', (tester) async {
+    final api = FakeAi()..enabled = true;
+    await mount(tester, api);
+    expect(api.analysisPages, isEmpty);
+    expect(find.byKey(const Key('ai-context-picker')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
   for (final state in ['failed', 'cancelled']) {
     for (final composerContext in [null, 9]) {
       testWidgets(
@@ -187,10 +420,18 @@ void main() {
       await tester.tap(find.text('Riwayat riset'));
       await tester.pump();
       await tester.pump();
-      await tester.tap(find.text('Lepas konteks'));
-      await tester.pump();
+      expect(
+        tester
+            .widget<TextButton>(
+              find.widgetWithText(TextButton, 'Lepas konteks'),
+            )
+            .onPressed,
+        isNull,
+      );
       api.state = 'failed';
       await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      await tester.tap(find.text('Lepas konteks'));
       await tester.pump();
       await tester.tap(find.text('Buat ulang jawaban'));
       await tester.pump();
