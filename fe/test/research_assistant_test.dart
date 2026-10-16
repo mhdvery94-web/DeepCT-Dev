@@ -136,7 +136,9 @@ class FakeAi extends AiService {
       throw const ApiException('Jaringan terputus');
     }
     state = 'queued';
-    originalContextId = data['analysis_record_id'] as int?;
+    if (data.containsKey('analysis_record_id')) {
+      originalContextId = data['analysis_record_id'] as int?;
+    }
     return {
       'request': request,
       'user_message': {'id': 100, 'role': 'user', 'content': data['content']},
@@ -160,7 +162,7 @@ void main() {
     0.934: '0.934',
     0: '0',
     null: 'Tidak tersedia',
-    '<script>alert(1)</script>': '<script>alert(1)</script>',
+    '<script>alert(1)</script>': 'Tidak tersedia',
   }.entries) {
     testWidgets('evidence displays saved SSIM ${entry.key} as text', (
       tester,
@@ -173,6 +175,7 @@ void main() {
                 request: {
                   'sources': [
                     {
+                      'type': 'analysis_record',
                       'id': 3,
                       'status': 'completed',
                       'metrics': {'ssim': entry.key},
@@ -186,7 +189,10 @@ void main() {
       );
       await tester.tap(find.text('Sumber dan metrik tepercaya'));
       await tester.pumpAndSettle();
-      expect(find.text('ssim: ${entry.value}'), findsOneWidget);
+      expect(
+        find.text('SSIM: ${entry.value}'),
+        entry.value == 'Tidak tersedia' ? findsNWidgets(2) : findsOneWidget,
+      );
     });
   }
   testWidgets(
@@ -286,7 +292,8 @@ void main() {
       await tester.tap(find.byKey(const Key('ai-send')));
       await tester.pump();
       await tester.pump();
-      expect(api.sends.last.containsKey('analysis_record_id'), isFalse);
+      expect(api.sends.last.containsKey('analysis_record_id'), isTrue);
+      expect(api.sends.last['analysis_record_id'], isNull);
       await tester.pumpWidget(const SizedBox());
     },
   );
@@ -463,7 +470,8 @@ void main() {
         await tester.tap(find.text('Buat ulang jawaban'));
         await tester.pump();
         await tester.pump();
-        expect(api.sends.single.containsKey('analysis_record_id'), isFalse);
+        expect(api.sends.single.containsKey('analysis_record_id'), isTrue);
+        expect(api.sends.single['analysis_record_id'], isNull);
         await tester.pumpWidget(const SizedBox());
       },
     );
@@ -695,6 +703,91 @@ void main() {
         tester.getBottomLeft(find.byKey(const Key('ai-input'))).dy,
         greaterThan(430),
       );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  test(
+    'ordinary composer omission inherits; clear and switching remain explicit with stable retry',
+    () async {
+      final api = FakeAi()
+        ..enabled = true
+        ..originalContextId = 3;
+      final chat = AiChatController(api);
+      await chat.initialize();
+      await chat.open({'id': 7});
+      await chat.send('Pertanyaan lanjutan');
+      expect(api.sends.single.containsKey('analysis_record_id'), isFalse);
+      expect(chat.request!['analysis_record_id'], 3);
+      await chat.cancel();
+      chat.selectContext(24);
+      api.failSend = true;
+      await chat.send('Ganti analisis');
+      final admitted = Map<String, dynamic>.from(api.sends.last);
+      chat.clearContext(); // Locked while a transport admission is pending.
+      await chat.send('Diabaikan', retry: true);
+      expect(api.sends.last, admitted);
+      await chat.cancel();
+      chat.clearContext();
+      await chat.send('Lepas analisis');
+      expect(api.sends.last.containsKey('analysis_record_id'), isTrue);
+      expect(api.sends.last['analysis_record_id'], isNull);
+      chat.dispose();
+    },
+  );
+
+  test('picker changes retain the recorded source snapshot', () async {
+    final api = FakeAi()..enabled = true;
+    final chat = AiChatController(api);
+    await chat.initialize();
+    await chat.open({'id': 7});
+    final recorded = chat.request!['sources'];
+    chat.selectContext(24);
+    expect(chat.request!['sources'], same(recorded));
+    expect(chat.request!['sources'][0]['id'], 3);
+    chat.clearContext();
+    expect(chat.request!['sources'], same(recorded));
+    expect(chat.contextId, isNull);
+    chat.dispose();
+  });
+  testWidgets(
+    'picker labels inherited follow-up separately from explicit clear',
+    (tester) async {
+      final api = FakeAi()
+        ..enabled = true
+        ..mode = 'metadata'
+        ..originalContextId = 3;
+      await mount(tester, api);
+      expect(find.text('Ikuti konteks percakapan'), findsOneWidget);
+      final initial = tester.widget<DropdownButtonFormField<int>>(
+        find.byKey(const Key('ai-context-picker')),
+      );
+      expect(initial.initialValue, -1);
+      await tester.tap(find.byKey(const Key('ai-context-picker')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tanpa konteks analisis').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('ai-input')),
+        'Lepas konteks lama',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('ai-send')));
+      await tester.pump();
+      await tester.pump();
+      expect(api.sends.single.containsKey('analysis_record_id'), isTrue);
+      expect(api.sends.single['analysis_record_id'], isNull);
+      await tester.tap(find.text('Batalkan'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ai-context-picker')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ikuti konteks percakapan').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('ai-input')), 'Lanjutkan');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('ai-send')));
+      await tester.pump();
+      await tester.pump();
+      expect(api.sends.last.containsKey('analysis_record_id'), isFalse);
       await tester.pumpWidget(const SizedBox());
     },
   );

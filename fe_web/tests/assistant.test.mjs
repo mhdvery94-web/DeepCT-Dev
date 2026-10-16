@@ -22,5 +22,26 @@ test('regeneration uses immutable original selection even when failed/cancelled 
   }
 });
 test('a null original context is never reconstructed from a source or composer',()=>{
-  assert.deepEqual(regenerationSubmission({content:'Pertanyaan asli'},{analysis_record_id:null,sources:[{id:9}]},'new-key'),{content:'Pertanyaan asli',idempotency_key:'new-key'});
+  assert.deepEqual(regenerationSubmission({content:'Pertanyaan asli'},{analysis_record_id:null,sources:[{id:9}]},'new-key'),{content:'Pertanyaan asli',idempotency_key:'new-key',analysis_record_id:null});
+});
+
+test('composer distinguishes inherited omission, explicit clear and selected ID', async()=>{
+  const {contextSubmission}=await import('../src/lib/assistant.ts');
+  assert.deepEqual(contextSubmission('Pesan','k',undefined),{content:'Pesan',idempotency_key:'k'});
+  assert.deepEqual(contextSubmission('Pesan','k',null),{content:'Pesan',idempotency_key:'k',analysis_record_id:null});
+  assert.deepEqual(contextSubmission('Pesan','k',3),{content:'Pesan',idempotency_key:'k',analysis_record_id:3});
+});
+test('unknown errors never reveal raw paths, JSON or parser exceptions',async()=>{
+  const {assistantErrorMessage,requestFailureLabel}=await import('../src/lib/assistant.ts');
+  assert.equal(assistantErrorMessage('Jaringan terputus'),'Jaringan terputus');
+  for(const value of ['/etc/private','{"exception":"bad"}','TypeError: invalid data',{},null]) assert.equal(assistantErrorMessage(value),'Permintaan tidak dapat diselesaikan. Coba lagi.');
+  assert.equal(requestFailureLabel('/etc/private'),'Jawaban gagal dibuat');
+  assert.match(requestFailureLabel('provider_timeout'),/provider_timeout/);
+});
+test('picker distinguishes follow-up inheritance from an explicit clear',async()=>{
+  const {contextSelection}=await import('../src/lib/assistant.ts');
+  assert.equal(contextSelection('inherit'),undefined);
+  assert.equal(contextSelection(''),null);
+  assert.equal(contextSelection('24'),24);
+  assert.equal(contextSelection('malformed'),undefined);
 });

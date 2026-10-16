@@ -39,7 +39,7 @@ const fixture = http.createServer(async (req, res) => {
     const body = JSON.parse(text); sends.push(body);
     if (refuseSend) {refuseSend=false;status=404;payload={success:false,message:'Konteks tidak ditemukan'};}
     else if (failSend) {failSend=false;status=502;payload={success:false,message:'Jaringan terputus'};}
-    else {state='queued';originalContextId=body.analysis_record_id ?? null;payload={request:request(),user_message:msg(100,'user',body.content)};status=202;}
+    else {state='queued';if(Object.hasOwn(body,'analysis_record_id'))originalContextId=body.analysis_record_id;payload={request:request(),user_message:msg(100,'user',body.content)};status=202;}
   } else if (path.endsWith('/cancel')) {state='cancelled';payload=request();}
   else if (path.startsWith('/ai/requests/')) {
     if (failPoll) {status=502;payload={success:false,message:'Jaringan polling terputus'};}
@@ -110,10 +110,25 @@ try {
     await page.getByRole('textbox',{name:'Pesan'}).fill('Tanpa konteks');
     await page.getByRole('button',{name:'Kirim',exact:true}).click();
     await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
-    assert.equal(Object.hasOwn(sends.at(-1),'analysis_record_id'),false);
+    assert.equal(Object.hasOwn(sends.at(-1),'analysis_record_id'),true);
+    assert.equal(sends.at(-1).analysis_record_id,null);
     await page.getByRole('button',{name:'Batalkan',exact:true}).click();
     await page.getByText('Dibatalkan',{exact:true}).waitFor();
   }
+  originalContextId=3; state='completed';
+  await page.goto('http://127.0.0.1:3213/workspace/assistant');
+  const inheritedPicker=page.getByRole('combobox',{name:'Pilih analisis',exact:true});
+  await inheritedPicker.waitFor();
+  assert.equal(await inheritedPicker.inputValue(),'inherit');
+  await page.getByRole('button',{name:'Riwayat riset',exact:true}).click();
+  await page.getByText('Pertanyaan tersimpan',{exact:true}).waitFor();
+  await page.getByRole('textbox',{name:'Pesan'}).fill('Lanjutkan dengan konteks percakapan');
+  await page.getByRole('button',{name:'Kirim',exact:true}).click();
+  await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
+  assert.equal(Object.hasOwn(sends.at(-1),'analysis_record_id'),false,'ordinary follow-up omits the context selection');
+  assert.equal(originalContextId,3,'the conversation retains its admitted analysis');
+  await page.getByRole('button',{name:'Batalkan',exact:true}).click();
+  await page.getByText('Dibatalkan',{exact:true}).waitFor();
   let releaseAnalyses;
   analysisGate=new Promise(resolve=>{releaseAnalyses=resolve;});
   await page.goto('http://127.0.0.1:3213/workspace/assistant?analysis_record_id=99');
@@ -155,8 +170,8 @@ try {
   await page.getByText('50.0 detik',{exact:false}).waitFor();
   const evidence=page.locator('.assistant-evidence');
   await evidence.getByText('Metadata ini dicatat saat jawaban dibuat, bukan status terkini.',{exact:false}).waitFor();
-  const ssim=evidence.locator('.assistant-evidence__fact').filter({has:page.locator('dt').filter({hasText:/^ssim$/})});
-  assert.equal(await ssim.locator('dd').innerText(),'0');
+  const ssim=evidence.locator('.assistant-evidence__fact').filter({has:page.locator('dt').filter({hasText:/^SSIM$/})});
+  assert.equal(await ssim.first().locator('dd').innerText(),'0');
   assert.equal(await page.getByRole('complementary',{name:'Riwayat percakapan'}).evaluate(el=>Math.round(el.getBoundingClientRect().width)),270);
   await page.getByRole('button',{name:'Percakapan berikutnya'}).click();
   await page.getByRole('button',{name:'Percakapan lama',exact:true}).waitFor();
@@ -251,7 +266,8 @@ try {
     await page.getByRole('button',{name:'Riwayat riset',exact:true}).click();
     await page.getByRole('button',{name:'Buat ulang jawaban',exact:true}).click();
     await page.getByRole('button',{name:'Batalkan',exact:true}).waitFor();
-    assert.equal(Object.hasOwn(sends.at(-1),'analysis_record_id'),false,'context-free history cannot acquire composer context');
+    assert.equal(Object.hasOwn(sends.at(-1),'analysis_record_id'),true,'context-free history explicitly clears inherited context');
+    assert.equal(sends.at(-1).analysis_record_id,null);
     await page.getByRole('button',{name:'Batalkan',exact:true}).click();
     await page.getByText('Dibatalkan',{exact:true}).waitFor();
   }

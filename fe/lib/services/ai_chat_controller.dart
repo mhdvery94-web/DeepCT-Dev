@@ -3,13 +3,17 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'ai_service.dart';
 import 'api_client.dart';
+import '../models/assistant_sources.dart';
 
 /// Transport retry retains its admission payload. Request polling and late
 /// responses stop when navigating or disposing this owner-scoped chat.
 class AiChatController extends ChangeNotifier {
   final AiService service;
-  AiChatController(this.service, {this.contextId});
+  AiChatController(this.service, {this.contextId})
+    : _contextSpecified = contextId != null;
   int? contextId;
+  bool _contextSpecified;
+  bool get inheritsContext => !_contextSpecified;
   Map<String, dynamic>? status, conversation, request, pending, knownActive;
   List<Map<String, dynamic>> conversations = [], messages = [];
   int historyPage = 1, historyLast = 1, messagePage = 1, messageLast = 1;
@@ -57,7 +61,9 @@ class AiChatController extends ChangeNotifier {
       }
       await loadHistory(1);
     } catch (e) {
-      if (!_disposed) error = e.toString();
+      if (!_disposed) {
+        error = assistantErrorMessage(e is ApiException ? e.message : null);
+      }
     } finally {
       if (!_disposed) {
         loading = false;
@@ -83,7 +89,11 @@ class AiChatController extends ChangeNotifier {
       analysisPage = pagination['current_page'] as int? ?? analysisPage + 1;
       analysisLast = pagination['last_page'] as int? ?? analysisPage;
     } catch (e) {
-      if (!_disposed) analysesError = e.toString();
+      if (!_disposed) {
+        analysesError = assistantErrorMessage(
+          e is ApiException ? e.message : null,
+        );
+      }
     } finally {
       if (!_disposed) {
         analysesLoading = false;
@@ -95,6 +105,14 @@ class AiChatController extends ChangeNotifier {
   void selectContext(int? id) {
     if (_disposed || !canSend) return;
     contextId = id;
+    _contextSpecified = true;
+    _notify();
+  }
+
+  void inheritContext() {
+    if (_disposed || !canSend) return;
+    contextId = null;
+    _contextSpecified = false;
     _notify();
   }
 
@@ -109,7 +127,7 @@ class AiChatController extends ChangeNotifier {
       _notify();
     } catch (e) {
       if (!_disposed && sequence == _historySequence) {
-        error = e.toString();
+        error = assistantErrorMessage(e is ApiException ? e.message : null);
         _notify();
       }
     }
@@ -136,7 +154,9 @@ class AiChatController extends ChangeNotifier {
       if (result['request'] != null) _accept(map(result['request']));
       _schedulePoll();
     } catch (e) {
-      if (!_disposed && selection == _selection) error = e.toString();
+      if (!_disposed && selection == _selection) {
+        error = assistantErrorMessage(e is ApiException ? e.message : null);
+      }
     } finally {
       if (!_disposed && selection == _selection) {
         loading = false;
@@ -161,7 +181,9 @@ class AiChatController extends ChangeNotifier {
       messageLast =
           map(result['pagination'])['last_page'] as int? ?? messageLast;
     } catch (e) {
-      if (!_disposed && selection == _selection) error = e.toString();
+      if (!_disposed && selection == _selection) {
+        error = assistantErrorMessage(e is ApiException ? e.message : null);
+      }
     } finally {
       if (!_disposed) {
         busy = false;
@@ -215,7 +237,8 @@ class AiChatController extends ChangeNotifier {
         : {
             'content': content.trim(),
             'idempotency_key': _key(),
-            'analysis_record_id': ?selectedContext,
+            if (useRequestContext || _contextSpecified)
+              'analysis_record_id': selectedContext,
           };
     if (payload == null || payload['content'].toString().isEmpty) return false;
     busy = true;
@@ -242,7 +265,7 @@ class AiChatController extends ChangeNotifier {
       return true;
     } catch (e) {
       if (!_disposed) {
-        error = e.toString();
+        error = assistantErrorMessage(e is ApiException ? e.message : null);
         if (e is ApiException &&
             ((e.statusCode != null && e.statusCode! < 500) ||
                 e.errorCode == 'assistant_disabled')) {
@@ -307,7 +330,7 @@ class AiChatController extends ChangeNotifier {
       }
     } catch (e) {
       if (!_disposed && selection == _selection && active) {
-        pollError = e.toString();
+        pollError = assistantErrorMessage(e is ApiException ? e.message : null);
         _notify();
       }
     }
@@ -335,7 +358,9 @@ class AiChatController extends ChangeNotifier {
       pollError = null;
       if (active) _schedulePoll();
     } catch (e) {
-      if (!_disposed) error = e.toString();
+      if (!_disposed) {
+        error = assistantErrorMessage(e is ApiException ? e.message : null);
+      }
     } finally {
       if (!_disposed) {
         busy = false;

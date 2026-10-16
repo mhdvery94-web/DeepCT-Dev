@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/ai_service.dart';
+import '../../models/assistant_sources.dart';
 import '../../services/ai_chat_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/assistant_evidence.dart';
@@ -170,7 +171,7 @@ class _ResearchAssistantScreenState extends State<ResearchAssistantScreen> {
       children: [
         DropdownButtonFormField<int>(
           key: const Key('ai-context-picker'),
-          initialValue: chat.contextId ?? 0,
+          initialValue: chat.inheritsContext ? -1 : chat.contextId ?? 0,
           isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Pilih analisis',
@@ -179,6 +180,10 @@ class _ResearchAssistantScreenState extends State<ResearchAssistantScreen> {
           ),
           style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
           items: [
+            const DropdownMenuItem(
+              value: -1,
+              child: Text('Ikuti konteks percakapan'),
+            ),
             const DropdownMenuItem(
               value: 0,
               child: Text('Tanpa konteks analisis'),
@@ -200,7 +205,9 @@ class _ResearchAssistantScreenState extends State<ResearchAssistantScreen> {
             ),
           ],
           onChanged: chat.canSend
-              ? (id) => chat.selectContext(id == 0 ? null : id)
+              ? (id) => id == -1
+                    ? chat.inheritContext()
+                    : chat.selectContext(id == 0 ? null : id)
               : null,
         ),
         if (chat.analysesLoading)
@@ -588,7 +595,7 @@ class _ResearchAssistantScreenState extends State<ResearchAssistantScreen> {
                 spacing: 10,
                 children: [
                   Text(
-                    '${const {'queued': 'Dalam antrean', 'processing': 'Sedang diproses', 'completed': 'Selesai', 'failed': 'Gagal', 'cancelled': 'Dibatalkan'}[chat.request!['status']]}${chat.request!['status'] == 'failed' ? ' · ${chat.request!['error_code'] ?? 'generation_failed'}' : ''}',
+                    '${const {'queued': 'Dalam antrean', 'processing': 'Sedang diproses', 'completed': 'Selesai', 'failed': 'Gagal', 'cancelled': 'Dibatalkan'}[chat.request!['status']] ?? 'Status tidak diketahui'}${chat.request!['status'] == 'failed' ? ' · ${requestFailureLabel(chat.request!['error_code'])}' : ''}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppTheme.textMuted,

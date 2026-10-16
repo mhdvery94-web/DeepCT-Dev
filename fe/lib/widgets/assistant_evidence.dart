@@ -1,25 +1,70 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../services/ai_chat_controller.dart';
+import '../models/assistant_sources.dart';
 import '../theme/app_theme.dart';
 
 /// Server snapshots stay visually separate from experimental generated text.
 class AssistantEvidence extends StatelessWidget {
   final Map<String, dynamic> request;
   const AssistantEvidence({super.key, required this.request});
-  String value(dynamic value) => value?.toString() ?? 'Tidak tersedia';
-  Widget fact(String label, dynamic data) => Padding(
+  Widget fact(EvidenceFact fact) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 3),
     child: Text(
-      '$label: ${value(data)}',
+      '${fact.label}: ${fact.value}',
       style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
     ),
   );
+  Widget heading(String value) => Padding(
+    padding: const EdgeInsets.only(top: 12, bottom: 4),
+    child: Text(
+      value,
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+    ),
+  );
+  Widget note(String value) => Text(
+    value,
+    style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+  );
+  List<Widget> analysis(AiAnalysisSource source) {
+    final report = source.evaluation;
+    return [
+      heading(
+        'Prediksi #${source.id} · ${analysisStatusLabels[source.status]}',
+      ),
+      ...source.facts.map(fact),
+      heading('Metrik prediksi'),
+      ...report.measurement.facts.map(fact),
+      ExpansionTile(
+        title: const Text('Metode pengukuran', style: TextStyle(fontSize: 12)),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        children: report.method.isEmpty
+            ? [note(evidenceUnavailable)]
+            : report.method.map(fact).toList(),
+      ),
+      heading('Baseline linear'),
+      note(
+        report.baselineStatus == 'completed'
+            ? 'Baseline selesai'
+            : report.baselineStatus == 'baseline_failed'
+            ? 'Pengukuran baseline gagal'
+            : 'Baseline tidak tersedia',
+      ),
+      ...report.baseline.facts.map(fact),
+      ...report.baselineMethod.map(fact),
+      heading('Selisih terhadap baseline'),
+      note(
+        report.comparisonCompleted
+            ? 'Presisi metrik tersimpan (recorded_precision). Nilai negatif berarti lebih buruk dari baseline.'
+            : 'Perbandingan tidak tersedia.',
+      ),
+      ...report.comparisonFacts.map(fact),
+      note('Metrik dan provenans model tidak menyatakan persetujuan ilmiah.'),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
-    final sources = AiChatController.rows(request['sources']);
-    final metrics = AiChatController.map(request['metrics']);
+    final sources = parseAiSources(request['sources']);
+    final metrics = evidenceMap(request['metrics']);
     return Container(
       margin: const EdgeInsets.only(top: 14),
       decoration: BoxDecoration(
@@ -37,75 +82,21 @@ class AssistantEvidence extends StatelessWidget {
           childrenPadding: const EdgeInsets.all(14),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            note(
               'Metadata ini dicatat saat jawaban dibuat, bukan status terkini. Gunakan sumber ini untuk memeriksa jawaban; asisten tidak membaca piksel TIFF.',
-              style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
             ),
-            if (sources.isEmpty) fact('Konteks prediksi', 'Tidak ada'),
-            for (final source in sources) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Prediksi #${source['id']} · ${source['status']}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-              fact(
-                'Model CT',
-                source['model'] == null
-                    ? null
-                    : AiChatController.map(source['model'])['provenance'] ==
-                          'historical_model_snapshot_unavailable'
-                    ? 'Versi historis / provenans model tidak tersedia'
-                    : '${AiChatController.map(source['model'])['name']} · ${AiChatController.map(source['model'])['version']}',
-              ),
-              fact('Berkas input', source['input_files_count']),
-              fact('Berkas hasil', source['output_files_count']),
-              fact(
-                'Waktu analisis',
-                source['processing_time_seconds'] == null
-                    ? null
-                    : '${source['processing_time_seconds']} detik',
-              ),
-              fact(
-                'Kedaluwarsa / dihapus',
-                '${source['expired'] == true ? 'Ya' : 'Tidak'} / ${source['files_deleted'] == true ? 'Ya' : 'Tidak'}',
-              ),
-              for (final key in [
-                'mae',
-                'psnr',
-                'ssim',
-                'rmse',
-                'pixels',
-                'reference_min',
-                'reference_max',
-              ])
-                fact(key, AiChatController.map(source['metrics'])[key]),
-              ExpansionTile(
-                title: const Text(
-                  'Provenans validasi dan frame',
-                  style: TextStyle(fontSize: 12),
-                ),
-                children: [
-                  Text(
-                    const JsonEncoder.withIndent('  ').convert({
-                      'validation': source['validation_provenance'],
-                      'frames': source['frame_provenance'],
-                    }),
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 11,
-                    ),
-                  ),
+            if (!sources.any((s) => s is AiAnalysisSource))
+              note('Tidak ada konteks prediksi.'),
+            for (final source in sources)
+              ...switch (source) {
+                AiDocumentSource() => [
+                  heading('Dokumen SOP · ${source.title}'),
+                  note('${source.id} · ${source.version}'),
+                  note(source.text),
                 ],
-              ),
-            ],
-            const SizedBox(height: 12),
-            const Text(
-              'Metrik generasi',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
+                AiAnalysisSource() => analysis(source),
+              },
+            heading('Metrik generasi'),
             for (final entry in const {
               'prompt_eval_count': 'Token input',
               'eval_count': 'Token output',
@@ -115,17 +106,12 @@ class AssistantEvidence extends StatelessWidget {
               'eval_duration': 'Durasi output',
             }.entries)
               fact(
-                entry.value,
-                metrics[entry.key] == null
-                    ? null
-                    : entry.key.endsWith('_duration')
-                    ? '${((metrics[entry.key] as num) / 1000000000).toStringAsFixed(1)} detik'
-                    : metrics[entry.key],
+                EvidenceFact(
+                  entry.value,
+                  providerMetric(entry.key, metrics[entry.key]),
+                ),
               ),
-            const Text(
-              'Durasi server dikonversi dari nanodetik ke detik.',
-              style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
-            ),
+            note('Durasi server dikonversi dari nanodetik ke detik.'),
           ],
         ),
       ),

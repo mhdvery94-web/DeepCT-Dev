@@ -1,102 +1,39 @@
-import { providerMetric, type AiRequest } from "@/lib/assistant";
+import { analysisStatusLabels, analysisFacts, comparisonFacts, measurementFacts, parseAiSources, providerMetric, type AiRequest, type EvidenceFact } from "@/lib/assistant";
+
+function Facts({ facts }: { facts: EvidenceFact[] }) {
+  return <dl>{facts.map(({ label, value }) => <div className="assistant-evidence__fact" key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
+}
 
 export function AssistantEvidence({ request }: { request: AiRequest }) {
+  const sources = parseAiSources(request.sources);
   return (
     <details className="assistant-evidence">
       <summary>Sumber dan metrik tepercaya</summary>
-      <p>
-        Metadata ini dicatat saat jawaban dibuat, bukan status terkini. Gunakan sumber ini untuk memeriksa jawaban; asisten tidak membaca piksel TIFF.
-      </p>
-      {request.sources.length === 0 && <p>Tidak ada konteks prediksi.</p>}
-      {request.sources.map((source) => (
-        <section key={source.id}>
-          <h3>
-            Prediksi #{source.id} · {source.status}
-          </h3>
-          <dl>
-            <dt>Model CT</dt>
-            <dd>
-              {source.model
-                ? source.model.provenance === "historical_model_snapshot_unavailable"
-                  ? "Versi historis / provenans model tidak tersedia"
-                  : "name" in source.model ? `${source.model.name} · ${source.model.version}` : "Tidak tersedia"
-                : "Tidak tersedia"}
-            </dd>
-            <dt>Jumlah berkas input / hasil</dt>
-            <dd>
-              {source.input_files_count ?? "Tidak tersedia"} /{" "}
-              {source.output_files_count ?? "Tidak tersedia"}
-            </dd>
-            <dt>Waktu analisis</dt>
-            <dd>
-              {source.processing_time_seconds == null
-                ? "Tidak tersedia"
-                : `${source.processing_time_seconds} detik`}
-            </dd>
-            <dt>Berkas kedaluwarsa / dihapus</dt>
-            <dd>
-              {source.expired ? "Ya" : "Tidak"} /{" "}
-              {source.files_deleted ? "Ya" : "Tidak"}
-            </dd>
-            {[
-              "mae",
-              "psnr",
-              "ssim",
-              "rmse",
-              "pixels",
-              "reference_min",
-              "reference_max",
-            ].map((key) => (
-              <div className="assistant-evidence__fact" key={key}>
-                <dt>{key}</dt>
-                <dd>{source.metrics[key] ?? "Tidak tersedia"}</dd>
-              </div>
-            ))}
-          </dl>
-          <details>
-            <summary>Provenans validasi dan frame</summary>
-            <pre>
-              {JSON.stringify(
-                {
-                  validation: source.validation_provenance,
-                  frames: source.frame_provenance,
-                },
-                null,
-                2,
-              )}
-            </pre>
-          </details>
+      <p>Metadata ini dicatat saat jawaban dibuat, bukan status terkini. Gunakan sumber ini untuk memeriksa jawaban; asisten tidak membaca piksel TIFF.</p>
+      {!sources.some(source => source.type === "analysis_record") && <p>Tidak ada konteks prediksi.</p>}
+      {sources.map(source => source.type === "document" ? (
+        <section key={`document-${source.id}`} aria-label={`Dokumen SOP ${source.id}`}>
+          <h3>Dokumen SOP · {source.title}</h3>
+          <p>{source.id} · {source.version}</p><p>{source.text}</p>
+        </section>
+      ) : (
+        <section key={`analysis-${source.id}`} aria-label={`Snapshot prediksi ${source.id}`}>
+          <h3>Prediksi #{source.id} · {analysisStatusLabels[source.status]}</h3>
+          <Facts facts={analysisFacts(source)} />
+          <h4>Metrik prediksi</h4><Facts facts={measurementFacts(source.evaluation)} />
+          <details><summary>Metode pengukuran</summary>{source.evaluation.method.length ? <Facts facts={source.evaluation.method} /> : <p>Tidak tersedia</p>}</details>
+          <h4>Baseline linear</h4>
+          <p>{source.evaluation.baseline.status === "completed" ? "Baseline selesai" : source.evaluation.baseline.status === "baseline_failed" ? "Pengukuran baseline gagal" : "Baseline tidak tersedia"}</p>
+          <Facts facts={measurementFacts(source.evaluation.baseline)} />
+          {source.evaluation.baseline.method.length > 0 && <Facts facts={source.evaluation.baseline.method} />}
+          <h4>Selisih terhadap baseline</h4>
+          <p>{source.evaluation.comparison.status === "completed" ? "Presisi metrik tersimpan (recorded_precision). Nilai negatif berarti lebih buruk dari baseline." : "Perbandingan tidak tersedia."}</p>
+          <Facts facts={comparisonFacts(source.evaluation)} />
+          <small>Metrik dan provenans model tidak menyatakan persetujuan ilmiah.</small>
         </section>
       ))}
       <h3>Metrik generasi</h3>
-      <dl>
-        {[
-          "prompt_eval_count",
-          "eval_count",
-          "total_duration",
-          "load_duration",
-          "prompt_eval_duration",
-          "eval_duration",
-        ].map((key) => (
-          <div className="assistant-evidence__fact" key={key}>
-            <dt>
-              {
-                (
-                  {
-                    prompt_eval_count: "Token input",
-                    eval_count: "Token output",
-                    total_duration: "Durasi total",
-                    load_duration: "Durasi pemuatan",
-                    prompt_eval_duration: "Durasi input",
-                    eval_duration: "Durasi output",
-                  } as Record<string, string>
-                )[key]
-              }
-            </dt>
-            <dd>{providerMetric(key, request.metrics?.[key])}</dd>
-          </div>
-        ))}
-      </dl>
+      <Facts facts={Object.entries({ prompt_eval_count: "Token input", eval_count: "Token output", total_duration: "Durasi total", load_duration: "Durasi pemuatan", prompt_eval_duration: "Durasi input", eval_duration: "Durasi output" }).map(([key, label]) => ({ label, value: providerMetric(key, request.metrics?.[key]) }))} />
       <small>Durasi server dikonversi dari nanodetik ke detik.</small>
     </details>
   );

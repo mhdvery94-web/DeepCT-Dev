@@ -11,6 +11,10 @@ import {
 import { backend, BackendError } from "@/lib/client-api";
 import {
   activeRequest,
+  assistantErrorMessage,
+  requestFailureLabel,
+  contextSubmission,
+  contextSelection,
   mergeMessages,
   regenerationSubmission,
   requestLabels,
@@ -25,9 +29,7 @@ import {
 import { AssistantEvidence } from "@/components/assistant-evidence";
 
 const messageOf = (error: unknown) =>
-  error instanceof Error
-    ? error.message
-    : "Permintaan tidak dapat diselesaikan.";
+  assistantErrorMessage(error instanceof BackendError ? error.message : null);
 
 export function ResearchAssistant({
   analysisRecordId,
@@ -43,7 +45,7 @@ export function ResearchAssistant({
   const [request, setRequest] = useState<AiRequest | null>(null);
   const [knownActive, setKnownActive] = useState<AiRequest | null>(null);
   const [draft, setDraft] = useState("");
-  const [contextId, setContextId] = useState(analysisRecordId);
+  const [contextId, setContextId] = useState<number | null | undefined>(analysisRecordId);
   const [analyses, setAnalyses] = useState<{ id: number; status: string }[]>([]);
   const [analysisPage, setAnalysisPage] = useState<AiPagination>();
   const [analysesLoading, setAnalysesLoading] = useState(false);
@@ -334,11 +336,7 @@ export function ResearchAssistant({
       loading
     )
       return;
-    const payload = submission ?? {
-      content: draft.trim(),
-      idempotency_key: crypto.randomUUID(),
-      ...(contextId ? { analysis_record_id: contextId } : {}),
-    };
+    const payload = submission ?? contextSubmission(draft.trim(), crypto.randomUUID(), contextId);
     if (!payload.content) return;
     operations.current = true;
     setBusy(true);
@@ -620,9 +618,9 @@ export function ResearchAssistant({
           {request && (
             <div className="assistant-request" role="status">
               <span>
-                {requestLabels[request.status]}
+                {requestLabels[request.status] ?? "Status tidak diketahui"}
                 {request.status === "failed"
-                  ? ` · ${request.error_code ?? "generation_failed"}`
+                  ? ` · ${requestFailureLabel(request.error_code)}`
                   : ""}
               </span>
               {activeRequest(request) && (
@@ -720,15 +718,16 @@ export function ResearchAssistant({
               <label htmlFor="assistant-analysis">Pilih analisis</label>
               <select
                 id="assistant-analysis"
-                value={contextId ?? ""}
+                value={contextId === undefined ? "inherit" : contextId ?? ""}
                 disabled={blocked}
                 onChange={(event) => {
                   if (!blocked && !operations.current)
                     setContextId(
-                      event.target.value ? Number(event.target.value) : undefined,
+                      contextSelection(event.target.value),
                     );
                 }}
               >
+                <option value="inherit">Ikuti konteks percakapan</option>
                 <option value="">Tanpa konteks analisis</option>
                 {contextId != null &&
                   !analyses.some((item) => item.id === contextId) && (
@@ -780,7 +779,7 @@ export function ResearchAssistant({
               <button
                 disabled={blocked}
                 onClick={() => {
-                  if (!blocked && !operations.current) setContextId(undefined);
+                  if (!blocked && !operations.current) setContextId(null);
                 }}
               >
                 Lepas konteks
