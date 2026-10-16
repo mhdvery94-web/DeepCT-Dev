@@ -65,16 +65,24 @@ class AnalysisEvidence
         foreach (FrameMetrics::method() + ['baseline' => 'linear_midpoint', 'midpoint_rounding' => 'half_up'] as $key => $expected) {
             if ($key === 'ssim' && is_array($v[$key] ?? null)) {
                 foreach ($expected as $parameter => $value) {
-                    if (($v[$key][$parameter] ?? null) == $value && is_scalar($v[$key][$parameter] ?? null)) {
+                    if ($this->sameParameter($v[$key][$parameter] ?? null, $value)) {
                         $result[$key][$parameter] = $value;
                     }
                 }
-            } elseif (isset($v[$key]) && is_scalar($v[$key]) && $v[$key] == $expected) {
+            } elseif (is_scalar($expected) && $this->sameParameter($v[$key] ?? null, $expected)) {
                 $result[$key] = $expected;
             }
         }
 
         return $result ?: null;
+    }
+
+    private function sameParameter(mixed $value, int|float|string $expected): bool
+    {
+        // JSON can decode an integral float as an int. Normalize only that
+        // case; booleans, numeric strings and malformed containers never match.
+        return $value === $expected
+            || (is_float($expected) && is_int($value) && (float) $value === $expected);
     }
 
     private function reference(array $v): ?array

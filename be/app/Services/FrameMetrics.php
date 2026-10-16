@@ -11,6 +11,8 @@ class FrameMetrics
 
     private const WINDOW = 7;
 
+    private const MAX_EVALUATION_WIDTH = 4096;
+
     public function __construct(private TiffPreview $tiff) {}
 
     public static function method(): array
@@ -58,6 +60,11 @@ class FrameMetrics
     private function decode(string $bytes): array
     {
         $image = $this->tiff->decode($bytes);
+        // The TIFF decoder limits total pixels, not aspect ratio. Bound the
+        // seven-row SSIM cache before any width-sized PHP array can be made.
+        if ($image['width'] > self::MAX_EVALUATION_WIDTH) {
+            throw new RuntimeException('Evaluation supports frame widths up to 4096 pixels.');
+        }
         if ($image['maxValue'] !== self::MAX_VALUE) {
             throw new RuntimeException('Evaluation requires raw uint16 frames.');
         }

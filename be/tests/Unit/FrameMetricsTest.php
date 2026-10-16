@@ -178,4 +178,17 @@ class FrameMetricsTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->metrics->compareMidpoint($this->tif([1, 2], 2, 1), $this->tif([1, 2], 2, 1), $this->tif([1], 1, 1));
     }
+    public function test_wide_frames_are_rejected_without_exhausting_worker_memory(): void
+    {
+        $process = new \Symfony\Component\Process\Process([
+            PHP_BINARY, '-d', 'memory_limit=512M', __DIR__.'/fixtures/wide-frame.php',
+        ]);
+        $process->setTimeout(30);
+        $process->run();
+        $this->assertSame(0, $process->getExitCode(), $process->getOutput().$process->getErrorOutput());
+        $result = json_decode($process->getOutput(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame(['compare', 'compareMidpoint'], $result['rejected']);
+        $this->assertLessThan(128 * 1024 * 1024, $result['peak_bytes']);
+    }
+
 }

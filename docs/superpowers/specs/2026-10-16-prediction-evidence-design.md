@@ -14,7 +14,7 @@ Use raw decoded uint16 pixels, data range 65535, no independent image normalizat
 
 ## 2. Metrics and baseline
 
-Add local-window SSIM using a 7×7 uniform window, sample covariance, K1=0.01, K2=0.03, cropped valid centers, data range 65535; no resampling. Images smaller than the window keep MAE/RMSE/PSNR and declare SSIM unavailable with `image_too_small`. Match independent scikit-image reference fixtures. Compute in bounded memory suitable for the 512 MiB PHP worker; do not unpack entire 2048² frames into PHP arrays.
+Add local-window SSIM using a 7×7 uniform window, sample covariance, K1=0.01, K2=0.03, cropped valid centers, data range 65535; no resampling. Images smaller than the window keep MAE/RMSE/PSNR and declare SSIM unavailable with `image_too_small`. Match independent scikit-image reference fixtures. Reject evaluation width above 4096 before allocating SSIM arrays; report measurement failure while retaining completed interpolation outputs. This explicit resource limit is a builder choice discovered during memory review. Compute in bounded memory suitable for the 512 MiB PHP worker; do not unpack entire 2048² frames into PHP arrays.
 
 Measure a linear midpoint baseline against the same uploaded held-out reference and with the identical metric method. Baseline pixel rounding is half upward, `floor((left+right+1)/2)`. Record comparison deltas and whether each metric improves, ties, or regresses, without asserting scientific adequacy. A baseline failure is separate from model-evaluation failure. Existing uploaded frames alone are reference truth; synthetic output must never become held-out truth.
 

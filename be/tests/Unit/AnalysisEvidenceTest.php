@@ -67,4 +67,23 @@ class AnalysisEvidenceTest extends TestCase
         $this->assertSame('infinite', $result['metric_status']['psnr']);
         $this->assertIsString(json_encode($result, JSON_THROW_ON_ERROR));
     }
+    public function test_malformed_boolean_method_values_are_not_canonicalized(): void
+    {
+        $result = $this->evidence([
+            'schema_version' => 1, 'evaluation_status' => 'completed',
+            'method' => ['sample_domain' => true, 'data_range' => true,
+                'mae_decimals' => true, 'baseline' => true, 'midpoint_rounding' => true,
+                'ssim' => ['window_size' => true, 'weighting' => true, 'boundary' => true,
+                    'covariance' => true, 'k1' => true, 'k2' => true]],
+        ]);
+        $this->assertNull($result['method']);
+        foreach ([['ssim' => true], ['data_range' => '65535', 'ssim' => ['k1' => '0.01']]] as $malformed) {
+            $result = $this->evidence(['schema_version' => 1, 'evaluation_status' => 'completed', 'method' => $malformed]);
+            $this->assertNull($result['method']);
+        }
+        $canonical = \App\Services\FrameMetrics::method();
+        $result = $this->evidence(['schema_version' => 1, 'evaluation_status' => 'completed', 'method' => $canonical]);
+        $this->assertSame($canonical, $result['method']);
+    }
+
 }
