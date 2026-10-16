@@ -31,6 +31,9 @@ class AiRequest extends Model
     public function toPublicArray(): array
     {
         $sources = array_map(function (array $source) {
+            if (($source['type'] ?? null) === 'document') {
+                return $source;
+            }
             $source['metrics'] = (object) ($source['metrics'] ?? []);
             $source['validation_provenance'] = (object) ($source['validation_provenance'] ?? []);
             $source['frame_provenance'] = array_map(fn (array $row) => (object) $row, $source['frame_provenance'] ?? []);

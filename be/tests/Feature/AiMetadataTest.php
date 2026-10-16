@@ -47,6 +47,9 @@ class AiMetadataTest extends TestCase
 
     private function work(int $id, string $answer, string $reason = 'stop'): AiRequest
     {
+        // Each iteration must exercise its own response, not an earlier wildcard fake.
+        Http::swap(new \Illuminate\Http\Client\Factory());
+        Http::preventStrayRequests();
         Http::fake(['*' => Http::response(['done' => true, 'done_reason' => $reason,
             'message' => ['content' => $answer, 'thinking' => 'PRIVATE-REASONING'],
             'eval_count' => 0, 'prompt_eval_count' => 35, 'total_duration' => 123, 'load_duration' => 1.5])]);
@@ -68,7 +71,7 @@ class AiMetadataTest extends TestCase
         $sources = app(AiContext::class)->sources($request);
         $result = $this->work($id, '{"topic":"metrics"}');
         $this->assertSame('completed', $result->status);
-        $this->assertSame('deepct-metadata-v2', $result->prompt_version);
+        $this->assertSame('deepct-metadata-v3', $result->prompt_version);
         $this->assertEquals($sources, $result->sources);
         $this->assertSame(0.875, $result->sources[0]['metrics']['ssim']);
         $this->assertEquals(['prompt_eval_count' => 35, 'eval_count' => 0, 'total_duration' => 123], $result->metrics);
@@ -91,7 +94,7 @@ class AiMetadataTest extends TestCase
             return true;
         });
         $this->apiAs($this->token)->getJson('/api/ai/status')->assertOk()
-            ->assertJsonPath('data.mode', 'metadata')->assertJsonPath('data.prompt_version', 'deepct-metadata-v2');
+            ->assertJsonPath('data.mode', 'metadata')->assertJsonPath('data.prompt_version', 'deepct-metadata-v3');
         $this->apiAs($this->token)->getJson("/api/ai/requests/{$id}")->assertOk()
             ->assertJsonPath('data.assistant_message.content', $content);
         $this->assertEquals($sources, $this->apiAs($this->token)->getJson("/api/ai/requests/{$id}")->json('data.sources'));
@@ -111,19 +114,23 @@ class AiMetadataTest extends TestCase
         }
     }
 
-    public function test_invalid_topic_output_and_incomplete_generation_never_persist_assistant_prose(): void
+    public function test_invalid_classifier_json_uses_safe_overview_and_transport_invalidity_still_fails(): void
     {
         foreach (['{"topic":"unknown"}', '{"topic":"metrics","answer":"PRIVATE-PROSE"}',
             'PRIVATE-PROSE', '```json {"topic":"status"}```', '[{"topic":"status"}]', '"status"',
-            '{}', '{"topic":null}', '{"topic":["status"]}', '{{"topic":"status"}', str_repeat('x', 12001)] as $output) {
+            '{}', '{"topic":null}', '{"topic":["status"]}', '{{"topic":"status"}'] as $output) {
             $result = $this->work($this->admit(), $output);
+            $this->assertSame('completed', $result->status);
+            $answer = AiMessage::findOrFail($result->assistant_message_id)->content;
+            $this->assertStringContainsString('Belum ada analisis', $answer);
+            $this->assertStringNotContainsString('PRIVATE', $answer);
+        }
+        foreach (['length', 'oversized'] as $invalidity) {
+            $result = $this->work($this->admit(), $invalidity === 'oversized' ? str_repeat('x', 12001) : '{"topic":"status"}', $invalidity === 'length' ? 'length' : 'stop');
             $this->assertSame('failed', $result->status);
             $this->assertSame('invalid_output', $result->error_code);
             $this->assertNull($result->assistant_message_id);
         }
-        $result = $this->work($this->admit(), '{"topic":"status"}', 'length');
-        $this->assertSame('invalid_output', $result->error_code);
-        $this->assertSame(0, AiMessage::where('role', 'assistant')->count());
     }
 
     public function test_each_non_scope_topic_without_selection_asks_for_owned_analysis_and_scope_stays_bounded(): void

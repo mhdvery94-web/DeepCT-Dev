@@ -9,7 +9,7 @@ return [
     // Enable only for the authenticated fixed-target DeepCT gateway.
     'gateway' => (bool) env('AI_OLLAMA_GATEWAY', false),
     'model' => env('AI_ASSISTANT_MODEL', 'deepseek-r1:1.5b'),
-    'prompt_version' => env('AI_METADATA_MODE', false) ? 'deepct-metadata-v2' : 'deepct-assistant-v1',
+    'prompt_version' => env('AI_METADATA_MODE', false) ? \App\Services\AiGroundedReply::PROMPT_VERSION : 'deepct-assistant-v1',
     'context_tokens' => (int) env('AI_CONTEXT_TOKENS', 2048),
     'output_tokens' => (int) env('AI_OUTPUT_TOKENS', 768),
     'history_messages' => 8,

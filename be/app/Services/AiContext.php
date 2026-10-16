@@ -8,24 +8,23 @@ use App\Models\AnalysisRecord;
 
 class AiContext
 {
+    public function __construct(private AnalysisEvidence $evidence, private AiKnowledge $knowledge) {}
+
     /** Trusted metadata only: no filenames, paths, free-form errors or model URLs. */
     public function sources(AiRequest $request): array
     {
+        $question = AiMessage::whereKey($request->user_message_id)
+            ->where('ai_conversation_id', $request->ai_conversation_id)->where('role', 'user')->value('content');
+        $documents = $this->knowledge->retrieve(is_string($question) ? $question : '');
         if ($request->requested_analysis_record_id === null) {
-            return [];
+            return $documents;
         }
         $record = AnalysisRecord::where('user_id', $request->user_id)->find($request->requested_analysis_record_id);
         if (! $record) {
             throw new AiProviderException('context_unavailable');
         }
 
-        $metrics = [];
-        foreach (['mae', 'psnr', 'rmse', 'ssim', 'pixels', 'reference_min', 'reference_max'] as $key) {
-            $value = $record->validation[$key] ?? null;
-            if (array_key_exists($key, $record->validation ?? []) && ($value === null || is_int($value) || (is_float($value) && is_finite($value)))) {
-                $metrics[$key] = $value;
-            }
-        }
+        $evaluation = $this->evidence->fromRecord($record);
         $provenance = [];
         foreach (array_slice($record->frame_provenance ?? [], 0, 8) as $row) {
             if (is_array($row)) {
@@ -40,13 +39,12 @@ class AiContext
             'output_files_count' => $record->output_files_count,
             'processing_time_seconds' => $record->processing_time_seconds,
             'expired' => $record->isExpired(), 'files_deleted' => $record->files_deleted_at !== null,
-            'model' => $record->model_snapshot
-                ? array_intersect_key($record->model_snapshot, array_flip(['id', 'name', 'slug', 'version', 'model_id', 'sha256', 'provenance']))
-                : ['id' => $record->model_id, 'provenance' => 'historical_model_snapshot_unavailable'],
-            'metrics' => $metrics,
+            'model' => $evaluation['model'] ?? ['id' => $record->model_id, 'provenance' => 'historical_model_snapshot_unavailable'],
+            'metrics' => $evaluation['metrics'],
+            'evaluation' => $evaluation,
             'validation_provenance' => $this->numericProvenance($record->validation ?? []),
             'frame_provenance' => $provenance,
-        ]];
+        ], ...$documents];
     }
 
     private function numericProvenance(array $row): array

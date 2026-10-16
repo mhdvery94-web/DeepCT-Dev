@@ -68,6 +68,7 @@ Route::middleware(['auth:sanctum', 'account.access'])->group(function () {
     Route::prefix('ai')->group(function () {
         $controller = \App\Http\Controllers\API\AiConversationController::class;
         Route::get('/status', [$controller, 'status'])->name('api.ai.status');
+        Route::get('/analyses/{id}/evidence', [$controller, 'evidence'])->whereNumber('id')->name('api.ai.analyses.evidence');
         Route::get('/conversations', [$controller, 'index'])->name('api.ai.conversations.index');
         Route::post('/conversations', [$controller, 'store'])->name('api.ai.conversations.store');
         Route::get('/conversations/{id}', [$controller, 'show'])->whereNumber('id')->name('api.ai.conversations.show');

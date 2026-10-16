@@ -8,6 +8,8 @@ use App\Models\AiConversation;
 use App\Models\AiMessage;
 use App\Models\AiRequest;
 use App\Models\AnalysisRecord;
+use App\Services\AiGroundedReply;
+use App\Services\AnalysisEvidence;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -20,7 +22,7 @@ class AiConversationController extends Controller
         return response()->json(['success' => true, 'data' => [
             'enabled' => config('ai.enabled'), 'model' => config('ai.model'),
             'mode' => config('ai.metadata_mode') ? 'metadata' : 'freeform',
-            'prompt_version' => (config('ai.metadata_mode') ? 'deepct-metadata-v2' : config('ai.prompt_version')), 'experimental' => true,
+            'prompt_version' => (config('ai.metadata_mode') ? AiGroundedReply::PROMPT_VERSION : config('ai.prompt_version')), 'experimental' => true,
             'limits' => [
                 'context_tokens' => config('ai.context_tokens'), 'output_tokens' => config('ai.output_tokens'),
                 'history_messages' => config('ai.history_messages'), 'history_characters' => config('ai.history_characters'),
@@ -28,6 +30,13 @@ class AiConversationController extends Controller
                 'requests_per_day' => config('ai.daily_limit'), 'active_requests_per_user' => 1,
             ],
         ]]);
+    }
+
+    public function evidence(Request $request, int $id, AnalysisEvidence $evidence)
+    {
+        $record = AnalysisRecord::where('user_id', $request->user()->id)->findOrFail($id);
+
+        return response()->json(['success' => true, 'data' => $evidence->fromRecord($record)]);
     }
 
     private function pagination($page): array
@@ -95,12 +104,15 @@ class AiConversationController extends Controller
             'idempotency_key' => 'required|string|max:100|regex:/\A[A-Za-z0-9._:-]+\z/',
             'analysis_record_id' => 'nullable|integer|min:1',
         ]);
-        $hash = hash('sha256', json_encode([$id, $input['content'], $input['analysis_record_id'] ?? null]));
+        // Hash input presence, never the context inherited later at admission.
+        $hash = hash('sha256', json_encode(['v2', $id, $input['content'],
+            array_key_exists('analysis_record_id', $input), $input['analysis_record_id'] ?? null]));
+        $legacyHash = hash('sha256', json_encode([$id, $input['content'], $input['analysis_record_id'] ?? null]));
         try {
             // Global shared lock serializes the queue capacity and daily counts,
             // while transactions + unique keys protect persistent admission.
-            return Cache::store(config('ai.lock_store'))->lock('ai:admission', 30)->block(3, function () use ($request, $conversation, $input, $hash) {
-                return DB::transaction(function () use ($request, $conversation, $input, $hash) {
+            return Cache::store(config('ai.lock_store'))->lock('ai:admission', 30)->block(3, function () use ($request, $conversation, $input, $hash, $legacyHash) {
+                return DB::transaction(function () use ($request, $conversation, $input, $hash, $legacyHash) {
                     $user = $request->user()->fresh();
                     if (! $user || ! $user->is_active || $user->must_change_password) {
                         return $this->error('access_revoked', 'Account access is unavailable.', 403);
@@ -110,14 +122,21 @@ class AiConversationController extends Controller
                     }
                     $replay = AiRequest::where('user_id', $user->id)->where('idempotency_key', $input['idempotency_key'])->first();
                     if ($replay) {
-                        if (! hash_equals($replay->payload_hash, $hash)) {
+                        // Prior releases treated omission and null identically and did
+                        // not inherit context. Accept only their original selection.
+                        $legacyReplay = hash_equals($replay->payload_hash, $legacyHash)
+                            && $replay->requested_analysis_record_id === (isset($input['analysis_record_id']) ? (int) $input['analysis_record_id'] : null);
+                        if (! hash_equals($replay->payload_hash, $hash) && ! $legacyReplay) {
                             return $this->error('idempotency_conflict', 'This key was used for another message.', 409);
                         }
 
                         return $this->accepted($replay);
                     }
-                    if (! empty($input['analysis_record_id'])) {
-                        AnalysisRecord::where('user_id', $user->id)->findOrFail($input['analysis_record_id']);
+                    $selectedId = array_key_exists('analysis_record_id', $input)
+                        ? $input['analysis_record_id']
+                        : $conversation->requests()->latest('id')->first()?->requested_analysis_record_id;
+                    if ($selectedId !== null) {
+                        AnalysisRecord::where('user_id', $user->id)->findOrFail($selectedId);
                     }
                     if (AiRequest::where('user_id', $user->id)->whereIn('status', AiRequest::ACTIVE)->exists()) {
                         return $this->error('request_active', 'Wait for or cancel your active request.', 409);
@@ -134,9 +153,9 @@ class AiConversationController extends Controller
                     $message = $conversation->messages()->create(['role' => 'user', 'content' => $input['content']]);
                     $record = AiRequest::create([
                         'user_id' => $user->id, 'ai_conversation_id' => $conversation->id, 'user_message_id' => $message->id,
-                        'analysis_record_id' => $input['analysis_record_id'] ?? null, 'idempotency_key' => $input['idempotency_key'],
-                        'requested_analysis_record_id' => $input['analysis_record_id'] ?? null,
-                        'payload_hash' => $hash, 'model' => config('ai.model'), 'prompt_version' => (config('ai.metadata_mode') ? 'deepct-metadata-v2' : config('ai.prompt_version')), 'status' => 'queued',
+                        'analysis_record_id' => $selectedId, 'idempotency_key' => $input['idempotency_key'],
+                        'requested_analysis_record_id' => $selectedId,
+                        'payload_hash' => $hash, 'model' => config('ai.model'), 'prompt_version' => (config('ai.metadata_mode') ? AiGroundedReply::PROMPT_VERSION : config('ai.prompt_version')), 'status' => 'queued',
                     ]);
                     $conversation->touch();
                     // Same database connection and transaction: queue insertion

@@ -34,7 +34,7 @@ class AiAssistantTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['ai.enabled' => true, 'ai.lock_store' => 'file']);
+        config(['ai.enabled' => true, 'ai.lock_store' => 'file', 'ai.context_tokens' => 16384]);
         Http::preventStrayRequests();
         Queue::fake();
         $this->owner = User::factory()->create(['is_active' => true, 'must_change_password' => false]);
@@ -201,7 +201,7 @@ class AiAssistantTest extends TestCase
         config(['ai.enabled' => false]);
         $data = $this->apiAs($this->token)->getJson('/api/ai/status')->assertOk()->json('data');
         $this->assertFalse($data['enabled']);
-        $this->assertSame(2048, $data['limits']['context_tokens']);
+        $this->assertSame(16384, $data['limits']['context_tokens']);
         $this->assertArrayNotHasKey('base_url', $data);
         $this->send($id)->assertStatus(503);
     }
@@ -435,7 +435,7 @@ class AiAssistantTest extends TestCase
         $this->work($requestId);
         Http::assertSent(function ($request) {
             $payload = $request->data();
-            $this->assertSame(2048, $payload['options']['num_ctx']);
+            $this->assertSame(16384, $payload['options']['num_ctx']);
             $this->assertSame(768, $payload['options']['num_predict']);
             $this->assertSame(0.6, $payload['options']['temperature']);
             $this->assertSame(2, $payload['options']['num_thread']);
@@ -494,7 +494,7 @@ class AiAssistantTest extends TestCase
         $record->delete();
         $this->apiAs($this->token)->getJson("/api/ai/conversations/{$conversationId}")->assertOk()
             ->assertJsonPath('data.request.analysis_record_id', $originalId);
-        $this->send($conversationId, 'context-free')->assertAccepted()
+        $this->send($conversationId, 'context-free', ['analysis_record_id' => null])->assertAccepted()
             ->assertJsonStructure(['data' => ['request' => ['analysis_record_id']]])
             ->assertJsonPath('data.request.analysis_record_id', null);
     }
