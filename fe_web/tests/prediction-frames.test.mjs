@@ -41,3 +41,16 @@ test('malformed rows and unsafe names are rejected without fabricated AI labels'
   for (const value of [null, {}, 'frames', undefined]) assert.deepEqual(parsePredictionFrames(value), []);
   assert.deepEqual(parsePredictionFrames([frame('frame2.tif', 'output', -4)])[0].size, undefined);
 });
+
+test('lone high and low Unicode surrogates are rejected before preview rendering', () => {
+  const names = ['\ud800.tif', '\udc00.tif', 'frame2\ud800.tif', 'frame2\udc00.tif', '\udc00\ud800.tif'];
+  assert.deepEqual(parsePredictionFrames(names.map(name => frame(name, 'output'))), []);
+});
+
+test('valid Unicode including a surrogate pair retains its exact name and safe preview URL', () => {
+  const name = 'frame2\ud83d\udd2c.tif';
+  const frames = parsePredictionFrames([frame(name, 'input'), frame('échantillon_3.tif', 'output')]);
+  assert.deepEqual(frames.map(frame => frame.name), [name, 'échantillon_3.tif']);
+  assert.equal(framePreviewUrl(42, frames[0], 128), '/api/backend/predictions/42/frames/frame2%F0%9F%94%AC.tif/preview?kind=input&size=128');
+  assert.equal(framePreviewUrl(42, frames[1], 1024), '/api/backend/predictions/42/frames/%C3%A9chantillon_3.tif/preview?kind=output&size=1024');
+});

@@ -14,6 +14,8 @@ export function parsePredictionFrames(value: unknown): PredictionFrame[] {
   for (const row of value) {
     if (!row || typeof row !== "object" || !frameKindLabel(row.kind) || typeof row.name !== "string"
       || !/\.tiff?$/i.test(row.name) || /[\\/\x00-\x1f\x7f]/.test(row.name) || row.name.length > 255) continue;
+    // Unpaired UTF-16 surrogates survive JSON but cannot form a preview URL.
+    try { encodeURIComponent(row.name); } catch { continue; }
     const key = JSON.stringify([row.kind, row.name]);
     if (seen.has(key)) continue;
     seen.add(key);
