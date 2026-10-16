@@ -220,6 +220,12 @@ select { min-height: 46px; max-width: 100%; padding: 8px 12px; border: 1px solid
 .prediction-status--failed { background: #fee2e2; color: #991b1b; }
 .prediction-downloads, .frame-tabs { margin-block: 20px; }
 .frame-tabs [aria-pressed="true"] { border-color: var(--brin-red); color: var(--brin-red); background: #fff1f2; }
+.prediction-frame-viewer { min-width: 0; }
+.frame-caption-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.frame-caption-name strong { min-width: 0; overflow-wrap: anywhere; }
+.frame-kind-badge, .frame-thumbnails .frame-kind-badge { display: inline-block; flex-shrink: 0; width: fit-content; padding: 2px 8px; border-radius: 5px; font-size: 11px; line-height: 1.6; font-weight: 700; }
+.frame-kind-badge--input { color: #334b58; background: #e6edf1; }
+.frame-kind-badge--output { color: var(--brin-red-dark); background: #fee2e2; }
 .frame-stage { margin: 0; overflow: hidden; border-radius: 14px; border: 1px solid var(--line); background: #101820; }
 .frame-stage > img { display: block; width: 100%; height: clamp(240px, 45vh, 560px); object-fit: contain; }
 .frame-stage figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 12px 16px; background: #f6f8f9; font-size: 12px; overflow-wrap: anywhere; }
