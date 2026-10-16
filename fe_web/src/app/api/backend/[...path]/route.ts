@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiUrl } from "@/lib/api";
 import { AUTH_COOKIE_NAME } from "@/lib/auth-constants";
+import { buildPredictionDownload } from "@/lib/prediction-download";
 import { hasTrustedOrigin } from "@/lib/request-security";
 
 const METHODS_WITHOUT_BODY = new Set(["GET", "HEAD"]);
@@ -76,14 +77,11 @@ async function handler(
       const linkResponse = await fetch(apiUrl(linkPath), { headers, cache: "no-store" });
       const payload = await linkResponse.json();
       if (!linkResponse.ok) return NextResponse.json(payload, { status: linkResponse.status });
-      const signedPath = payload?.data?.path;
-      if (typeof signedPath !== "string" || !signedPath.startsWith("/api/downloads/") || signedPath.startsWith("//")) {
-        throw new Error("Invalid download link.");
+      const download = buildPredictionDownload(apiUrl("/"), payload?.data?.path, predictionDownload[1], predictionDownload[2]);
+      if (request.nextUrl.searchParams.get("prepare") === "1") {
+        return NextResponse.json({ success: true, data: download }, { headers: { "cache-control": "no-store" } });
       }
-      // Laravel signs its internal /api path. The ingress strips the configured
-      // deployment prefix before validating it; keep that prefix in the public
-      // URL and preserve the signed query verbatim.
-      return NextResponse.redirect(apiUrl(signedPath.slice("/api".length)), 307);
+      return NextResponse.redirect(download.url, 307);
     }
     const target = new URL(apiUrl(buildPath(path)));
     target.search = request.nextUrl.search;
