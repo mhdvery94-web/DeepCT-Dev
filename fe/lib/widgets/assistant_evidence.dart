@@ -38,7 +38,7 @@ class AssistantEvidence extends StatelessWidget {
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Gunakan sumber ini untuk memeriksa jawaban; asisten tidak membaca piksel TIFF.',
+              'Metadata ini dicatat saat jawaban dibuat, bukan status terkini. Gunakan sumber ini untuk memeriksa jawaban; asisten tidak membaca piksel TIFF.',
               style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
             ),
             if (sources.isEmpty) fact('Konteks prediksi', 'Tidak ada'),
@@ -75,6 +75,7 @@ class AssistantEvidence extends StatelessWidget {
               for (final key in [
                 'mae',
                 'psnr',
+                'ssim',
                 'rmse',
                 'pixels',
                 'reference_min',

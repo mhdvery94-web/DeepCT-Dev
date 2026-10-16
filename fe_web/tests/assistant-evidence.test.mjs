@@ -14,3 +14,16 @@ test('historical snapshot absence renders explicit provenance without undefined 
  assert.match(markup,/Versi historis \/ provenans model tidak tersedia/);
  assert.doesNotMatch(markup,/undefined · undefined/);
 });
+
+for (const [ssim, rendered] of [[0.934, '0.934'], [0, '0'], [null, 'Tidak tersedia'], ['<script>alert(1)</script>', '&lt;script&gt;alert(1)&lt;/script&gt;']]) {
+ test(`evidence exposes saved SSIM ${JSON.stringify(ssim)} safely`,()=>{
+  const markup=renderToStaticMarkup(compiled.exports.AssistantEvidence({request:{sources:[{id:1,status:'completed',metrics:{ssim}}]}}));
+  assert.ok(markup.includes(`<dt>ssim</dt><dd>${rendered}</dd>`));
+  assert.doesNotMatch(markup,/<script>/);
+ });
+}
+test('evidence identifies the historical snapshot alongside neutral verification guidance',()=>{
+ const markup=renderToStaticMarkup(compiled.exports.AssistantEvidence({request:{sources:[]}}));
+ assert.match(markup,/Metadata ini dicatat saat jawaban dibuat, bukan status terkini/);
+ assert.match(markup,/Gunakan sumber ini untuk memeriksa jawaban; asisten tidak membaca piksel TIFF/);
+});

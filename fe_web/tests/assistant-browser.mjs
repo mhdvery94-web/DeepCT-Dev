@@ -14,7 +14,7 @@ let analysisGate;
 const sends = [];
 const date = '2026-10-10T12:00:00Z';
 const msg = (id, role, content) => ({ id, role, content, created_at: date });
-const request = () => ({ id: 42, conversation_id: 7, user_message_id: 100, analysis_record_id: originalContextId, status: state, model: 'deepseek-r1:1.5b', prompt_version: 'deepct-assistant-v1', experimental: true, error_code: state === 'failed' ? 'provider_timeout' : null, assistant_message: state === 'completed' ? msg(101, 'assistant', 'Jawaban eksperimen') : null, sources: state === 'completed' ? [{type:'analysis_record',id:3,status:'pending',input_files_count:2,output_files_count:null,processing_time_seconds:null,expired:false,files_deleted:false,model:null,metrics:{mae:null},validation_provenance:{},frame_provenance:[]}] : [], metrics: state === 'completed' ? {total_duration:50000000000} : null, created_at:date, started_at:null, finished_at:null });
+const request = () => ({ id: 42, conversation_id: 7, user_message_id: 100, analysis_record_id: originalContextId, status: state, model: 'deepseek-r1:1.5b', prompt_version: 'deepct-assistant-v1', experimental: true, error_code: state === 'failed' ? 'provider_timeout' : null, assistant_message: state === 'completed' ? msg(101, 'assistant', 'Jawaban eksperimen') : null, sources: state === 'completed' ? [{type:'analysis_record',id:3,status:'pending',input_files_count:2,output_files_count:null,processing_time_seconds:null,expired:false,files_deleted:false,model:null,metrics:{mae:null,ssim:0},validation_provenance:{},frame_provenance:[]}] : [], metrics: state === 'completed' ? {total_duration:50000000000} : null, created_at:date, started_at:null, finished_at:null });
 const fixture = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
   const path = url.pathname.replace(/^\/api/, '');
@@ -153,6 +153,10 @@ try {
   await page.getByText('Pesan lama',{exact:true}).waitFor();
   await page.getByText('Sumber dan metrik tepercaya',{exact:true}).click();
   await page.getByText('50.0 detik',{exact:false}).waitFor();
+  const evidence=page.locator('.assistant-evidence');
+  await evidence.getByText('Metadata ini dicatat saat jawaban dibuat, bukan status terkini.',{exact:false}).waitFor();
+  const ssim=evidence.locator('.assistant-evidence__fact').filter({has:page.locator('dt').filter({hasText:/^ssim$/})});
+  assert.equal(await ssim.locator('dd').innerText(),'0');
   assert.equal(await page.getByRole('complementary',{name:'Riwayat percakapan'}).evaluate(el=>Math.round(el.getBoundingClientRect().width)),270);
   await page.getByRole('button',{name:'Percakapan berikutnya'}).click();
   await page.getByRole('button',{name:'Percakapan lama',exact:true}).waitFor();

@@ -272,18 +272,46 @@ def test_compatibility_lease_admission_precedes_gpu_probe(model_tree, tmp_path, 
 
 @pytest.fixture
 def legacy(monkeypatch):
-    state = {'requests': []}
+    state = {'requests': [], 'framing': 'close', 'status': 201}
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
         def do_POST(self):
             body = self.rfile.read(int(self.headers['Content-Length']))
             state['requests'].append((self.path, self.headers.get('Authorization'), self.headers.get('Content-Type'), body))
-            self.send_response(201)
+            self.send_response(state['status'])
             self.send_header('Content-Type', 'image/tiff')
             self.send_header('Content-Disposition', 'attachment; filename="prediction.tif"')
+            framing = state['framing']
+            raw = b'II\x2a\x00legacy-image'
+            if framing == 'length':
+                self.send_header('Content-Length', str(len(raw)))
+            elif framing == 'truncated-length':
+                self.send_header('Content-Length', '20')
+                raw = b'II\x2a\x00shortbody'  # 13 bytes, then ordinary connection close.
+            elif framing == 'oversized-length':
+                self.send_header('Content-Length', str(64 * 1024**2 + 1))
+                raw = b''
+            elif framing in ('chunked', 'chunked-trailer', 'missing-trailer-end', 'truncated-chunk', 'missing-last-chunk'):
+                self.send_header('Transfer-Encoding', 'chunked')
+                raw = b'10\r\nII\x2a\x00legacy-image\r\n'
+                if framing == 'chunked':
+                    raw += b'0\r\n\r\n'
+                elif framing == 'chunked-trailer':
+                    raw += b'0\r\nChecksum: fixture\r\n\r\n'
+                elif framing == 'missing-trailer-end':
+                    raw += b'0\r\nChecksum: fixture\r\n'
+                elif framing == 'truncated-chunk':
+                    raw = b'10\r\nII\x2a\x00shortbody'
             self.end_headers()
-            self.wfile.write(b'II\x2a\x00legacy-image')
+            self.wfile.write(raw)
+            if framing == 'oversized-body':
+                try:
+                    for _ in range(64):
+                        self.wfile.write(b'x' * 1024**2)
+                    self.wfile.write(b'x')
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     import http.client
     original = http.client.HTTPConnection
@@ -310,6 +338,36 @@ def test_legacy_proxy_preserves_bearer_multipart_and_image_semantics(tmp_path, l
     assert response.headers['content-disposition'] == 'attachment; filename="prediction.tif"'
     assert legacy['requests'] == [('/predict/ginet-v1-0-0', 'Bearer legacy-test', 'multipart/form-data; boundary=test', body)]
     assert competing_process(settings.gpu_lease_path) == 'acquired'
+
+
+@pytest.mark.parametrize('framing', ['close', 'length', 'chunked', 'chunked-trailer'])
+@pytest.mark.parametrize('status', [200, 422])
+def test_legacy_complete_http_framing_preserves_bytes_status_and_releases_lease(tmp_path, legacy, framing, status):
+    legacy.update(framing=framing, status=status)
+    settings = configured(tmp_path, legacy_proxy_enabled=True)
+    with TestClient(create_app(settings)) as client:
+        response = client.post('/assistant/legacy/predict/gin-tcd', content=b'TIFF')
+    assert response.status_code == status
+    assert response.content == b'II\x2a\x00legacy-image'
+    assert response.headers['content-length'] == '16'
+    assert response.headers['content-type'] == 'image/tiff'
+    assert response.headers['content-disposition'] == 'attachment; filename="prediction.tif"'
+    assert settings.gpu_lease_path.read_bytes() == b''
+    assert competing_process(settings.gpu_lease_path) == 'acquired'
+
+
+@pytest.mark.parametrize('framing', ['truncated-length', 'oversized-length', 'oversized-body', 'truncated-chunk', 'missing-last-chunk', 'missing-trailer-end'])
+def test_legacy_incomplete_http_framing_retains_durable_exclusion(tmp_path, legacy, framing):
+    legacy.update(framing=framing, status=200)
+    settings = configured(tmp_path, legacy_proxy_enabled=True)
+    with TestClient(create_app(settings)) as client:
+        response = client.post('/assistant/legacy/predict/gin-tcd', content=b'TIFF')
+        # Check the marker before the error: clearing it is independently unsafe.
+        assert settings.gpu_lease_path.read_bytes() == b'unverified residency\n'
+        assert response.status_code == 503
+        assert response.json() == {'error_code': 'provider_unavailable'}
+        assert client.post('/assistant/api/chat', json=PAYLOAD, headers=AUTH).json() == {'error_code': 'generation_busy'}
+    assert competing_process(settings.gpu_lease_path) == 'busy'
 
 
 @pytest.mark.parametrize('suffix', ['http://attacker', '..', 'bad%2fname', 'bad%5cname', 'a..b', 'models', 'name/extra'])

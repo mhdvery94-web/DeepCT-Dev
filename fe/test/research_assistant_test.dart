@@ -6,6 +6,7 @@ import 'package:fe/screens/assistant/research_assistant_screen.dart';
 import 'package:fe/services/ai_service.dart';
 import 'package:fe/services/ai_chat_controller.dart';
 import 'package:fe/services/api_client.dart';
+import 'package:fe/widgets/assistant_evidence.dart';
 
 class FakeAi extends AiService {
   bool enabled = false;
@@ -155,6 +156,64 @@ Future<void> mount(WidgetTester tester, FakeAi api, {int? context}) async {
 }
 
 void main() {
+  for (final entry in <Object?, String>{
+    0.934: '0.934',
+    0: '0',
+    null: 'Tidak tersedia',
+    '<script>alert(1)</script>': '<script>alert(1)</script>',
+  }.entries) {
+    testWidgets('evidence displays saved SSIM ${entry.key} as text', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: AssistantEvidence(
+                request: {
+                  'sources': [
+                    {
+                      'id': 3,
+                      'status': 'completed',
+                      'metrics': {'ssim': entry.key},
+                    },
+                  ],
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Sumber dan metrik tepercaya'));
+      await tester.pumpAndSettle();
+      expect(find.text('ssim: ${entry.value}'), findsOneWidget);
+    });
+  }
+  testWidgets(
+    'evidence explains the saved snapshot with neutral verification guidance',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: AssistantEvidence(request: {'sources': []})),
+        ),
+      );
+      await tester.tap(find.text('Sumber dan metrik tepercaya'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining(
+          'Metadata ini dicatat saat jawaban dibuat, bukan status terkini',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(
+          'Gunakan sumber ini untuk memeriksa jawaban; asisten tidak membaca piksel TIFF',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
   TestWidgetsFlutterBinding.ensureInitialized();
   String? clipboardText;
   setUp(() {

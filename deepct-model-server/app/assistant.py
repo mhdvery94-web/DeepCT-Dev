@@ -205,12 +205,27 @@ def legacy_lease(path):
         lease.__exit__(None, None, None)
 
 
+class CompleteLegacyResponse(http.client.HTTPResponse):
+    def _read_and_discard_trailer(self):
+        # http.client tolerates EOF here; it cannot certify a complete CT reply.
+        # Keep its trailer line bound and accepted line endings, require the end.
+        while True:
+            line = self.fp.readline(http.client._MAXLINE + 1)
+            if len(line) > http.client._MAXLINE:
+                raise http.client.LineTooLong('trailer line')
+            if not line:
+                raise http.client.IncompleteRead(b'')
+            if line in (b'\r\n', b'\n'):
+                return
+
+
 def legacy_predict(settings, model_name, body, content_type, authorization):
     try:
         with legacy_lease(settings.gpu_lease_path) as lease:
             if settings.gpu_lease_path is None:
                 return error(503, 'provider_unavailable')
             connection = http.client.HTTPConnection('127.0.0.1', 8000, timeout=settings.assistant_timeout_seconds)
+            connection.response_class = CompleteLegacyResponse
             # Unknown completion on connection loss must block future GPU work,
             # including LLM generation, until an operator verifies legacy idle.
             lease.uncertain()
@@ -218,8 +233,14 @@ def legacy_predict(settings, model_name, body, content_type, authorization):
                 connection.request('POST', '/predict/' + model_name, body,
                     ({'Authorization': authorization} if authorization else {}) | {'Content-Type': content_type})
                 upstream = connection.getresponse()
-                raw = upstream.read(64 * 1024**2 + 1)
-                if len(raw) > 64 * 1024**2:
+                response_limit = 64 * 1024**2
+                if upstream.length is not None and upstream.length > response_limit:
+                    raise ProviderUnavailable()
+                raw = upstream.read(response_limit + 1)
+                # Bounded HTTPResponse.read() can return a partial declared body
+                # without raising on EOF. Chunked reads raise on incomplete chunks;
+                # close-delimited responses have no declared length to satisfy.
+                if len(raw) > response_limit or upstream.length not in (None, 0):
                     raise ProviderUnavailable()
                 headers = {key: value for key, value in upstream.getheaders()
                            if key.lower() in ('content-type', 'content-disposition', 'cache-control')}
