@@ -15,7 +15,7 @@
       terjadi sejak awal.
     -->
     <application
-        android:label="deepCT-AI"
+        android:label="${deepctAppLabel}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"

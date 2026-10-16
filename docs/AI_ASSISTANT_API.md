@@ -138,7 +138,7 @@ remain terminal and are returned unchanged.
 Before any separately authorized activation, migrate the three AI tables and
 configure `AI_OLLAMA_BASE_URL`, optional `AI_OLLAMA_TOKEN`, and backend-only
 `AI_ASSISTANT_MODEL` (default `deepseek-r1:1.5b`). The freeform prompt version is
-`deepct-assistant-v1`; bounded metadata mode uses `deepct-metadata-v2`.
+`deepct-assistant-v1`; bounded metadata mode uses `deepct-metadata-v3`.
 Keep `AI_ASSISTANT_ENABLED=false` until the selected mode's quality gate
 passes. Client input cannot override the provider URL, credentials or model.
 Apply normal Laravel configuration refresh/restart practices for config changes.
@@ -214,3 +214,121 @@ an uncertainty marker after ambiguous failures. Recovery requires checking the
 owned runtime and CT work under the existing lock; see the
 [model-server recovery procedure](../deepct-model-server/README.md#private-gpu-assistant-gateway).
 Do not clear that marker merely because a health endpoint responds.
+
+## Synthetic freeform comparison (evaluation only)
+
+`scripts/evaluate-assistant.py` compares exactly `deepseek-r1:7b` or
+`qwen2.5:7b-instruct-q4_K_M` against the 40 distinct synthetic cases in
+`scripts/assistant-quality-cases.json`. The corpus follows the owner-scoped
+`AiContext` source/evaluation shape, contains inherited/cleared/switched context
+and hostile history, and copies only the versioned curated SOP excerpts from
+`be/resources/ai/sop.json`. No private TIFF bytes, real owner data, provider token,
+or frontend model/URL input is used. This exercises supplied source snapshots;
+it does **not** test Laravel ownership admission, retrieval, or conversation
+serialization, which need their own API tests and staging canaries.
+
+Run natively on the approved GPU host with the existing gateway Python environment.
+The operator must supply the gateway checkout, **existing absolute shared lock
+file**, and an approved free-VRAM budget. The harness imports that checkout's
+`app.gpu.GPULease` and `app.compatibility.gpu_free_bytes`; it does not accept an
+unconfigured lease or make a private substitute lock. Example after the operator
+has configured these non-secret environment variables:
+
+```sh
+"$GATEWAY_PYTHON" scripts/evaluate-assistant.py \
+  --model deepseek-r1:7b --gateway-root "$GATEWAY_ROOT" \
+  --gpu-lease-path "$SHARED_GPU_LEASE" --min-free-mib "$BENCHMARK_MIN_FREE_MIB" \
+  --report deepseek-quality.json
+"$GATEWAY_PYTHON" scripts/evaluate-assistant.py \
+  --model qwen2.5:7b-instruct-q4_K_M --gateway-root "$GATEWAY_ROOT" \
+  --gpu-lease-path "$SHARED_GPU_LEASE" --min-free-mib "$BENCHMARK_MIN_FREE_MIB" \
+  --report qwen-quality.json
+```
+
+Run one model at a time. The endpoint is fixed to `127.0.0.1:11435` and bypasses
+HTTP proxies. Both use `think=false`, context 16384, output 1024, temperature 0.2,
+seed 17, four threads, and `keep_alive=0`. **R1 is evaluated in this constrained
+non-thinking deployment profile, not its full reasoning capability.** Prompts
+preserve the current question and all supplied evidence within 12,000 UTF-8
+bytes; old history is included only within the existing eight-message/6000-character
+limits. Oversized evidence/current questions fail instead of being truncated.
+Ollama model digest/version, Python/platform identity, gateway code hashes,
+script/corpus hashes, profile, operator admission budget and timeout are recorded.
+Artifact digest verification and installation precede this harness; it does not
+pull or replace models, stop processes, or change activation flags.
+
+Each case acquires the real shared lock, checks free VRAM alongside existing CT
+residency, durably marks uncertainty before provider work, and requires initially
+empty Ollama residency. Unaccounted existing work is left untouched and blocks
+further work. Successful terminal completion clears the marker only after explicit
+unload and a verified empty `/api/ps`. A known `done=true` terminal stop/length
+response with empty, malformed-thinking or truncated content becomes a failed
+quality result with empty final answer and a fixed error code; after verified
+unload the remaining cases continue. Raw invalid/truncated content is discarded.
+Timeout, transport/malformed completion, or ambiguous/unverified cleanup stops the
+run and leaves the marker poisoned even when an empty residency probe is observed.
+Follow the existing gateway recovery procedure under its lock; never clear a
+marker just to resume a benchmark or interrupt another user's CT job.
+
+Reports are atomically checkpointed and fsynced after every case. `--resume`
+requires exactly the same model/runtime/profile/script/corpus identity and a
+persisted successful prefix; the real lock still blocks unresolved uncertainty.
+A failed report is immutable for automatic recovery: retain it, resolve the owned
+runtime using the operator procedure, and use a new report filename for a fresh
+comparison. No report or retry activates anything. All reports contain
+`manual_review_required=true` and `activation=false`; a completed report is
+`completed_pending_manual_review`, including when its rule-pass count is zero.
+Console output contains only case IDs and rule pass/fail, never provider prose or
+reasoning. Only validated final content and allowlisted nonnegative integer timing
+and token-count fields are retained; duration fields use Ollama nanoseconds and
+`wall_seconds` uses seconds.
+
+The rules check required/forbidden lexical patterns, selected labeled numeric
+values (including zero, infinite and missing), and explicit source citations.
+They are **not semantic approval**: paraphrases can fail, and contradictions,
+fabricated causes, source mismatch, privacy breaches and unsupported scientific
+claims can escape these narrow rules. Manually review **all 40 final answers per
+model**, separately recording factual/privacy/claim decisions and matching every
+used source. All critical cases must pass that review before a separate activation
+decision; researcher scientific approval remains a distinct prerequisite. A failed
+freeform gate retains the staging metadata profile and its deterministic evidence
+answers. The current renderer version is `deepct-metadata-v3`; this benchmark uses
+`deepct-freeform-evaluation-2026-10-16.v1`, not the metadata topic classifier.
+
+## Isolated staging Android artifact
+
+Use `.github/workflows/staging-android.yml`, named **Isolated staging Android APK**.
+Its bootstrap push trigger is limited to branch `staging` and changes to that
+workflow file. Once it has followed normal promotion onto the default branch,
+manual dispatch accepts only `develop` or `staging` branch refs. No production
+promotion is required to obtain the initial artifact. This workflow has read-only
+repository permissions and no publishing, Drive upload, backend deployment, or
+production signing step.
+
+The API is selected only from `DEVELOP_API_BASE_URL` or `STAGING_API_BASE_URL` for
+the matching branch, with no manual URL override or production fallback.
+`scripts/check-staging-android.py` rejects other refs, missing/non-HTTPS URLs,
+credentials/query/fragment, loopback, malformed/encoded/traversal paths, and
+production endpoints (including `RASPI_API_BASE_URL`, `API_BASE_URL`, `NGROK_RASPI`).
+A dedicated preview host can use `/api`; the existing shared public ingress must
+use the matching exact `/staging/api` or `/develop/api` prefix. Production `/api`
+on a known production host and a prefix for the wrong branch are rejected.
+The guard compares canonical origin/path endpoints, allowing staging and production
+to share a hostname without allowing the production endpoint.
+Build depends on preflight, the existing model CPU workflow, and locked Flutter
+analysis/tests. Flutter is frozen at **3.44.9**. The sole Android Gradle opt-in
+`deepctStaging=true` selects application ID `id.go.brin.neutronct.staging` and
+visible name **deepCT-AI Staging**, keeping installation/storage separate from
+production. The workflow supplies it via `ORG_GRADLE_PROJECT_deepctStaging=true`.
+Without that property the existing package/name are retained.
+
+This is an installable **debug APK**, signed with an ephemeral CI debug key for
+staging testing. It is not a production release; a later CI key can require
+uninstalling an earlier staging build. The build verifies the actual APK package
+and label with Android `aapt`. Download the `deepct-staging-android-<source SHA>`
+artifact; check `staging-SHA256SUMS`, `staging-badging.txt`, and
+`staging-apk-metadata.json` against the selected run/source SHA and preview API.
+Metadata records APK SHA256, source ref/SHA, API, Flutter version, build/signing
+mode, and `physical_android_tested=false`. Artifact creation does not establish
+on-device behavior: login, evidence/SOP views, ownership and context flows still
+need an authorized physical Android device. Absence of a device remains unverified.

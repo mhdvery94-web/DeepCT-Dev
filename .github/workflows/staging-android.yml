@@ -1,0 +1,113 @@
+name: Isolated staging Android APK
+
+on:
+  # Bootstrap before this workflow is on main. Later builds use workflow_dispatch.
+  push:
+    branches: [staging]
+    paths: ['.github/workflows/staging-android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.44.9'
+  API_BASE_URL: >-
+    ${{ github.ref == 'refs/heads/staging' && vars.STAGING_API_BASE_URL
+        || github.ref == 'refs/heads/develop' && vars.DEVELOP_API_BASE_URL || '' }}
+  PRODUCTION_API_URL: ${{ vars.RASPI_API_BASE_URL }}
+  LEGACY_PRODUCTION_API_URL: ${{ vars.API_BASE_URL }}
+  NGROK_PRODUCTION_API_URL: ${{ vars.NGROK_RASPI }}
+
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Guard branch and non-production API
+        run: python scripts/check-staging-android.py
+
+  test-model-cpu:
+    needs: preflight
+    uses: ./.github/workflows/model-cpu.yml
+
+  test:
+    needs: preflight
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Locked Flutter analysis and tests
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter analyze
+          flutter test
+
+  android:
+    needs: [preflight, test, test-model-cpu]
+    runs-on: ubuntu-latest
+    env:
+      ORG_GRADLE_PROJECT_deepctStaging: 'true'
+    defaults:
+      run:
+        working-directory: fe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Build isolated debug APK
+        run: |
+          python ../scripts/check-staging-android.py
+          flutter pub get --enforce-lockfile
+          flutter build apk --debug --dart-define="API_BASE_URL=$API_BASE_URL"
+      - name: Verify Android identity and record provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=build/app/outputs/flutter-apk/app-debug.apk
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)
+          test -n "$AAPT"
+          "$AAPT" dump badging "$APK" > build/staging-badging.txt
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('build/staging-badging.txt').read_text()
+          assert "package: name='id.go.brin.neutronct.staging'" in text
+          assert "application-label:'deepCT-AI Staging'" in text
+          PY
+          cp "$APK" build/deepct-staging.apk
+          python ../scripts/check-staging-android.py --apk build/deepct-staging.apk --metadata build/staging-apk-metadata.json
+          cd build
+          sha256sum deepct-staging.apk staging-apk-metadata.json > staging-SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deepct-staging-android-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            fe/build/deepct-staging.apk
+            fe/build/staging-apk-metadata.json
+            fe/build/staging-SHA256SUMS
+            fe/build/staging-badging.txt

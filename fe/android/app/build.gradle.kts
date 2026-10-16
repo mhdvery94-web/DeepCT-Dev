@@ -4,6 +4,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Explicit opt-in used only by the dedicated staging APK workflow.
+val deepctStaging = providers.gradleProperty("deepctStaging").orNull.let { value ->
+    require(value == null || value == "true" || value == "false") { "Invalid deepctStaging property" }
+    value == "true"
+}
+
 android {
     namespace = "id.go.brin.neutronct"
     compileSdk = flutter.compileSdkVersion
@@ -18,7 +24,8 @@ android {
         // Reverse-DNS of the institution that owns the app. Changing this
         // after a release installs a second copy alongside the first rather
         // than updating it, so it had to be settled before distribution.
-        applicationId = "id.go.brin.neutronct"
+        applicationId = if (deepctStaging) "id.go.brin.neutronct.staging" else "id.go.brin.neutronct"
+        manifestPlaceholders["deepctAppLabel"] = if (deepctStaging) "deepCT-AI Staging" else "deepCT-AI"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
