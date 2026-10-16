@@ -20,14 +20,16 @@ async function worker(options = {}) {
   const listeners = {};
   const clients = new Map([['window', { type: 'window', url: 'https://app.test/dashboard' }], ['foreign', { type: 'window', url: 'https://evil.test/' }]]);
   const requests = [];
-  const context = vm.createContext({ URL, Headers, Request, Response, crypto: globalThis.crypto, Date: options.Date ?? Date, Map, Set,
+  const context = vm.createContext({ URL, Headers, Request, Response, ReadableStream, AbortController, crypto: globalThis.crypto, Date: options.Date ?? Date, Map, Set,
     self: { location: { origin: 'https://app.test' }, clients: { get: async id => clients.get(id), claim: async () => {} }, skipWaiting: async () => {}, addEventListener: (type, fn) => { listeners[type] = fn; } },
-    fetch: async (url, init) => { requests.push({url, init}); return options.response?.() ?? new Response(new Uint8Array([80,75,3,4]), { headers: { 'content-type': 'application/zip', 'content-length': '4', 'content-range': 'bytes 0-3/4', 'accept-ranges': 'bytes', 'x-checksum-md5': 'digest' }, status: 206 }); }
+    fetch: async (url, init) => { requests.push({url, init}); return options.response?.(url, init) ?? new Response(new Uint8Array([80,75,3,4]), { headers: { 'content-type': 'application/zip', 'content-length': '4', 'content-range': 'bytes 0-3/4', 'accept-ranges': 'bytes', 'x-checksum-md5': 'digest' }, status: 206 }); }
   });
   vm.runInContext(await fs.readFile(new URL('../public/prediction-download-sw.js', import.meta.url), 'utf8'), context);
   async function register(data = {}, source = 'window') {
     let promise; const messages = [];
-    listeners.message({ data: { type: 'REGISTER_PREDICTION_DOWNLOAD', url: 'https://api.test/prefix' + signed(), filename: 'results_42.zip', ...data }, source: { id: source }, ports: [{ postMessage: x => messages.push(x) }], waitUntil: p => { promise = p; } });
+    const port = {postMessage:x=>messages.push(x)};
+    messages.cancel=()=>port.onmessage({data:{type:"cancel"}});
+    listeners.message({ data: { type: 'REGISTER_PREDICTION_DOWNLOAD', url: 'https://api.test/prefix' + signed(), filename: 'results_42.zip', ...data }, source: { id: source }, ports: [port], waitUntil: p => { promise = p; } });
     await promise;
     return messages;
   }
@@ -78,23 +80,40 @@ test('worker expires records, bounds map, and never buffers archive body', async
 });
 
 test('client shares worker startup across concurrent downloads and handles channel/backend errors', async () => {
-  const saved = Object.fromEntries(['navigator','fetch','document'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  let registrations = 0; let clicks = 0; const ports = [];
-  const active = { state: 'activated', postMessage(data, transfer) { const port = transfer[0]; ports.push(port); port.postMessage(data.url === 'bad' ? {type:'error',message:'Rejected target'} : {type:'registered',path:'/__prediction-download/' + 'a'.repeat(64)}); } };
+  const saved = Object.fromEntries(['navigator','fetch','document','setTimeout'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  let registrations = 0; let clicks = 0; const ports = [];let autoStart=true;let cancellations=0;
+  const active = { state: 'activated', postMessage(data, transfer) { const port = transfer[0]; ports.push(port);port.onmessage=({data})=>{if(data?.type==='cancel'){cancellations++;port.postMessage({type:'error',message:'cancelled'});}}; port.postMessage(data.url === 'bad' ? {type:'error',message:'Rejected target'} : {type:'registered',path:'/__prediction-download/' + ports.length.toString(16).padStart(64,'0')}); } };
   const changes = new Set();
   const serviceWorker = {controller:null,register:async () => {registrations++;setTimeout(()=>{assert.equal(clicks,0,'must await page control before anchor click');serviceWorker.controller=active;for(const changed of changes)changed();},10);return {active};},ready:Promise.resolve(),addEventListener:(_,listener)=>changes.add(listener),removeEventListener:(_,listener)=>changes.delete(listener)};
   Object.defineProperty(globalThis, 'navigator', {configurable:true,value:{serviceWorker}});
-  globalThis.document = {body:{append(){}},createElement:()=>({click(){ clicks++; setTimeout(()=>ports.forEach(port=>port.postMessage({type:'started'})),0); },remove(){}})};
+  const frames=[];const targets=[];
+  globalThis.document = {body:{append(){}},createElement:tag=>{const element={removed:false,click(){clicks++;targets.push(this.target);if(autoStart)setTimeout(()=>ports.forEach(port=>port.postMessage({type:'started'})),0);},remove(){this.removed=true;}};if(tag==='iframe')frames.push(element);return element;}};
   globalThis.fetch = async () => Response.json({success:true,data:{url:'https://api.test'+signed(),filename:'results_42.zip'}});
   try {
     await Promise.all([startPredictionDownload('/api/backend/predictions/42/download/results'),startPredictionDownload('/api/backend/predictions/42/download/results')]);
     assert.equal(registrations,1); assert.equal(clicks,2);
+    assert.equal(new Set(targets).size,2,'each concurrent navigation has its own target');
+    assert.equal(frames.filter(frame=>!frame.removed).length,2,'started streams keep both targets');
+    ports.forEach(port=>port.postMessage({type:'complete'}));await new Promise(resolve=>setTimeout(resolve,10));
+    assert.equal(frames.filter(frame=>!frame.removed).length,0,'source completion removes targets');
+    await Promise.all(Array.from({length:32},()=>startPredictionDownload('/api/backend/predictions/42/download/results')));
+    await assert.rejects(startPredictionDownload('/api/backend/predictions/42/download/results'),/Too many active downloads/);
+    ports.forEach(port=>port.postMessage({type:'complete'}));await new Promise(resolve=>setTimeout(resolve,10));
+    assert.equal(frames.filter(frame=>!frame.removed).length,0);
     globalThis.fetch = async () => Response.json({success:true,data:{url:'bad',filename:'results_42.zip'}});
     await assert.rejects(startPredictionDownload('/api/backend/predictions/42/download/results'), /Rejected target/);
     globalThis.fetch = async () => Response.json({success:false,message:'Not owned'}, {status:403});
     await assert.rejects(startPredictionDownload('/api/backend/predictions/42/download/results'), /Not owned/);
     globalThis.fetch = async () => Response.json({success:true,data:{url:'https://api.test',filename:'../evil.zip'}});
     await assert.rejects(startPredictionDownload('/api/backend/predictions/42/download/results'), /Invalid download response/);
+    autoStart=false;
+    globalThis.fetch=async()=>Response.json({success:true,data:{url:'https://api.test'+signed(),filename:'results_42.zip'}});
+    const realSetTimeout=globalThis.setTimeout;let headerDeadlines=0;
+    globalThis.setTimeout=(callback,delay,...args)=>{if(delay===5*60_000){headerDeadlines++;return realSetTimeout(callback,20,...args);}return realSetTimeout(callback,delay,...args);};
+    await assert.rejects(startPredictionDownload('/api/backend/predictions/42/download/results'),/took too long/);
+    await new Promise(resolve=>realSetTimeout(resolve,10));
+    assert.equal(headerDeadlines,1,'archive-header wait has a separate five-minute deadline');assert.equal(cancellations,1);
+    assert.equal(frames.filter(frame=>!frame.removed).length,0,'cancel acknowledgment cleans timed-out preparation');
   } finally { for(const [key, descriptor] of Object.entries(saved)) { if(descriptor) Object.defineProperty(globalThis,key,descriptor); else delete globalThis[key]; } for(const port of ports) port.close(); }
 });
 
@@ -122,5 +141,27 @@ test('worker returns the upstream stream before archive completion', async () =>
   const w = await worker({response:()=>new Response(stream,{headers:{'content-type':'application/zip'}})});
   const messages = await w.register();
   const response = await Promise.race([w.download(messages[0].path),new Promise((_,reject)=>setTimeout(()=>reject(Error('buffered entire stream')),1000))]);
-  const reader=response.body.getReader();assert.deepEqual([...((await reader.read()).value)],[80,75,3,4]);complete();assert.equal((await reader.read()).done,true);
+  const reader=response.body.getReader();assert.deepEqual([...((await reader.read()).value)],[80,75,3,4]);assert.equal(messages.some(message=>message.type==='complete'),false);complete();assert.equal((await reader.read()).done,true);assert.equal(messages.at(-1).type,'complete');
+});
+
+test('worker propagates explicit preparation cancellation to the upstream fetch', async () => {
+  let initiated;
+  const pending=new Promise(resolve=>{initiated=resolve;});
+  const w=await worker({response:(_url,init)=>new Promise((_,reject)=>{initiated(init.signal);init.signal.addEventListener('abort',()=>reject(Error('cancelled')));})});
+  const messages=await w.register();const response=w.download(messages[0].path);const signal=await pending;
+  assert.equal(signal.aborted,false);messages.cancel();
+  assert.equal((await response).status,0);assert.equal(signal.aborted,true);assert.equal(messages.at(-1).type,'error');
+});
+
+test('worker closes target lifecycle on stream errors/cancellation, and waits for simultaneous range streams', async () => {
+  let source;
+  const w=await worker({response:()=>new Response(new ReadableStream({start(controller){source=controller;}}),{headers:{'content-type':'application/zip'}})});
+  const messages=await w.register();const response=await w.download(messages[0].path);const reader=response.body.getReader();
+  source.error(Error('connection lost'));await assert.rejects(reader.read(),/connection lost/);assert.equal(messages.at(-1).type,'error');
+  const cancellation=await w.register();const cancelled=await w.download(cancellation[0].path);await cancelled.body.cancel();
+  assert.equal(w.requests.at(-1).init.signal.aborted,true);assert.equal(cancellation.at(-1).type,'complete');
+  const retry=await w.download(cancellation[0].path);assert.equal(retry.status,200);assert.equal(w.requests.at(-1).init.signal.aborted,false,'cancelling one stream does not poison range retries');await retry.body.cancel();
+  const concurrent=await w.register();const first=await w.download(concurrent[0].path);const firstSource=source;const second=await w.download(concurrent[0].path);const secondSource=source;
+  firstSource.close();assert.equal((await first.body.getReader().read()).done,true);assert.equal(concurrent.some(message=>message.type==='complete'),false);
+  secondSource.close();assert.equal((await second.body.getReader().read()).done,true);assert.equal(concurrent.at(-1).type,'complete');
 });

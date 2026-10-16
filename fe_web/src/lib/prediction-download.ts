@@ -1,5 +1,6 @@
 const DOWNLOAD_PATH = /^\/api\/backend\/predictions\/(\d+)\/download\/(results|complete)$/;
 const START_TIMEOUT = 30_000;
+const ARCHIVE_START_TIMEOUT = 5 * 60_000;
 
 /** Accept only the relative, owner-scoped capability returned by Laravel. */
 export function buildPredictionDownload(base: string, path: unknown, id: string, kind: string) {
@@ -24,7 +25,9 @@ function bounded<T>(promise: Promise<T>, message: string): Promise<T> {
 }
 
 let workerReady: Promise<ServiceWorker> | undefined;
-let downloadFrame: HTMLIFrameElement | undefined;
+// Never evict a target that may still own an active browser transfer.
+const activeDownloads = new Set<MessagePort>();
+const MAX_ACTIVE_DOWNLOADS = 32;
 function downloadWorker(): Promise<ServiceWorker> {
   if (!workerReady) {
     workerReady = bounded((async () => {
@@ -77,24 +80,41 @@ export async function startPredictionDownload(path: string): Promise<void> {
   const { url, filename } = payload?.data ?? {};
   if (typeof url !== "string" || filename !== `${match[2]}_${match[1]}.zip`) throw new Error("Invalid download response.");
   const worker = await downloadWorker();
+  if (activeDownloads.size >= MAX_ACTIVE_DOWNLOADS) throw new Error("Too many active downloads. Please wait for one to finish.");
   const channel = new MessageChannel();
+  activeDownloads.add(channel.port1);
+  let downloadFrame: HTMLIFrameElement | undefined;
+  const cleanup = () => {
+    downloadFrame?.remove();
+    activeDownloads.delete(channel.port1);
+    channel.port1.close();
+  };
   try {
-    await bounded(new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       let registered = false;
+      const timedOut = (message: string) => {
+        if (downloadFrame) channel.port1.postMessage({ type: "cancel" });
+        else cleanup();
+        reject(new Error(message));
+      };
+      let waitTimer = setTimeout(() => timedOut("Download worker registration timed out."), START_TIMEOUT);
       channel.port1.onmessage = ({ data }) => {
-        if (data?.type === "error") { reject(new Error(data.message || "Unable to start download.")); return; }
-        if (data?.type === "started" && registered) { resolve(); return; }
+        if (data?.type === "error") { clearTimeout(waitTimer); cleanup(); reject(new Error(data.message || "Unable to start download.")); return; }
+        if (data?.type === "complete" && registered) { clearTimeout(waitTimer); cleanup(); return; }
+        if (data?.type === "started" && registered) { clearTimeout(waitTimer); resolve(); return; }
         if (data?.type !== "registered" || registered || typeof data.path !== "string" || !/^\/__prediction-download\/[a-f0-9]{64}$/.test(data.path)) return;
         registered = true;
-        // A failed navigation must not replace the application page. Reuse one
-        // hidden browsing context; attachment responses stream to the browser.
-        if (!downloadFrame?.isConnected) {
-          downloadFrame = document.createElement("iframe");
-          downloadFrame.name = "prediction-download-target";
-          downloadFrame.hidden = true;
-          downloadFrame.title = "Prediction archive download";
-          document.body.append(downloadFrame);
-        }
+        clearTimeout(waitTimer);
+        // Laravel builds the archive before sending headers. This preparation
+        // has its own deadline; started streams have no duration limit.
+        waitTimer = setTimeout(() => timedOut("The archive server took too long to start. Please try again."), ARCHIVE_START_TIMEOUT);
+        // Each navigation owns its browsing context until the worker observes
+        // EOF, failure or cancellation. A later download cannot replace it.
+        downloadFrame = document.createElement("iframe");
+        downloadFrame.name = `prediction-download-${data.path.slice(data.path.lastIndexOf("/") + 1)}`;
+        downloadFrame.hidden = true;
+        downloadFrame.title = "Prediction archive download";
+        document.body.append(downloadFrame);
         const anchor = document.createElement("a");
         // Let the worker's attachment header trigger the browser download.
         // Chromium can bypass fetch interception for anchors with download=.
@@ -102,6 +122,11 @@ export async function startPredictionDownload(path: string): Promise<void> {
         document.body.append(anchor); anchor.click(); anchor.remove();
       };
       worker.postMessage({ type: "REGISTER_PREDICTION_DOWNLOAD", url, filename }, [channel.port2]);
-    }), "Download did not start. Please try again.");
-  } finally { channel.port1.close(); }
+    });
+  } catch (error) {
+    // A timeout after navigation does not prove that the transfer has stopped.
+    // Keep its bounded slot/target until the worker sends a terminal signal.
+    if (!downloadFrame) cleanup();
+    throw error;
+  }
 }

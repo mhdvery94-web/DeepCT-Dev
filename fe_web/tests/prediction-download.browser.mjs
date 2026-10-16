@@ -27,7 +27,10 @@ const backend = createServer((req,res) => {
   const body = range ? archive.subarray(Number(range[1]),Number(range[2])+1) : archive;
   res.setHeader('Content-Length',body.length);
   if(range) {res.statusCode=206;res.setHeader('Content-Range',`bytes ${range[1]}-${range[2]}/${archive.length}`);}
-  res.end(body);
+  if(req.url.includes('/43/')) {
+    // Delay headers so both navigations overlap, then keep both bodies active.
+    setTimeout(()=>{res.flushHeaders();let offset=0;const timer=setInterval(()=>{const end=Math.min(offset+512*1024,body.length);res.write(body.subarray(offset,end));offset=end;if(offset===body.length){clearInterval(timer);res.end();}},100);res.on('close',()=>clearInterval(timer));},1000);
+  } else res.end(body);
 });
 await new Promise(resolve=>backend.listen(0,'127.0.0.1',resolve));
 const backendOrigin = `http://127.0.0.1:${backend.address().port}`;
@@ -61,6 +64,20 @@ try {
     files.push({kind,bytes:archive.length,sha256:digest});
     await page.waitForFunction(id=>!document.getElementById(id).disabled,kind);
   }
+  const overlapping=[];
+  let timeout;
+  const bothDownloads=new Promise((resolve,reject)=>{
+    timeout=setTimeout(()=>reject(Error('Expected two overlapping browser downloads; observed '+overlapping.map(file=>file.suggestedFilename()).join(','))),7000);
+    page.on('download',download=>{overlapping.push(download);if(overlapping.length===2){clearTimeout(timeout);resolve();}});
+  });
+  await page.evaluate(async()=>Promise.all(['results','complete'].map(kind=>window.startPredictionDownload('/api/backend/predictions/43/download/'+kind))));
+  await bothDownloads;
+  const activeTargets=await page.locator('iframe[title="Prediction archive download"]').count();
+  assert.equal(activeTargets,2,'independent targets stay alive while both delayed streams are active');
+  for(const download of overlapping){assert.ok(['results_43.zip','complete_43.zip'].includes(download.suggestedFilename()));const file=await download.path();assert.equal(createHash('sha256').update(await fs.readFile(file)).digest('hex'),digest);}
+  assert.deepEqual(overlapping.map(file=>file.suggestedFilename()).sort(),['complete_43.zip','results_43.zip']);
+  assert.equal(page.url(),appOrigin+'/dashboard');
+  await page.waitForFunction(()=>document.querySelectorAll('iframe[title="Prediction archive download"]').length===0);
   assert.equal(await page.evaluate(async()=>await(await fetch('/ordinary')).text()),'ordinary network response');
   const range = await page.evaluate(async ({backendOrigin})=>{
     const registration=await navigator.serviceWorker.ready;const channel=new MessageChannel();
@@ -69,5 +86,5 @@ try {
   assert.deepEqual(range,{status:206,range:`bytes 0-127/${archive.length}`,bytes:128,digest:'fixture-digest'});
   for(const id of ['html','denied']) {await page.locator('#'+id).click();await page.waitForFunction(()=>document.querySelector('[role=status]').textContent.includes('Unable to download'));assert.equal(page.url(),appOrigin+'/dashboard');}
   assert.ok(requests.length>=5);for(const request of requests){assert.equal(request.headers['ngrok-skip-browser-warning'],'true');assert.equal(request.headers.authorization,undefined);assert.equal(request.headers.cookie,undefined);}
-  console.log(JSON.stringify({passed:true,freshProfile:true,pageUnchanged:true,noBlobBuffering:true,files,range,backendRequests:requests.length},null,2));
+  console.log(JSON.stringify({passed:true,freshProfile:true,pageUnchanged:true,noBlobBuffering:true,files,overlapping:overlapping.map(file=>({filename:file.suggestedFilename(),bytes:archive.length,sha256:digest})),activeTargetsDuringStreams:activeTargets,targetsAfterStreams:0,range,backendRequests:requests.length},null,2));
 } finally {await context?.close();await fs.rm(profile,{recursive:true,force:true});await new Promise(resolve=>app.close(resolve));await new Promise(resolve=>backend.close(resolve));}
