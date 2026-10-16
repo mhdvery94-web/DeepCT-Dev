@@ -88,3 +88,14 @@
 - [ ] Push authorized develop/staging fast forwards, inspect CI/Vercel outcomes, build/download isolated staging APK. Check for an available authorized Android device; if absent record physical QA unverified.
 - [ ] Synchronize Windows repository preserving current changes/stash. Archive report, source bundle, final answers/gates, reviews and helper instructions with checksums; verified laptop copy. Do not retry known stale cloud draft.
 - [ ] State readiness separately: evidence assistant, freeform, CT scientific approval, APK build, real-device QA, production. Complete seven-point closure even when conditional gates correctly remain closed.
+
+### Task 6: Combined completed-prediction preview with AI labels (user addendum)
+
+Execute after Task4 review and before final Task5 acceptance; keep one implementer at a time. User explicitly requested combined input+output previews like the existing Flutter gallery. Read the design addendum; root's builder choices are recorded there.
+
+**Files:** `fe_web/src/components/prediction-frame-viewer.tsx`, focused frame-selection/sorting helper under `fe_web/src/lib/` if useful, `fe_web/src/app/globals.css`, focused Node tests and a real Chromium acceptance helper as needed. Existing Flutter combined gallery is the behavioral reference and does not need a rewrite. No backend/schema/model changes.
+
+- [ ] Meaningful RED tests: completed default combines both kinds; numeric frame2 precedes10; Input versus AI labels derive only from known kind; same-number names from distinct kinds both survive with correct kind-specific image URL; filters/select/play and bounded thumbnail page maintain correct frame; uploaded defaults input; unknown/malformed data rejected safely.
+- [ ] Implement combined/Input/AI filters and per-frame visible text badges in selected preview and thumbnails, counts and accessible controls, BRIN styling. Use existing PNG preview endpoints and original TIFF downloads unchanged. Keep at most12 thumbnail requests per currentpage, no loading full stacks/ZIPs to show preview. Reset errors/loading/index safely when prediction/filter changes, and abort stale requests.
+- [ ] Real Chromium functional acceptance (existing mock backend with valid PNGs permitted) must exercise mixed sequence, filter changes, next/slider/play, AI/Input badges, actual image requests including kind, unchanged page and no horizontal overflow at1366/768/390. Record source SHA/contract/limits; root later verifies live staging owned fixture.
+- [ ] Focused Next tests/lint/typecheck, self-review report in this planworkspace/task-6-report.md. Root commits, independent task review handles findings before final integration.
