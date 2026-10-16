@@ -6,7 +6,7 @@
 
 **Architecture:** Laravel owns a backward-compatible evaluation report and owner-scoped context. Curated, versioned SOP retrieval augments exact server-rendered answers. Next.js and Flutter expose the same evidence; a separate GPU benchmark assesses freeform without enabling it.
 
-**Tech Stack:** Laravel/PHP, SQLite tests, Python/FastAPI/Ollama on TUF, Next.js/TypeScript, Flutter/Dart, GitHub Actions.
+**Tech Stack:** Laravel/PHP, MySQL tests, Python/FastAPI/Ollama on TUF, Next.js/TypeScript, Flutter/Dart, GitHub Actions.
 
 **Spec:** `docs/superpowers/specs/2026-10-16-prediction-evidence-design.md`
 
@@ -71,12 +71,12 @@
 
 **Files:** Create `scripts/evaluate-assistant.py`, `scripts/assistant-quality-cases.json`, focused Python tests following existing CPU test conventions; create `.github/workflows/staging-android.yml`; modify `docs/AI_ASSISTANT.md` or existing equivalent readiness documentation.
 
-**Interfaces:** Benchmark consumes 40 synthetic cases with stable ID/question/sources/history/expected facts, local Ollama URL fixed to loopback 11435, explicit allowed model selection `deepseek-r1:7b` or `qwen2.5:7b-instruct-q4_K_M`. Runs on TUF with existing gateway app import and `GPULease` path given operator-side, no token/URL from frontend. Reports retain final content, timings, rule-check results, model/runtime identity, and explicit `manual_review_required=true`, `activation=false`. No reasoning logs. Artifact download/verification and remote installation handled by root.
+**Interfaces:** Benchmark consumes 40 synthetic cases with stable ID/question/sources/history/expected facts, local Ollama URL fixed to loopback 11435, explicit allowed model selection `deepseek-r1:7b` or `qwen2.5:7b-instruct-q4_K_M`. Use the same non-thinking generation profile for both models: `think=false`, context16384, output1024, temperature0.2, seed17, threads4, keep_alive0; report that R1 is evaluated in this constrained deployment profile, not its full reasoning capability. Runs on TUF with existing gateway app import and `GPULease` path given operator-side, no token/URL from frontend. Reports retain final content, timings, rule-check results, model/runtime identity, and explicit `manual_review_required=true`, `activation=false`. No reasoning logs. Artifact download/verification and remote installation handled by root.
 
 - [ ] Write failing harness tests for bad/incomplete answers, finite/infinite/missing metric checks, prompt byte budget, no reasoning export, timeout uncertainty, unload/verified idle, malformed corpus, and report recovery without automatic activation.
 - [ ] Implement sequential benchmark respecting shared GPU lock, free-VRAM admission, poison-before-dispatch and successful verified-unload-only clear; on ambiguity fail closed. Rule checks must report scope and limitations, not pretend semantic approval. Checkpoint after every case.
 - [ ] Supply 40 distinct, representative cases covering spec section 5 including follow-ups, owner-bound data, curated references and baseline regressions; synthetic data only. Do not copy all provider output to logs.
-- [ ] Add `workflow_dispatch` staging APK build workflow restricted to develop/staging, read-only permissions, frozen Flutter 3.44.9, staging/develop URL variable as appropriate, dependent tests/preflight, distinct Android application ID and visible staging name, no release publish/production backend/Drive. Use supported Gradle property or minimal Android flavor changes if needed; document signing/test limitations, source SHA/API in artifact metadata.
+- [ ] Add a staging APK build workflow with `workflow_dispatch` restricted to develop/staging plus `push` on branch staging limited to this workflow file path (initial build works before the new workflow exists on main), read-only permissions, frozen Flutter 3.44.9, staging/develop URL variable as appropriate, dependent tests/preflight, distinct Android application ID and visible staging name, no release publish/production backend/Drive. Use supported Gradle property or minimal Android flavor changes if needed; document signing/test limitations, source SHA/API in artifact metadata.
 - [ ] Run harness unit tests and workflow static/actual dry checks where possible; root later triggers workflow, downloads and checks APK, runs actual model comparison and reviews all answers.
 - [ ] Report evidence/self-review; root commits.
 

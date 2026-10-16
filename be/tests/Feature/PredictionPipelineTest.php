@@ -7,6 +7,7 @@ use App\Jobs\ProcessDeepLearningImage;
 use App\Models\AnalysisRecord;
 use App\Models\Model;
 use App\Models\User;
+use App\Services\FrameMetrics;
 use App\Services\ResultEvidence;
 use App\Services\ResultManifest;
 use App\Services\StorageGuard;
@@ -33,7 +34,9 @@ class PredictionPipelineTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+
     private Model $model;
+
     private string $token;
 
     protected function setUp(): void
@@ -79,7 +82,7 @@ class PredictionPipelineTest extends TestCase
         $pixelOffset = 8;
         $ifdOffset = $pixelOffset + strlen($pixels);
 
-        $tif = 'II' . pack('v', 42) . pack('V', $ifdOffset) . $pixels;
+        $tif = 'II'.pack('v', 42).pack('V', $ifdOffset).$pixels;
 
         $ifd = pack('v', 8);
         $ifd .= pack('vvVV', 256, 3, 1, $size);
@@ -92,7 +95,7 @@ class PredictionPipelineTest extends TestCase
         $ifd .= pack('vvVV', 279, 4, 1, strlen($pixels));
         $ifd .= pack('V', 0);
 
-        return $tif . $ifd;
+        return $tif.$ifd;
     }
 
     /**
@@ -100,9 +103,9 @@ class PredictionPipelineTest extends TestCase
      */
     private function zipFile(array $names): UploadedFile
     {
-        $path = tempnam(sys_get_temp_dir(), 'frames') . '.zip';
+        $path = tempnam(sys_get_temp_dir(), 'frames').'.zip';
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
         foreach (array_values($names) as $i => $name) {
             $zip->addFromString($name, $this->tifBytes(4, $i));
@@ -211,7 +214,8 @@ class PredictionPipelineTest extends TestCase
 
     public function test_expanded_zip_size_is_checked_before_extraction(): void
     {
-        $guard = new class extends StorageGuard {
+        $guard = new class extends StorageGuard
+        {
             public array $checked = [];
 
             public function refusalFor(int $uploadBytes): ?string
@@ -223,8 +227,8 @@ class PredictionPipelineTest extends TestCase
         };
         $this->app->instance(StorageGuard::class, $guard);
 
-        $path = tempnam(sys_get_temp_dir(), 'expanded') . '.zip';
-        $zip = new ZipArchive();
+        $path = tempnam(sys_get_temp_dir(), 'expanded').'.zip';
+        $zip = new ZipArchive;
         $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
         $zip->addFromString('frame_001.tif', str_repeat('a', 20000));
         $zip->addFromString('frame_005.tif', str_repeat('b', 20000));
@@ -351,6 +355,14 @@ class PredictionPipelineTest extends TestCase
         $this->assertArrayHasKey('psnr', $record->validation);
         $this->assertArrayHasKey('reference_max', $record->validation);
         $this->assertSame(16, $record->validation['pixels']);
+        $this->assertSame(1, $record->validation['schema_version']);
+        $this->assertSame('completed', $record->validation['evaluation_status']);
+        $this->assertSame('uploaded_midpoint', $record->validation['reference']['source']);
+        $this->assertSame('Test Model', $record->validation['model']['name']);
+        $this->assertSame('completed', $record->validation['baseline']['status']);
+        $this->assertEquals(0, $record->validation['baseline']['mae']);
+        $this->assertSame('recorded_precision', $record->validation['comparison']['precision']);
+        $this->assertLessThan(0, $record->validation['comparison']['mae_reduction']);
     }
 
     /**
@@ -398,10 +410,8 @@ class PredictionPipelineTest extends TestCase
         $record = AnalysisRecord::first()->fresh();
 
         $this->assertSame('completed', $record->status, $record->error_message ?? '');
-        $this->assertNull(
-            $record->validation,
-            'nothing to hold out is an ordinary case, not a failure'
-        );
+        $this->assertSame('no_reference', $record->validation['evaluation_status']);
+        $this->assertSame('no_uploaded_midpoint', $record->validation['reason_code']);
     }
 
     public function test_an_odd_span_is_never_chosen(): void
@@ -416,7 +426,7 @@ class PredictionPipelineTest extends TestCase
         $record = AnalysisRecord::first()->fresh();
 
         $this->assertSame('completed', $record->status, $record->error_message ?? '');
-        $this->assertNull($record->validation);
+        $this->assertSame('no_reference', $record->validation['evaluation_status']);
     }
 
     /**
@@ -438,7 +448,45 @@ class PredictionPipelineTest extends TestCase
         $record = AnalysisRecord::first()->fresh();
 
         $this->assertSame('completed', $record->status, $record->error_message ?? '');
-        $this->assertArrayHasKey('error', $record->validation);
+        $this->assertSame('evaluation_failed', $record->validation['evaluation_status']);
+        $this->assertSame('measurement_failed', $record->validation['reason_code']);
+        $this->assertArrayNotHasKey('error', $record->validation);
+        $this->assertSame(3, $record->output_files_count);
+    }
+
+    public function test_baseline_failure_keeps_model_metrics_and_completed_output(): void
+    {
+        $this->fakeWorkerReturnsFrames();
+        $this->mock(FrameMetrics::class, function ($mock) {
+            $mock->shouldReceive('compare')->once()->andReturn([
+                'mae' => 4.0, 'rmse' => 5.0, 'psnr' => 82.35, 'ssim' => null,
+                'psnr_status' => 'available', 'ssim_status' => 'image_too_small',
+                'method' => [], 'pixels' => 16, 'reference_min' => 0, 'reference_max' => 60,
+            ]);
+            $mock->shouldReceive('compareMidpoint')->once()->andThrow(new \RuntimeException('/private/secret?token=hidden'));
+        });
+        $this->upload(['frame_001.tif', 'frame_003.tif', 'frame_005.tif']);
+        $record = AnalysisRecord::first()->fresh();
+        $this->assertSame('completed', $record->status);
+        $this->assertSame('completed', $record->validation['evaluation_status']);
+        $this->assertEquals(4, $record->validation['mae']);
+        $this->assertSame('baseline_failed', $record->validation['baseline']['reason_code']);
+        $this->assertSame('unavailable', $record->validation['comparison']['status']);
+        $this->assertStringNotContainsString('hidden', json_encode($record->validation));
+    }
+
+    public function test_metric_decoder_failure_keeps_completed_output(): void
+    {
+        $this->fakeWorkerReturnsFrames();
+        $this->mock(FrameMetrics::class, function ($mock) {
+            $mock->shouldReceive('compare')->once()->andThrow(new \RuntimeException('/private/secret?token=hidden'));
+        });
+        $this->upload(['frame_001.tif', 'frame_003.tif', 'frame_005.tif']);
+        $record = AnalysisRecord::first()->fresh();
+        $this->assertSame('completed', $record->status);
+        $this->assertSame(2, $record->output_files_count);
+        $this->assertSame('measurement_failed', $record->validation['reason_code']);
+        $this->assertStringNotContainsString('hidden', json_encode($record->validation));
     }
 
     /**
@@ -659,7 +707,7 @@ class PredictionPipelineTest extends TestCase
         // controller sees it. Asserting "not 200" rather than a specific code
         // keeps this a test of the outcome rather than of which layer said no.
         $traversal = $this->apiAs($this->token)
-            ->get("/api/predictions/{$id}/evidence/" . urlencode('../../.env'));
+            ->get("/api/predictions/{$id}/evidence/".urlencode('../../.env'));
 
         $this->assertNotSame(200, $traversal->status());
     }
@@ -849,7 +897,7 @@ class PredictionPipelineTest extends TestCase
         $this->assertNotNull($notification, 'a completed job must notify its owner');
         $this->assertSame('prediction.completed', $notification->data['type']);
         $this->assertSame(
-            'predictions/' . AnalysisRecord::first()->id,
+            'predictions/'.AnalysisRecord::first()->id,
             $notification->data['link'],
         );
     }
@@ -1023,7 +1071,7 @@ class PredictionPipelineTest extends TestCase
         $this->assertSame('image/png', $response->headers->get('Content-Type'));
         // Built from character codes: embedding the raw signature in source
         // is a good way to have an editor or tool quietly rewrite it.
-        $signature = chr(0x89) . 'PNG' . chr(0x0D) . chr(0x0A) . chr(0x1A) . chr(0x0A);
+        $signature = chr(0x89).'PNG'.chr(0x0D).chr(0x0A).chr(0x1A).chr(0x0A);
         $this->assertSame($signature, substr($response->getContent(), 0, 8));
     }
 
@@ -1066,7 +1114,7 @@ class PredictionPipelineTest extends TestCase
         $record = AnalysisRecord::first();
 
         $this->apiAs($this->token)
-            ->getJson("/api/predictions/{$record->id}/frames/" . urlencode('../../../.env') . '/preview')
+            ->getJson("/api/predictions/{$record->id}/frames/".urlencode('../../../.env').'/preview')
             ->assertNotFound();
     }
 

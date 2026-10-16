@@ -560,49 +560,63 @@ class ProcessDeepLearningImage implements ShouldQueue
      * drawn across nine frames of movement measures the model on a problem
      * harder than the one it was asked to solve.
      *
-     * Costs one extra round-trip, and returns null when the archive offers no
+     * Costs one extra round-trip, and records no_reference when there is no
      * such triple at all — which is still an ordinary case rather than a
      * failure. Frames 1, 3 and 7 have no midpoint among them. Every failure
-     * here is swallowed into a note rather than thrown: a measurement that
+     * here is recorded as a safe code rather than thrown: a measurement that
      * could not be taken must never cost a researcher the interpolation they
      * waited for.
      *
      * @param array<int, string> $frames uploaded frames, keyed by index
-     * @return array<string, mixed>|null
+     * @return array<string, mixed>
      */
-    private function validateOnHeldOutFrame(Model $model, array $frames): ?array
+    private function validateOnHeldOutFrame(Model $model, array $frames): array
     {
+        $base = [
+            'schema_version' => 1,
+            'model' => $this->record->model_snapshot,
+            'method' => FrameMetrics::method(),
+            'psnr_status' => 'unavailable', 'ssim_status' => 'unavailable',
+            'baseline' => ['status' => 'unavailable', 'reason_code' => null],
+            'comparison' => ['status' => 'unavailable', 'precision' => null],
+        ];
         $triple = $this->tightestHoldOut(array_keys($frames));
-
-        if ($triple !== null) {
-            [$left, $middle, $right] = $triple;
-
-            try {
-                $bytes = $this->requestFrame(
-                    $model,
-                    $frames[$left],
-                    $frames[$right],
-                    "hold-out frame {$middle}"
-                );
-
-                $metrics = app(FrameMetrics::class)->compare(
-                    Storage::get($frames[$middle]),
-                    $bytes
-                );
-
-                return $metrics + [
-                    'held_out_frame' => basename($frames[$middle]),
-                    'index' => $middle,
-                    'from' => [$left, $right],
-                ];
-            } catch (Throwable $e) {
-                // A measurement that could not be taken is worth saying so
-                // about. Losing a completed interpolation over it is not.
-                return ['error' => $this->summarise($e->getMessage())];
+        if ($triple === null) {
+            return $base + ['evaluation_status' => 'no_reference', 'reason_code' => 'no_uploaded_midpoint'];
+        }
+        [$left, $middle, $right] = $triple;
+        $base += [
+            'held_out_frame' => basename($frames[$middle]),
+            'index' => $middle, 'from' => [$left, $right],
+            'reference' => ['source' => 'uploaded_midpoint', 'index' => $middle, 'from' => [$left, $right]],
+        ];
+        try {
+            $bytes = $this->requestFrame($model, $frames[$left], $frames[$right], "hold-out frame {$middle}");
+            $reference = Storage::get($frames[$middle]);
+            $metrics = app(FrameMetrics::class)->compare($reference, $bytes);
+        } catch (Throwable $e) {
+            // Persist a safe code, never exception text, request details or paths.
+            return $base + ['evaluation_status' => 'evaluation_failed', 'reason_code' => 'measurement_failed'];
+        }
+        $result = $metrics + ['evaluation_status' => 'completed', 'reason_code' => null] + $base;
+        try {
+            $baseline = app(FrameMetrics::class)->compareMidpoint($reference, Storage::get($frames[$left]), Storage::get($frames[$right]));
+            $result['baseline'] = $baseline + ['status' => 'completed', 'reason_code' => null];
+            // Flat compatibility retains recorded MAE/RMSE (3 dp), PSNR (2 dp).
+            // Deltas explicitly describe that precision; SSIM is unrounded.
+            $comparison = ['status' => 'completed', 'precision' => 'recorded_precision'];
+            foreach (['mae_reduction' => 'mae', 'rmse_reduction' => 'rmse', 'psnr_gain_db' => 'psnr', 'ssim_gain' => 'ssim'] as $key => $metric) {
+                $a = $metrics[$metric] ?? null;
+                $b = $baseline[$metric] ?? null;
+                $comparison[$key] = is_numeric($a) && is_numeric($b)
+                    ? round(in_array($metric, ['mae', 'rmse'], true) ? $b - $a : $a - $b, 12) : null;
             }
+            $result['comparison'] = $comparison;
+        } catch (Throwable $e) {
+            $result['baseline'] = ['status' => 'baseline_failed', 'reason_code' => 'baseline_failed'];
         }
 
-        return null;
+        return $result;
     }
 
     /**

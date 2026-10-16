@@ -22,14 +22,14 @@ class FrameMetricsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->metrics = new FrameMetrics(new TiffPreview());
+        $this->metrics = new FrameMetrics(new TiffPreview);
     }
 
     /**
      * A minimal but structurally valid 16-bit grayscale TIFF holding exactly
      * the pixels given, row-major.
      *
-     * @param array<int> $pixels
+     * @param  array<int>  $pixels
      */
     private function tif(array $pixels, int $width, int $height): string
     {
@@ -41,7 +41,7 @@ class FrameMetricsTest extends TestCase
         $pixelOffset = 8;
         $ifdOffset = $pixelOffset + strlen($data);
 
-        $tif = 'II' . pack('v', 42) . pack('V', $ifdOffset) . $data;
+        $tif = 'II'.pack('v', 42).pack('V', $ifdOffset).$data;
 
         $ifd = pack('v', 8);
         $ifd .= pack('vvVV', 256, 3, 1, $width);
@@ -54,7 +54,7 @@ class FrameMetricsTest extends TestCase
         $ifd .= pack('vvVV', 279, 4, 1, strlen($data));
         $ifd .= pack('V', 0);
 
-        return $tif . $ifd;
+        return $tif.$ifd;
     }
 
     public function test_mae_is_the_mean_absolute_difference(): void
@@ -118,5 +118,64 @@ class FrameMetricsTest extends TestCase
             $this->tif([1, 2, 3, 4], 2, 2),
             $this->tif([1, 2], 2, 1)
         );
+    }
+
+    public function test_ssim_matches_independent_skimage_fixtures(): void
+    {
+        $fixtures = json_decode(file_get_contents(__DIR__.'/fixtures/ssim-skimage.json'), true);
+        foreach ($fixtures['cases'] as $case) {
+            $a = $b = [];
+            for ($y = 0; $y < $case['height']; $y++) {
+                for ($x = 0; $x < $case['width']; $x++) {
+                    $value = ($x * 1237 + $y * 1973 + $x * $y * 83) % 65536;
+                    $a[] = $value;
+                    $b[] = $case['kind'] === 'inverted' ? 65535 - $value
+                        : max(0, min(65535, $value + (($x + 2 * $y) % 5 - 2) * 311));
+                }
+            }
+            $result = $this->metrics->compare($this->tif($a, $case['width'], $case['height']), $this->tif($b, $case['width'], $case['height']));
+            $this->assertSame('available', $result['ssim_status']);
+            $this->assertEqualsWithDelta($case['ssim'], $result['ssim'], 1e-9);
+            $this->assertSame(7, $result['method']['ssim']['window_size']);
+            $this->assertSame('sample', $result['method']['ssim']['covariance']);
+            $this->assertSame('valid', $result['method']['ssim']['boundary']);
+        }
+    }
+
+    public function test_identical_and_small_image_statuses_are_explicit(): void
+    {
+        $frame = $this->tif(array_fill(0, 49, 12345), 7, 7);
+        $result = $this->metrics->compare($frame, $frame);
+        $this->assertSame(1.0, $result['ssim']);
+        $this->assertSame('infinite', $result['psnr_status']);
+        $small = $this->tif([1, 2, 3, 4], 2, 2);
+        $result = $this->metrics->compare($small, $small);
+        $this->assertNull($result['ssim']);
+        $this->assertSame('image_too_small', $result['ssim_status']);
+    }
+
+    public function test_tiny_error_is_not_reported_as_identical_when_mae_rounds_to_zero(): void
+    {
+        $a = array_fill(0, 4096, 10);
+        $b = $a;
+        $b[0] = 11;
+        $result = $this->metrics->compare($this->tif($a, 64, 64), $this->tif($b, 64, 64));
+        $this->assertSame(0.0, $result['mae']);
+        $this->assertSame('available', $result['psnr_status']);
+        $this->assertIsFloat($result['psnr']);
+    }
+
+    public function test_midpoint_rounds_half_up_in_raw_uint16_counts(): void
+    {
+        $result = $this->metrics->compareMidpoint($this->tif([1, 2, 65535, 32768], 2, 2),
+            $this->tif([0, 1, 65535, 0], 2, 2), $this->tif([1, 2, 65535, 65535], 2, 2));
+        $this->assertSame(0.0, $result['mae']);
+        $this->assertSame('half_up', $result['method']['midpoint_rounding']);
+    }
+
+    public function test_midpoint_requires_matching_dimensions(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->metrics->compareMidpoint($this->tif([1, 2], 2, 1), $this->tif([1, 2], 2, 1), $this->tif([1], 1, 1));
     }
 }
