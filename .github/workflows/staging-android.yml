@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Keep pubspec.lock aligned with this SDK's pinned test packages and dependencies.
   FLUTTER_VERSION: '3.44.9'
   API_BASE_URL: >-
     ${{ github.ref == 'refs/heads/staging' && vars.STAGING_API_BASE_URL
