@@ -54,7 +54,11 @@ class ManagedModelSafetyTest extends TestCase
         $model->update(['name' => 'Edited']);
         $this->model(['version' => '2.0.0', 'slug' => 'fixture-v2-0-0']);
         $request = new AiRequest(['user_id' => $user->id, 'requested_analysis_record_id' => $record->id]);
-        $this->assertSame($snapshot, app(AiContext::class)->sources($request)[0]['model']);
+        $expectedModel = $snapshot;
+        $actualModel = app(AiContext::class)->sources($request)[0]['model'];
+        ksort($expectedModel);
+        ksort($actualModel);
+        $this->assertSame($expectedModel, $actualModel);
         $this->assertStringNotContainsString('https', json_encode($snapshot));
     }
 

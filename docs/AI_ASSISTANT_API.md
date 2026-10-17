@@ -19,6 +19,7 @@ analysis selections return 404. Successful responses use `{success:true,data:…
 | Method/path | Input | `data` / HTTP status |
 | --- | --- | --- |
 | GET `/ai/status` | none | `enabled`, `model`, `mode:freeform\|metadata`, `prompt_version`, `experimental:true`, `limits` / 200 |
+| GET `/ai/analyses/{id}/evidence` | none | `EvaluationReport` for the caller's analysis / 200 |
 | GET `/ai/conversations` | optional `page`, `per_page` | `conversations:Conversation[]`, `pagination` / 200 |
 | POST `/ai/conversations` | optional `title` (1–120 characters) | `Conversation` / 201 |
 | GET `/ai/conversations/{id}` | optional `page`, `per_page` | `Conversation` plus `messages:Message[]`, `pagination`, `request:AiRequest|null` / 200 |
@@ -64,7 +65,25 @@ newest messages; messages within each page are returned oldest first. Detail's
       "expired": false,
       "files_deleted": false,
       "model": {"id": 1, "name": "CT model", "slug": "ct-model", "version": "v1"},
-      "metrics": {},
+      "metrics": {"mae": null, "rmse": null, "psnr": null, "ssim": null, "pixels": null, "reference_min": null, "reference_max": null},
+      "evaluation": {
+        "schema_version": 1,
+        "evaluation_status": "legacy_unknown",
+        "reason_code": null,
+        "metrics": {"mae": null, "rmse": null, "psnr": null, "ssim": null, "pixels": null, "reference_min": null, "reference_max": null},
+        "metric_status": {"psnr": "unknown", "ssim": "unknown"},
+        "method": null,
+        "reference": null,
+        "model": {"id": 1, "name": "CT model", "slug": "ct-model", "version": "v1"},
+        "baseline": {
+          "status": "unavailable",
+          "reason_code": null,
+          "metrics": {"mae": null, "rmse": null, "psnr": null, "ssim": null, "pixels": null, "reference_min": null, "reference_max": null},
+          "metric_status": {"psnr": "unknown", "ssim": "unknown"},
+          "method": null
+        },
+        "comparison": {"status": "unavailable", "precision": null, "mae_reduction": null, "rmse_reduction": null, "psnr_gain_db": null, "ssim_gain": null}
+      },
       "validation_provenance": {},
       "frame_provenance": []
     }],
@@ -93,7 +112,7 @@ before that migration remain unknown/null, without inference from snapshots.
 `sources` is trusted, allowlisted server metadata captured for generation;
 it is a snapshot, not a live prediction poll. The CT model field is nullable,
 with names/slugs bounded to 120 characters and versions to 64. Source counts
-and processing time may be null. Validation metric keys are optional
+and processing time may be null. Validation metric keys are
 `mae`, `psnr`, `rmse`, `ssim`, `pixels`, `reference_min`, `reference_max`, with numeric or
 null values; missing/null data is not replaced with zero. Numeric validation
 provenance may contain `index` and a two-integer `from` array. At most eight
@@ -101,6 +120,33 @@ frame provenance entries include only `index`, `from`, `generation` and
 `synthetic_parents`. No filenames, paths, model descriptions, credential fields
 or free-form error bodies enter this metadata. The assistant does not read TIFF
 bytes, including when files expire or are removed.
+
+`GET /api/ai/analyses/3/evidence` returns
+`{"success":true,"data":<EvaluationReport>}`. The endpoint always checks
+ownership, including for admins: a missing or another user's analysis returns
+404; a missing bearer token returns 401. It reads sanitized persisted evidence
+without generating a new evaluation or calling the model. Its report has the
+same schema as an analysis source's `evaluation`; the latter remains the
+snapshot captured for that assistant request.
+
+| `EvaluationReport` field | Contract |
+| --- | --- |
+| `schema_version` | Integer `1`. |
+| `evaluation_status` | `completed`, `no_reference`, `evaluation_failed`, or `legacy_unknown` for records without recognized evaluation state. Prediction completion is separate from evaluation availability. |
+| `reason_code` | `no_uploaded_midpoint` for `no_reference`, `measurement_failed` for `evaluation_failed`, otherwise null. Historical missingness stays unknown. |
+| `metrics` | Object containing `mae`, `rmse`, `psnr`, `ssim`, `pixels`, `reference_min`, `reference_max`; each is a finite allowed number or null. |
+| `metric_status` | `psnr`: `available`, `infinite`, `unavailable`, `unknown`; `ssim`: `available`, `image_too_small`, `unavailable`, `unknown`. Infinite PSNR has null numeric PSNR and an explicit `infinite` status; null alone never means infinity or zero. |
+| `method` | Null or allowlisted recorded method parameters: raw uint16, range 65535, MAE/RMSE precision 3 decimals, PSNR precision 2 decimals; SSIM uses a 7×7 uniform window, valid centers, sample covariance, K1 0.01 and K2 0.03. Missing parameters are not inferred. Baseline method may include `baseline:linear_midpoint`, `midpoint_rounding:half_up`. |
+| `reference` | Null or `{source:"uploaded_midpoint",index:<integer>,from:[<left>,<right>]}` describing the original uploaded midpoint and its symmetric pair. |
+| `model` | Null or sanitized historical snapshot: optional `id`, `name`, `slug`, `version`, `model_id`, 64-character lowercase hexadecimal `sha256`, and `provenance:managed_manifest_sha256\|legacy_registry_metadata`. Current registry edits do not reconstruct missing historical versions. |
+| `baseline` | Object with `status:completed\|baseline_failed\|unavailable`, `reason_code:baseline_failed\|null`, `metrics`, `metric_status`, `method`. Baseline failure does not erase model metrics. |
+| `comparison` | `status:completed\|unavailable`, `precision:recorded_precision\|null`, and nullable `mae_reduction`, `rmse_reduction`, `psnr_gain_db`, `ssim_gain`. Deltas use recorded rounded precision. |
+
+Sources may also contain up to two separate curated documents, including when
+no analysis is selected. Their shape is
+`{"type":"document","id":"deepct-sop-evaluation","version":"2026-10-16.v1","title":"Evaluasi terhadap midpoint unggahan","text":"<fixed bounded excerpt>"}`.
+Titles are bounded to 120 characters and excerpts to 900 characters. Documents
+are explanatory SOP citations, separate from measured analysis evidence.
 
 Provider metrics are optional nonnegative integer keys `prompt_eval_count`,
 `eval_count`, `total_duration`, `load_duration`, `prompt_eval_duration`,
@@ -111,11 +157,48 @@ Never treat generated text as verified scientific advice or executable HTML.
 
 Message content allows 1–2000 characters; whitespace-only input is rejected.
 The idempotency key allows 1–100 ASCII letters, digits, `.`, `_`, `:`, `-`.
-It is scoped to the owner across conversations. Repeating the same key with
-the same normalized content, conversation and analysis selection returns the
-original persisted request/message with 202, including after completion or
-cancellation. Changing the payload returns 409. Keep the key after transport
-errors and retry using the same payload. There is one active request per user,
+It is scoped to the owner across conversations. For a new admission,
+`analysis_record_id` has three distinct meanings:
+
+| Supplied field | Selection |
+| --- | --- |
+| Omitted | Inherit the latest admitted request's original selection in this conversation; null when there is none or the previous selection was cleared. |
+| Explicit `null` | Clear the selected analysis. |
+| Explicit positive integer | Switch to that owned analysis. Missing or foreign analyses return 404, including for admins. |
+
+Inherited selections are also rechecked for existence and ownership. Rejected
+admissions do not change the conversation's selected context.
+
+For example, send these bodies to `/api/ai/conversations/7/messages` in order,
+waiting for each request to become terminal (or cancelling it) before the next:
+
+```json
+{"content":"Jelaskan analisis ini","idempotency_key":"select-3","analysis_record_id":3}
+```
+
+```json
+{"content":"Bagaimana evaluasinya?","idempotency_key":"follow-up"}
+```
+
+The second request inherits analysis 3. A later body with
+`"analysis_record_id":null` and a new key clears it; a body with
+`"analysis_record_id":4` and a new key switches to owned analysis 4.
+
+Repeating a key with the same content, conversation, and supplied analysis
+field presence/value returns the original persisted request/message with 202,
+including after completion or cancellation. Replay is checked before selecting
+current context. Retrying the exact `follow-up` body above still returns its
+original selection of 3 after a later clear or switch. Adding
+`"analysis_record_id":null` or `"analysis_record_id":3` to that body with the
+same key returns 409 `idempotency_conflict`, even if the effective selection
+would otherwise match. Changing any of those payload inputs also conflicts.
+Keep the key and the original payload after transport errors; do not fill in
+an originally omitted field from the current picker. Requests admitted before
+the presence-sensitive hash remain replayable only when the supplied selection
+matches their original immutable selection; omission/null equivalence is
+retained only for original null selections under that older contract.
+
+There is one active request per user,
 10 total queue slots and 20 admissions per user per application day (UTC by
 default). Replays do not consume quota; cancelled/failed admissions do. Queued
 no-op jobs from cancellation still occupy queue space until a worker drains them.
