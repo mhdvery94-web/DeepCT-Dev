@@ -55,6 +55,15 @@ const finite = (v: unknown, min = 0, max = Number.MAX_SAFE_INTEGER): number | nu
 const integer = (v: unknown, min = 0) => typeof v === "number" && Number.isSafeInteger(v) && v >= min ? v : null;
 const enumValue = (v: unknown, allowed: string[], fallback: string): string => typeof v === "string" && allowed.includes(v) ? v : fallback;
 const safeText = (v: unknown, max: number): string | null => typeof v === "string" && v.length > 0 && v.length <= max && !/[<>\\/\u0000-\u001f]/u.test(v) ? v : null;
+// Document prose may contain word separators (Mulai/Start). Keep the stricter
+// metadata validator above; path syntax, markup, raw JSON and errors stay out.
+function documentProse(value: unknown, max: number): string | null {
+  if (typeof value !== "string" || value.length === 0 || value.length > max
+    || /[<>{}\\\u0000-\u001f]/u.test(value)
+    || /(?:exception|[a-z]*error:|stack trace)/i.test(value)) return null;
+  const prosePair = /^[('"“‘]*[\p{L}\p{N}]+\/[\p{L}\p{N}]+[)'"”’.,;:!?]*$/u;
+  return value.split(/\s+/u).every(token => !token.includes("/") || prosePair.test(token)) ? value : null;
+}
 const metricLabels: Record<string, string> = { mae: "MAE", rmse: "RMSE", psnr: "PSNR (dB)", ssim: "SSIM", pixels: "Jumlah piksel", reference_min: "Minimum referensi", reference_max: "Maksimum referensi" };
 function measurement(raw: unknown): EvidenceMeasurement {
   const v = object(raw), m = object(v.metrics), status = object(v.metric_status);
@@ -106,7 +115,7 @@ export function parseAiSources(raw: unknown): AiSource[] {
   return raw.flatMap((item): AiSource[] => {
     const v = object(item);
     if (v.type === "document") {
-      const id = safeText(v.id, 80), version = safeText(v.version, 40), title = safeText(v.title, 120), text = safeText(v.text, 900);
+      const id = safeText(v.id, 80), version = safeText(v.version, 40), title = documentProse(v.title, 120), text = documentProse(v.text, 900);
       return id && /^deepct-sop-[a-z-]+$/.test(id) && version && title && text ? [{ type: "document", id, version, title, text }] : [];
     }
     const id = integer(v.id, 1);

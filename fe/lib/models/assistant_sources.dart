@@ -25,6 +25,30 @@ String? _text(dynamic v, int max) =>
         !RegExp(r'[<>\\/\x00-\x1f]').hasMatch(v)
     ? v
     : null;
+// Slash-separated words are valid prose; metadata retains the strict validator.
+// Reject path syntax, markup, raw JSON and exception text in document fields.
+String? _documentProse(dynamic value, int max) {
+  if (value is! String ||
+      value.isEmpty ||
+      value.length > max ||
+      RegExp(r'[<>{}\\\x00-\x1f]').hasMatch(value) ||
+      RegExp(
+        r'(exception|[a-z]*error:|stack trace)',
+        caseSensitive: false,
+      ).hasMatch(value)) {
+    return null;
+  }
+  final prosePair = RegExp(
+    r'''^[('"“‘]*[\p{L}\p{N}]+/[\p{L}\p{N}]+[)'"”’.,;:!?]*$''',
+    unicode: true,
+  );
+  return value
+          .split(RegExp(r'\s+'))
+          .every((token) => !token.contains('/') || prosePair.hasMatch(token))
+      ? value
+      : null;
+}
+
 String evidenceNumber(num v) =>
     v == v.truncateToDouble() ? v.toStringAsFixed(0) : v.toString();
 const _metricLabels = {
@@ -327,8 +351,8 @@ List<AiEvidenceSource> parseAiSources(dynamic raw) {
     if (v['type'] == 'document') {
       final id = _text(v['id'], 80),
           version = _text(v['version'], 40),
-          title = _text(v['title'], 120),
-          text = _text(v['text'], 900);
+          title = _documentProse(v['title'], 120),
+          text = _documentProse(v['text'], 900);
       if (id != null &&
           RegExp(r'^deepct-sop-[a-z-]+$').hasMatch(id) &&
           version != null &&

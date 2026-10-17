@@ -46,3 +46,29 @@ test('saved source snapshot is independent from composer selection and parser ne
  assert.equal(parsed[0].evaluation.metrics.mae,2); raw[0].evaluation.metrics.mae=2; assert.equal(JSON.stringify(raw),original);
  assert.match(render(raw),/Metadata ini dicatat saat jawaban dibuat, bukan status terkini/);
 });
+
+const sopDocuments = JSON.parse(fs.readFileSync(new URL('../../be/resources/ai/sop.json', import.meta.url), 'utf8')).documents;
+assert.equal(sopDocuments.length, 5, 'exercise the complete controlled corpus');
+for (const { id, version, title, text } of sopDocuments) {
+ test(`actual SOP ${id} survives parsing and document-only rendering verbatim`, () => {
+  const document = { type: 'document', id, version, title, text };
+  assert.deepEqual(assistant.parseAiSources([document]), [document]);
+  const markup = render([document]);
+  for (const value of [id, version, title, text]) assert.ok(markup.includes(value), value);
+  assert.match(markup, /Tidak ada konteks prediksi/);
+  assert.doesNotMatch(markup, /Prediksi #/);
+ });
+}
+test('document prose rejects unsafe content while metadata keeps strict slash restrictions', () => {
+ const document = { type: 'document', id: 'deepct-sop-lifecycle', version: '2026-10-16.v1', title: 'Tahapan analisis', text: 'Pilih Mulai/Start setelah peninjauan.' };
+ for (const value of ['/etc/private', '/secret', '../private', 'storage/private.tiff', 'storage/private/data', 'C:\\private', '<script>bad</script>', 'bad\u0000text', '{"error":"private"}', 'TypeError: invalid data', 'Stack trace: private']) {
+  for (const field of ['title', 'text']) assert.deepEqual(assistant.parseAiSources([{ ...document, [field]: value }]), [], `${field}: ${value}`);
+ }
+ for (const [field, limit] of [['title', 120], ['text', 900]]) {
+  for (const value of ['', {}, 'x'.repeat(limit + 1)]) assert.deepEqual(assistant.parseAiSources([{ ...document, [field]: value }]), [], `${field} is bounded prose`);
+ }
+ assert.deepEqual(assistant.parseAiSources([{ ...document, version: '2026/10' }]), []);
+ const parsed = assistant.parseAiSources([source(report({ model: { name: 'Model/Private' }, method: { sample_domain: 'raw/uint16' } }))]);
+ assert.deepEqual(parsed[0].evaluation.model, []);
+ assert.deepEqual(parsed[0].evaluation.method, []);
+});

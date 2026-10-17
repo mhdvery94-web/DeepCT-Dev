@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fe/widgets/assistant_evidence.dart';
@@ -322,4 +324,106 @@ void main() {
       contains('provider_timeout'),
     );
   });
+  final corpus =
+      jsonDecode(File('../be/resources/ai/sop.json').readAsStringSync())
+          as Map<String, dynamic>;
+  final documents = corpus['documents'] as List;
+  test('regression fixture covers all five actual controlled SOP entries', () {
+    expect(documents, hasLength(5));
+  });
+  for (final entry in documents) {
+    testWidgets(
+      'actual SOP ${entry['id']} survives parsing and document-only rendering verbatim',
+      (tester) async {
+        final document = {
+          'type': 'document',
+          for (final key in ['id', 'version', 'title', 'text']) key: entry[key],
+        };
+        final parsed = parseAiSources([document]);
+        expect(parsed, hasLength(1));
+        final source = parsed.single as AiDocumentSource;
+        expect(
+          [source.id, source.version, source.title, source.text],
+          [entry['id'], entry['version'], entry['title'], entry['text']],
+        );
+        await show(tester, [document]);
+        for (final key in ['id', 'version', 'title', 'text']) {
+          expect(
+            find.textContaining(entry[key] as String),
+            findsWidgets,
+            reason: key,
+          );
+        }
+        expect(
+          find.textContaining('Tidak ada konteks prediksi'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Prediksi #'), findsNothing);
+      },
+    );
+  }
+  test(
+    'document prose rejects unsafe content while metadata retains strict slash restrictions',
+    () {
+      const document = {
+        'type': 'document',
+        'id': 'deepct-sop-lifecycle',
+        'version': '2026-10-16.v1',
+        'title': 'Tahapan analisis',
+        'text': 'Pilih Mulai/Start setelah peninjauan.',
+      };
+      for (final value in [
+        '/etc/private',
+        '/secret',
+        '../private',
+        'storage/private.tiff',
+        'storage/private/data',
+        r'C:\private',
+        '<script>bad</script>',
+        'bad\u0000text',
+        '{"error":"private"}',
+        'TypeError: invalid data',
+        'Stack trace: private',
+      ]) {
+        for (final field in ['title', 'text']) {
+          expect(
+            parseAiSources([
+              {...document, field: value},
+            ]),
+            isEmpty,
+            reason: '$field: $value',
+          );
+        }
+      }
+      for (final limits in [('title', 120), ('text', 900)]) {
+        for (final value in ['', <String, dynamic>{}, 'x' * (limits.$2 + 1)]) {
+          expect(
+            parseAiSources([
+              {...document, limits.$1: value},
+            ]),
+            isEmpty,
+            reason: '${limits.$1} is bounded prose',
+          );
+        }
+      }
+      expect(
+        parseAiSources([
+          {...document, 'version': '2026/10'},
+        ]),
+        isEmpty,
+      );
+      final parsed =
+          parseAiSources([
+                source(
+                  report({
+                    'model': {'name': 'Model/Private'},
+                    'method': {'sample_domain': 'raw/uint16'},
+                  }),
+                ),
+              ]).single
+              as AiAnalysisSource;
+      expect(parsed.evaluation.model, isEmpty);
+      expect(parsed.evaluation.method, isEmpty);
+    },
+  );
 }
