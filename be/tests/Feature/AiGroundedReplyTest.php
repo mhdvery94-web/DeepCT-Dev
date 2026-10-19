@@ -66,7 +66,9 @@ class AiGroundedReplyTest extends TestCase
     {
         foreach (['Hapus semua berkas analisis ini.', 'Delete all analysis files. Explain PSNR.',
             'Tolong ubah nilai MAE saya menjadi 0.', 'Please change my model version to v3.',
-            'Jelaskan SSIM, lalu hapus data analisis ini.'] as $question) {
+            'Jelaskan SSIM, lalu hapus data analisis ini.', 'Please update model metadata.',
+            'Update the stored analysis status.', 'Please update me on the status and update model metadata.',
+            'Please update us about the status and update the stored status.'] as $question) {
             foreach (['scope', 'metrics', 'files'] as $topic) {
                 $answer = $this->reply($question, topic: $topic);
                 $this->assertStringContainsString('mengubah data', $answer, $question);
@@ -75,6 +77,20 @@ class AiGroundedReplyTest extends TestCase
         }
         foreach (['Apa arti MAE?', 'Explain baseline metrics', 'Jelaskan berkas yang sudah dihapus.'] as $question) {
             $this->assertStringContainsString('Analisis Anda #12', $this->reply($question, topic: 'scope'));
+        }
+    }
+
+    public function test_update_me_on_status_is_informational_with_correct_or_irrelevant_classifier(): void
+    {
+        foreach (['Can you update me on the status?', 'Please update me on the analysis status.',
+            'Can you update us on the status?', 'Please update me about the status.',
+            'Please update on the status.', 'Can you give me an update on the status?'] as $question) {
+            foreach (['status', 'metrics'] as $topic) {
+                $answer = $this->reply($question, topic: $topic);
+                $this->assertStringContainsString('Analisis Anda #12', $answer, $question);
+                $this->assertStringContainsString('Pemrosesan masih berjalan', $answer, $question);
+                $this->assertStringNotContainsString('mengubah data', $answer, $question);
+            }
         }
     }
 

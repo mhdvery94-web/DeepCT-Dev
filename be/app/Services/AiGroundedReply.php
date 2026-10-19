@@ -77,8 +77,8 @@ class AiGroundedReply
         if ($scopeQuestion !== $question && preg_match('/\b(?:abaikan|ignore|disregard|langgar|violate|reverse)\s+(?:(?:the|this|that)\s+)?(?:larangan|aturan|rules?|prohibition|ban|["“])|\b(?:lakukan\s+kebalikan(?:nya)?|do\s+(?:the\s+)?opposite)\b/iu', $question)) {
             $scopeQuestion = $question;
         }
-        // Unsupported action requests precede topic nouns; informational questions still correct the classifier.
-        if (preg_match('/(?:^|[.!?;,]|\b(?:dan|lalu|kemudian|and|then))\s*(?:(?:tolong|silakan|please|can you|could you|bisa(?:kah)? (?:anda|kamu))\s+)?(?:hapus(?:kan)?|delete|ubah|change|modify|remove|update)\b(?:\s+[\pL\pN_-]+){0,3}\s+(?:data|berkas|files?|analisis|analysis|metrics?|metrik|mae|rmse|psnr|ssim|model|checkpoint|snapshot|status)\b/iu', $scopeQuestion)) {
+        // Unsupported action requests precede topic nouns; update [recipient] on/about asks for information.
+        if (preg_match('/(?:^|[.!?;,]|\b(?:dan|lalu|kemudian|and|then))\s*(?:(?:tolong|silakan|please|can you|could you|bisa(?:kah)? (?:anda|kamu))\s+)?(?:hapus(?:kan)?|delete|ubah|change|modify|remove|update(?!\s+(?:(?:me|us|you|him|her|them)\s+)?(?:on|about)\b))\b(?:\s+[\pL\pN_-]+){0,3}\s+(?:data|berkas|files?|analisis|analysis|metrics?|metrik|mae|rmse|psnr|ssim|model|checkpoint|snapshot|status)\b/iu', $scopeQuestion)) {
             return 'scope';
         }
         if (preg_match('~\b(passwords?|passwd|kata sandi|api[ _-]?(keys?|token)|token api|kunci api|access token|secret(?:s)?|rahasia|credentials?|kredensial)\b|/etc/|\b(pengguna lain|user lain|akun lain|orang lain|other users?|another user|someone else|other people(?:\x{0027}|’)s)\b|\b(bypass|lewati|abaikan|tanpa|without|ignore)\s+(?:the\s+)?(?:access\s+)?(permissions?|controls?|authorization|authentication|izin|otorisasi|autentikasi|hak akses|kontrol akses)\b~iu', $scopeQuestion)) {
