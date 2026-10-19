@@ -16,7 +16,7 @@ class AiGroundedReply
         'additionalProperties' => false,
     ];
 
-    public function render(string $output, array $sources): string
+    public function render(string $output, array $sources, string $question = ''): string
     {
         // A classifier is advisory. Malformed output never becomes user prose.
         $topic = 'overview';
@@ -29,6 +29,7 @@ class AiGroundedReply
         } catch (\JsonException) {
             // Deterministic owned overview is the safe classifier fallback.
         }
+        $topic = $this->intent($question) ?? $topic;
         if ($topic === 'scope') {
             return 'Saya dapat menjelaskan status, metrik, dan ketersediaan berkas dari metadata analisis milik Anda. '
                 .'Saya tidak membaca piksel TIFF, menjalankan prediksi, mengubah data, atau mengakses rahasia maupun analisis pengguna lain.';
@@ -47,21 +48,88 @@ class AiGroundedReply
         }
         $citations = '';
         foreach ($documents as $document) {
-            $citations .= ' SOP: '.($source === null ? $document['text'] : $document['title'])
+            $citations .= "\n\nSOP: ".($source === null ? $document['text'] : $document['title'])
                 .' ['.$document['id'].'@'.$document['version'].']. ';
         }
         if ($source === null) {
             return 'Belum ada analisis yang dilampirkan. Pilih analisis milik Anda agar saya dapat menjelaskan status, metrik, atau metadata berkasnya.'
+                .($topic === 'model' ? ' Identitas model historis tidak diketahui. Versi model historis tidak diketahui tanpa snapshot analisis.' : '')
                 .$citations;
         }
-        $label = 'Analisis Anda'.(isset($source['id']) && is_int($source['id']) ? ' #'.$source['id'] : '').'. ';
+        $label = 'Analisis Anda'.(isset($source['id']) && is_int($source['id']) ? ' #'.$source['id'] : '').".\n\n"
+            ."Metadata ini adalah snapshot yang dicatat saat jawaban dibuat, bukan status terkini.\n\n";
 
         return $label.(match ($topic) {
             'status' => $this->status($source),
             'metrics' => $this->metrics($source),
             'files' => $this->files($source),
-            'overview' => $this->status($source).' '.$this->metrics($source).' '.$this->files($source),
+            'model' => $this->model($source),
+            'overview' => $this->status($source)."\n\n".$this->metrics($source)."\n\n".$this->files($source),
         }).$citations;
+    }
+
+    /** Explicit requests outrank advisory classification; ordinary scientific terms stay in scope. */
+    private function intent(string $question): ?string
+    {
+        // A quoted prohibition is context, not a request to access the named data.
+        // Match only the narrow prohibition phrase; requests elsewhere still refuse.
+        $scopeQuestion = preg_replace('~["“](?:jangan|do not|never)\s+(?:akses|mengakses|baca|membaca|bocorkan|membocorkan|read|access|reveal)\s+(?:rahasia|secrets?|passwords?|token api|api keys?|data|analisis)(?:\s+(?:pengguna lain|other users?|orang lain|pribadi|private))?["”]~iu', '', $question);
+        if (preg_match('~\b(passwords?|passwd|kata sandi|api[ _-]?(keys?|token)|token api|kunci api|access token|secret(?:s)?|rahasia|credentials?|kredensial)\b|/etc/|\b(pengguna lain|user lain|akun lain|orang lain|other users?|another user|someone else|other people(?:\x{0027}|’)s)\b|\b(bypass|lewati|abaikan|tanpa|without|ignore)\s+(?:the\s+)?(?:access\s+)?(permissions?|controls?|authorization|authentication|izin|otorisasi|autentikasi|hak akses|kontrol akses)\b~iu', $scopeQuestion)) {
+            return 'scope';
+        }
+        $documentOnly = preg_match('/\b(sop|dokumen|documents?|documentation)\b/iu', $question)
+            && ! preg_match('/\b(model|checkpoint)\b/iu', $question);
+        if (! $documentOnly && preg_match('/\b(versi(?:nya)?|version|model historis|historical model|model apa|model mana|nama model|identitas model|model name|model identity|model snapshot|snapshot model|what model|which model|model used|model yang (?:dipakai|digunakan))\b|^\s*model\s*\??\s*$/iu', $question)) {
+            return 'model';
+        }
+        if (preg_match('/\b(metrik|metrics?|mae|rmse|psnr|ssim|baseline|referensi|reference|evaluasi|evaluation)\b/iu', $question)) {
+            return 'metrics';
+        }
+        if (preg_match('/\b(berkas|files?|tiff|citra|gambar|images?|piksel|pixels?|unduh|diunduh|pengunduhan|downloads?|expired|kedaluwarsa)\b/iu', $question)) {
+            return 'files';
+        }
+        if (preg_match('/\b(status|progress|progres|antrean|antrian|queue|selesai|completion|completed|processing|pemrosesan|diproses|proses(?:nya)?|pending|uploaded|failed|gagal|kapan|waktu|durasi|duration|how long|waiting|menunggu|start|mulai)\b/iu', $question)) {
+            return 'status';
+        }
+
+        return null;
+    }
+
+    /** Six significant digits for display; never round a finite nonzero value to zero. */
+    private function number(int|float $value): string
+    {
+        $display = strtolower(str_replace(',', '.', sprintf('%.6g', $value)));
+        $display = preg_replace('/\.0+(?=e)/', '', $display);
+
+        return preg_replace('/e([+-]?)0+(\d+)/', 'e$1$2', $display);
+    }
+
+    private function model(array $source): string
+    {
+        $model = is_array($source['model'] ?? null) ? $source['model'] : [];
+        $facts = [];
+        if (($model['provenance'] ?? null) !== 'historical_model_snapshot_unavailable') {
+            if (is_int($model['id'] ?? null) && $model['id'] > 0) {
+                $facts[] = 'ID model: '.$model['id'];
+            }
+            foreach (['name' => 'Nama model', 'slug' => 'Slug model', 'model_id' => 'Identitas checkpoint'] as $key => $label) {
+                if ($this->modelText($model[$key] ?? null, 120)) {
+                    $facts[] = $label.': '.$model[$key];
+                }
+            }
+        }
+        $identity = $facts ? "Snapshot model historis:\n- ".implode("\n- ", $facts) : 'Identitas model historis tidak diketahui; snapshot tidak tersedia atau tidak lengkap.';
+        $version = ($model['provenance'] ?? null) !== 'historical_model_snapshot_unavailable'
+            && $this->modelText($model['version'] ?? null, 64)
+            ? 'Versi model historis: '.$model['version'] : 'Versi model historis tidak diketahui; tidak tercatat dalam snapshot.';
+
+        return $identity."\n\n".$version.' Identitas dan versi ini berasal dari snapshot analisis, bukan versi dokumen SOP atau registri model saat ini.';
+    }
+
+    private function modelText(mixed $value, int $limit): bool
+    {
+        return is_string($value) && mb_strlen($value) <= $limit
+            && preg_match('/\A[\pL\pN ._()+-]+\z/u', $value) === 1;
     }
 
     private function status(array $source): string
@@ -93,7 +161,7 @@ class AiGroundedReply
             if ($key === 'psnr' && ($source['evaluation']['metric_status']['psnr'] ?? null) === 'infinite') {
                 $facts[] = 'PSNR: tak terhingga dB (galat kuadrat tepat nol terhadap referensi tercatat)';
             } elseif ((is_int($value) || is_float($value)) && is_finite((float) $value)) {
-                $facts[] = strtoupper($key).': '.json_encode($value, JSON_PRESERVE_ZERO_FRACTION).($key === 'psnr' ? ' dB' : '');
+                $facts[] = strtoupper($key).': '.$this->number($value).($key === 'psnr' ? ' dB' : '');
             } else {
                 $facts[] = strtoupper($key).': tidak tersedia';
                 $missing = $missing || $key !== 'ssim'
@@ -123,26 +191,30 @@ class AiGroundedReply
         }
         $baseline = $evaluation['baseline'] ?? [];
         if (($baseline['status'] ?? null) === 'completed') {
-            $reason .= 'Metrik baseline linear_midpoint: '.$this->metricValues($baseline['metrics'] ?? [], $baseline['metric_status'] ?? []).'. ';
+            $reason .= "\n\nMetrik baseline linear_midpoint:\n- ".$this->metricValues($baseline['metrics'] ?? [], $baseline['metric_status'] ?? []);
         } elseif (($baseline['status'] ?? null) === 'baseline_failed') {
             $reason .= 'Pengukuran baseline gagal (baseline_failed). ';
         } elseif (($baseline['status'] ?? null) === 'unavailable') {
             $reason .= 'Metrik baseline tidak tersedia; penyebab tidak tercatat. ';
         }
         $comparison = $evaluation['comparison'] ?? [];
+        $comparisonText = '';
         if (($comparison['status'] ?? null) === 'completed' && ($comparison['precision'] ?? null) === 'recorded_precision') {
             $deltas = [];
             foreach (['mae_reduction', 'rmse_reduction', 'psnr_gain_db', 'ssim_gain'] as $key) {
                 $value = $comparison[$key] ?? null;
                 if ((is_int($value) || is_float($value)) && is_finite((float) $value)) {
-                    $deltas[] = $key.': '.json_encode($value, JSON_PRESERVE_ZERO_FRACTION);
+                    $direction = $value > 0 ? 'lebih baik' : ($value < 0 ? 'lebih buruk' : 'tidak berubah');
+                    $deltas[] = $key.': '.$this->number($value).' ('.$direction.' terhadap baseline pada referensi tercatat)';
+                } else {
+                    $deltas[] = $key.': tidak tersedia';
                 }
             }
-            $reason .= 'Perbandingan baseline pada recorded_precision: '.($deltas ? implode('; ', $deltas) : 'selisih numerik tidak tersedia')
-                .'. Nilai positif menunjukkan pengurangan galat atau kenaikan PSNR/SSIM pada referensi ini. ';
+            $comparisonText = "\n\nPerbandingan baseline pada recorded_precision:\n- ".implode("\n- ", $deltas)
+                ."\nArah perbandingan dapat berbeda antar metrik. Pengurangan MAE/RMSE dan kenaikan PSNR/SSIM bertanda positif berarti lebih baik; negatif lebih buruk; nol tidak berubah pada presisi tercatat.";
         }
 
-        return implode('; ', $facts).'. '.$reason
+        return "Metrik tercatat (angka tampilan dibulatkan hingga 6 digit signifikan; bukti tersimpan tidak diubah):\n- ".implode("\n- ", $facts)."\n\n".$reason.$comparisonText."\n\n"
             .'MAE adalah rata-rata galat absolut terhadap referensi. PSNR adalah rasio sinyal terhadap galat dalam dB; '
             .'PSNR lebih tinggi dan MAE lebih rendah umumnya hanya membandingkan galat. '
             .'RMSE adalah akar rata-rata kuadrat galat terhadap referensi; SSIM mengukur kemiripan struktur terhadap referensi. '
@@ -156,10 +228,10 @@ class AiGroundedReply
             $value = $metrics[$key] ?? null;
             $facts[] = strtoupper($key).': '.($key === 'psnr' && ($status['psnr'] ?? null) === 'infinite'
                 ? 'tak terhingga' : (((is_int($value) || is_float($value)) && is_finite((float) $value))
-                    ? json_encode($value, JSON_PRESERVE_ZERO_FRACTION) : 'tidak tersedia'));
+                    ? $this->number($value) : 'tidak tersedia'));
         }
 
-        return implode('; ', $facts);
+        return implode("\n- ", $facts);
     }
 
     private function files(array $source): string

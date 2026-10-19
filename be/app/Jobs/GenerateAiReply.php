@@ -72,7 +72,7 @@ class GenerateAiReply implements ShouldQueue
             $sources = $context->sources($request);
             $reply = $client->generate($request->model, $context->messages($request, $sources));
             if (config('ai.metadata_mode')) {
-                $reply['answer'] = app(AiGroundedReply::class)->render($reply['answer'], $sources);
+                $reply['answer'] = app(AiGroundedReply::class)->render($reply['answer'], $sources, $context->question($request));
             }
             DB::transaction(function () use ($reply, $sources) {
                 $request = AiRequest::whereKey($this->requestId)->lockForUpdate()->first();

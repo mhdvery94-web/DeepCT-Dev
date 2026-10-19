@@ -45,3 +45,13 @@ test('picker distinguishes follow-up inheritance from an explicit clear',async()
   assert.equal(contextSelection('24'),24);
   assert.equal(contextSelection('malformed'),undefined);
 });
+
+test('metadata mode describes bounded evidence-grounded replies and keeps scientific limits', async () => {
+  const fs = await import('node:fs');
+  const source = fs.readFileSync(new URL('../src/components/research-assistant.tsx', import.meta.url), 'utf8');
+  const disclaimer = source.match(/status\.mode === "metadata"\s*\? "([^"]+)"/)?.[1];
+  assert.ok(disclaimer, 'metadata-only disclaimer is present');
+  for (const text of ['Asisten berbasis bukti', 'snapshot', 'saat jawaban dibuat', 'bukan status terkini', 'tidak membaca piksel TIFF', 'tidak menjamin kebenaran ilmiah']) assert.ok(disclaimer.includes(text), text);
+  const welcome = source.match(/status\?\.mode === "metadata"\s*\? "([^"]+)"/)?.[1];
+  assert.match(welcome ?? '', /Jawaban berbasis bukti metadata dan SOP/);
+});

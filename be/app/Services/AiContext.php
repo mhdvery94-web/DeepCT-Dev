@@ -47,6 +47,17 @@ class AiContext
         ], ...$documents];
     }
 
+    public function question(AiRequest $request): string
+    {
+        $question = AiMessage::whereKey($request->user_message_id)
+            ->where('ai_conversation_id', $request->ai_conversation_id)->where('role', 'user')->value('content');
+        if (! is_string($question)) {
+            throw new AiProviderException('context_unavailable');
+        }
+
+        return $question;
+    }
+
     private function numericProvenance(array $row): array
     {
         $safe = [];

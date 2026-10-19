@@ -530,7 +530,7 @@ class _ResearchAssistantScreenState extends State<ResearchAssistantScreen> {
         child: Text(
           chat.enabled
               ? (chat.status?['mode'] == 'metadata')
-                    ? 'Asisten eksperimental menjelaskan status, metrik, dan ketersediaan berkas dari metadata analisis Anda. Asisten tidak membaca piksel TIFF atau menjalankan prediksi. Jawaban tidak menjamin kebenaran ilmiah hasil.'
+                    ? 'Asisten berbasis bukti menjelaskan metadata analisis Anda dan SOP terkontrol. Metadata adalah snapshot saat jawaban dibuat, bukan status terkini. Asisten tidak membaca piksel TIFF atau menjalankan prediksi. Jawaban tidak menjamin kebenaran ilmiah hasil.'
                     : 'DeepSeek eksperimental. Verifikasi jawaban sebelum digunakan dalam riset.'
               : 'DeepSeek eksperimental belum tersedia sampai evaluasi kualitas lulus. Riwayat tetap dapat dibaca.',
           style: const TextStyle(fontSize: 11, color: Color(0xFF854D0E)),

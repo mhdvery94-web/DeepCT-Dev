@@ -558,7 +558,7 @@ export function ResearchAssistant({
         <div className="assistant-disclaimer" role="status">
           {status?.enabled
             ? status.mode === "metadata"
-              ? "Asisten eksperimental menjelaskan status, metrik, dan ketersediaan berkas dari metadata analisis Anda. Asisten tidak membaca piksel TIFF atau menjalankan prediksi. Jawaban tidak menjamin kebenaran ilmiah hasil."
+              ? "Asisten berbasis bukti menjelaskan metadata analisis Anda dan SOP terkontrol. Metadata adalah snapshot saat jawaban dibuat, bukan status terkini. Asisten tidak membaca piksel TIFF atau menjalankan prediksi. Jawaban tidak menjamin kebenaran ilmiah hasil."
               : "DeepSeek eksperimental. Verifikasi jawaban sebelum digunakan dalam riset."
             : "DeepSeek eksperimental belum tersedia sampai evaluasi kualitas lulus. Riwayat tetap dapat dibaca."}
         </div>
@@ -587,8 +587,9 @@ export function ResearchAssistant({
                 memakai metadata prediksi milik Anda.
               </p>
               <p>
-                Jawaban model adalah eksperimen; sumber tepercaya ditampilkan
-                terpisah.
+                {status?.mode === "metadata"
+                  ? "Jawaban berbasis bukti metadata dan SOP; sumber tersimpan ditampilkan terpisah."
+                  : "Jawaban model adalah eksperimen; sumber tepercaya ditampilkan terpisah."}
               </p>
             </div>
           )}

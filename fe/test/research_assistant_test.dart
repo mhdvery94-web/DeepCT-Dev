@@ -158,6 +158,25 @@ Future<void> mount(WidgetTester tester, FakeAi api, {int? context}) async {
 }
 
 void main() {
+  testWidgets(
+    'metadata copy explains evidence snapshots and retains scientific limits',
+    (tester) async {
+      final api = FakeAi()
+        ..enabled = true
+        ..mode = 'metadata';
+      await mount(tester, api);
+      for (final text in [
+        'Asisten berbasis bukti',
+        'snapshot',
+        'saat jawaban dibuat',
+        'bukan status terkini',
+        'tidak membaca piksel TIFF',
+        'tidak menjamin kebenaran ilmiah',
+      ]) {
+        expect(find.textContaining(text), findsOneWidget, reason: text);
+      }
+    },
+  );
   for (final entry in <Object?, String>{
     0.934: '0.934',
     0: '0',
