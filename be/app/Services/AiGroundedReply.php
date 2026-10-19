@@ -71,14 +71,23 @@ class AiGroundedReply
     /** Explicit requests outrank advisory classification; ordinary scientific terms stay in scope. */
     private function intent(string $question): ?string
     {
-        // A quoted prohibition is context, not a request to access the named data.
-        // Match only the narrow prohibition phrase; requests elsewhere still refuse.
+        // Quoted prohibitions are context unless the request explicitly reverses them.
+        // Keep their target when asked to ignore a rule or do its opposite.
         $scopeQuestion = preg_replace('~["“](?:jangan|do not|never)\s+(?:akses|mengakses|baca|membaca|bocorkan|membocorkan|read|access|reveal)\s+(?:rahasia|secrets?|passwords?|token api|api keys?|data|analisis)(?:\s+(?:pengguna lain|other users?|orang lain|pribadi|private))?["”]~iu', '', $question);
+        if ($scopeQuestion !== $question && preg_match('/\b(?:abaikan|ignore|disregard|langgar|violate|reverse)\s+(?:(?:the|this|that)\s+)?(?:larangan|aturan|rules?|prohibition|ban|["“])|\b(?:lakukan\s+kebalikan(?:nya)?|do\s+(?:the\s+)?opposite)\b/iu', $question)) {
+            $scopeQuestion = $question;
+        }
+        // Unsupported action requests precede topic nouns; informational questions still correct the classifier.
+        if (preg_match('/(?:^|[.!?;,]|\b(?:dan|lalu|kemudian|and|then))\s*(?:(?:tolong|silakan|please|can you|could you|bisa(?:kah)? (?:anda|kamu))\s+)?(?:hapus(?:kan)?|delete|ubah|change|modify|remove|update)\b(?:\s+[\pL\pN_-]+){0,3}\s+(?:data|berkas|files?|analisis|analysis|metrics?|metrik|mae|rmse|psnr|ssim|model|checkpoint|snapshot|status)\b/iu', $scopeQuestion)) {
+            return 'scope';
+        }
         if (preg_match('~\b(passwords?|passwd|kata sandi|api[ _-]?(keys?|token)|token api|kunci api|access token|secret(?:s)?|rahasia|credentials?|kredensial)\b|/etc/|\b(pengguna lain|user lain|akun lain|orang lain|other users?|another user|someone else|other people(?:\x{0027}|’)s)\b|\b(bypass|lewati|abaikan|tanpa|without|ignore)\s+(?:the\s+)?(?:access\s+)?(permissions?|controls?|authorization|authentication|izin|otorisasi|autentikasi|hak akses|kontrol akses)\b~iu', $scopeQuestion)) {
             return 'scope';
         }
-        $documentOnly = preg_match('/\b(sop|dokumen|documents?|documentation)\b/iu', $question)
-            && ! preg_match('/\b(model|checkpoint)\b/iu', $question);
+        // The object of a version request can be a document about a model/checkpoint.
+        $documentOnly = preg_match('/\b(?:versi(?:nya)?|version)\s+(?:(?:of|the|dari)\s+)*(?:sop|dokumen|documents?|documentation)\b|\b(?:sop|dokumen|documents?|documentation)\s+version\b/iu', $question)
+            || (preg_match('/\b(sop|dokumen|documents?|documentation)\b/iu', $question)
+                && ! preg_match('/\b(model|checkpoint)\b/iu', $question));
         if (! $documentOnly && preg_match('/\b(versi(?:nya)?|version|model historis|historical model|model apa|model mana|nama model|identitas model|model name|model identity|model snapshot|snapshot model|what model|which model|model used|model yang (?:dipakai|digunakan))\b|^\s*model\s*\??\s*$/iu', $question)) {
             return 'model';
         }
