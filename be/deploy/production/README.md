@@ -71,6 +71,37 @@ The separate CT database queue retains at least 7260 seconds for its 7200-second
 job timeout. API and queue workers need a controlled restart after config changes;
 never kill an in-flight CT job to activate the assistant.
 
+The dedicated PHP worker uses `Restart=always` with a five-second restart delay.
+Laravel exits with exit status 0 after `queue:restart` or a lost database
+connection; continuous supervision must recover those clean exits as well as
+failures and memory recycling. An explicit `systemctl stop` remains stopped:
+systemd suppresses automatic restart for an operator-requested stop. The worker's
+`TimeoutStopSec=360` gives its current 300-second job time to finish after SIGTERM
+before systemd can force termination. Cancellation does not immediately abort
+provider work; drain or wait for the current assistant job when stopping.
+This policy applies only to the dedicated llm worker. The existing CT worker and
+original Ollama service are unchanged.
+
+At host installation, root must verify the actual lifecycle before activation:
+
+1. Inspect `systemctl show deepct-assistant-llm.service` for `Restart=always`,
+   a 360-second `TimeoutStopUSec`, and active/running state; record its `MainPID`.
+2. In a coordinated idle maintenance window, confirm a normal Laravel
+   `queue:restart` returns this unit to active/running with a new `MainPID` after
+   the five-second delay. Laravel's restart cache key can be shared with CT;
+   do not issue that signal while CT work is active or disrupt its worker to
+   demonstrate this. If a safe shared-cache window is unavailable, keep this
+   check pending or use an isolated lifecycle probe instead. Do not interrupt
+   the live database to simulate lost connections.
+3. Explicitly stop only `deepct-assistant-llm.service`, allowing up to 360 seconds
+   for graceful completion. Confirm it is inactive with `MainPID=0` and remains
+   stopped after more than five seconds. Start that dedicated worker explicitly
+   afterward if continuing the approved rollout.
+
+Local static/lifecycle-policy checks do not establish host supervision or signal
+handling. Record the host results separately; do not treat the unit's configuration
+as evidence that these lifecycle checks have executed.
+
 Rollback activation by setting `AI_ASSISTANT_ENABLED=false` through the existing
 configuration workflow and refreshing API/worker configuration. Drain or explicitly
 cancel pending assistant requests before stopping the dedicated worker and daemon.

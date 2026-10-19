@@ -8,8 +8,9 @@ Type=simple
 User=jihyo
 WorkingDirectory=/var/www/deepct-ai
 ExecStart=/usr/bin/php artisan queue:work llm --queue=llm --timeout=300 --tries=1 --memory=256
-Restart=on-failure
+Restart=always
 RestartSec=5
+TimeoutStopSec=360
 
 [Install]
 WantedBy=multi-user.target
