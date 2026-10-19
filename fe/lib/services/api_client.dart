@@ -10,6 +10,7 @@ import 'secure_store.dart';
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
+  final String? errorCode;
 
   /// Field-level validation errors from a 422 response.
   final Map<String, List<String>> fieldErrors;
@@ -17,6 +18,7 @@ class ApiException implements Exception {
   const ApiException(
     this.message, {
     this.statusCode,
+    this.errorCode,
     this.fieldErrors = const {},
   });
 
@@ -76,8 +78,15 @@ class ApiClient {
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, dynamic>? query,
+    CancelToken? cancelToken,
   }) async {
-    return _send(() => _dio.get(path, queryParameters: _clean(query)));
+    return _send(
+      () => _dio.get(
+        path,
+        queryParameters: _clean(query),
+        cancelToken: cancelToken,
+      ),
+    );
   }
 
   /// [receiveTimeout] overrides the default for slow endpoints, such as a test
@@ -86,11 +95,13 @@ class ApiClient {
     String path, {
     Map<String, dynamic>? data,
     Duration? receiveTimeout,
+    CancelToken? cancelToken,
   }) async {
     return _send(
       () => _dio.post(
         path,
         data: data,
+        cancelToken: cancelToken,
         options: receiveTimeout != null
             ? Options(receiveTimeout: receiveTimeout)
             : null,
@@ -302,6 +313,15 @@ class ApiClient {
     }
 
     if (status == 429) {
+      if (data is Map &&
+          data['error_code'] is String &&
+          data['message'] is String) {
+        return ApiException(
+          data['message'] as String,
+          statusCode: status,
+          errorCode: data['error_code'] as String,
+        );
+      }
       return const ApiException(
         'Too many attempts. Please wait a moment and try again.',
         statusCode: 429,
@@ -310,7 +330,13 @@ class ApiClient {
 
     // 403 and most others carry a useful server message.
     if (data is Map && data['message'] != null) {
-      return ApiException(data['message'].toString(), statusCode: status);
+      return ApiException(
+        data['message'].toString(),
+        statusCode: status,
+        errorCode: data['error_code'] is String
+            ? data['error_code'] as String
+            : null,
+      );
     }
 
     if (status == 500) {

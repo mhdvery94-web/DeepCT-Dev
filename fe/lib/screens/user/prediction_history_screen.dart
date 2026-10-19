@@ -12,6 +12,7 @@ import '../../widgets/app_dialog.dart';
 import '../../widgets/async_state_views.dart';
 import '../../widgets/pagination_bar.dart';
 import 'frame_gallery_screen.dart';
+import '../assistant/research_assistant_screen.dart';
 
 /// The researcher's jobs: what is running, what finished, and what can still
 /// be downloaded before the 24-hour window closes.
@@ -284,6 +285,14 @@ class _PredictionHistoryScreenState extends State<PredictionHistoryScreen> {
                 onDownloadComplete: () => _download(prediction, 'complete'),
                 onDelete: () => _confirmDelete(prediction),
                 onStart: () => _start(prediction),
+                onExplain: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ResearchAssistantScreen(
+                      analysisRecordId: prediction.id,
+                    ),
+                  ),
+                ),
               );
             },
           ),
@@ -312,6 +321,7 @@ class _PredictionCard extends StatelessWidget {
   final VoidCallback onDownloadComplete;
   final VoidCallback onDelete;
   final VoidCallback onStart;
+  final VoidCallback onExplain;
 
   const _PredictionCard({
     required this.prediction,
@@ -322,6 +332,7 @@ class _PredictionCard extends StatelessWidget {
     required this.onDownloadComplete,
     required this.onDelete,
     required this.onStart,
+    required this.onExplain,
   });
 
   (Color, IconData, String) get _statusStyle {
@@ -444,6 +455,12 @@ class _PredictionCard extends StatelessWidget {
             const LinearProgressIndicator(minHeight: 3),
           ],
 
+          TextButton.icon(
+            key: Key('prediction-explain-${prediction.id}'),
+            onPressed: onExplain,
+            icon: const Icon(Icons.auto_awesome_outlined, size: 16),
+            label: const Text('Jelaskan hasil dengan asisten'),
+          ),
           if (downloading) ...[
             const SizedBox(height: 12),
             Row(

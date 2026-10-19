@@ -15,6 +15,7 @@ import 'dashboard_home_screen.dart';
 import 'model_management_screen.dart';
 import 'news_management_screen.dart';
 import 'user_management_screen.dart';
+import '../assistant/research_assistant_screen.dart';
 
 /// Navigation destinations available to an administrator.
 enum AdminSection {
@@ -24,7 +25,8 @@ enum AdminSection {
   messages('Messages', Icons.forum_outlined),
   news('Research News', Icons.article_outlined),
   models('Model Management', Icons.memory_outlined),
-  activities('Activity Logs', Icons.history);
+  activities('Activity Logs', Icons.history),
+  assistant('Asisten riset', Icons.auto_awesome_outlined);
 
   const AdminSection(this.label, this.icon);
 
@@ -130,6 +132,8 @@ class _AdminShellState extends State<AdminShell> {
         return const ModelManagementScreen();
       case AdminSection.activities:
         return const ActivityLogsScreen();
+      case AdminSection.assistant:
+        return const ResearchAssistantScreen();
     }
   }
 

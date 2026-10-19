@@ -34,7 +34,7 @@ class QueueHealth
      */
     public function inspect(): array
     {
-        $waiting = DB::table('jobs')->whereNull('reserved_at')->count();
+        $waiting = DB::table('jobs')->where('queue', 'default')->whereNull('reserved_at')->count();
 
         if ($waiting === 0) {
             return ['stalled' => false, 'waiting' => 0, 'oldest_wait_seconds' => 0];
@@ -42,6 +42,7 @@ class QueueHealth
 
         // `available_at` is a unix timestamp on the jobs table.
         $oldest = (int) DB::table('jobs')
+            ->where('queue', 'default')
             ->whereNull('reserved_at')
             ->min('available_at');
 
@@ -60,7 +61,7 @@ class QueueHealth
         // reserved, which is what `--timeout` and `queue:retry` exist for. It
         // is proof that *something claimed work*, which is the question being
         // asked here.
-        $busy = DB::table('jobs')->whereNotNull('reserved_at')->exists();
+        $busy = DB::table('jobs')->where('queue', 'default')->whereNotNull('reserved_at')->exists();
 
         return [
             'stalled' => !$busy && $waited >= self::STALL_SECONDS,

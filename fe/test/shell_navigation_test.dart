@@ -9,6 +9,10 @@ import 'package:fe/screens/user/user_shell.dart';
 /// reordering the enum silently reorders navigation — and because the back
 /// gesture goes home, and home is whatever sits first.
 void main() {
+  test('both roles offer their own research assistant', () {
+    expect(UserSection.values.map((s) => s.name), contains('assistant'));
+    expect(AdminSection.values.map((s) => s.name), contains('assistant'));
+  });
   test('the researcher sections are in the order a swipe walks', () {
     expect(UserSection.values.first, UserSection.dashboard);
 
@@ -17,7 +21,7 @@ void main() {
     // other.
     expect(
       UserSection.values.map((s) => s.name).toList(),
-      ['dashboard', 'analysis', 'history', 'activity', 'messages'],
+      ['dashboard', 'analysis', 'history', 'activity', 'messages', 'assistant'],
     );
   });
 
@@ -25,7 +29,7 @@ void main() {
     // Wrapping would put one swipe from the last entry onto the Dashboard,
     // which reads as losing your place rather than moving.
     expect(nextSection(UserSection.dashboard, -1), UserSection.dashboard);
-    expect(nextSection(UserSection.messages, 1), UserSection.messages);
+    expect(nextSection(UserSection.assistant, 1), UserSection.assistant);
   });
 
   test('stepping moves exactly one place', () {

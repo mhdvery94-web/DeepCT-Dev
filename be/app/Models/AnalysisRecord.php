@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AnalysisRecord extends EloquentModel
 {
     protected $fillable = [
+        'model_snapshot',
         'job_id',
         'user_id',
         'model_id',
@@ -46,6 +47,7 @@ class AnalysisRecord extends EloquentModel
      * string and every `->toIso8601String()` call on it fails.
      */
     protected $casts = [
+        'model_snapshot' => 'array',
         'interpolated_frames' => 'array',
         'frame_provenance' => 'array',
         'validation' => 'array',

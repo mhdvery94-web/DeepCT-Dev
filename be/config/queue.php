@@ -40,7 +40,19 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // CT jobs can run for 7200 seconds. Never release their lease early,
+            // including when an existing environment still specifies 90 seconds.
+            'retry_after' => max(7260, (int) env('DB_QUEUE_RETRY_AFTER', 7260)),
+            'after_commit' => false,
+        ],
+
+        'llm' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'llm',
+            // Dedicated worker/job timeout is 300 seconds.
+            'retry_after' => 360,
             'after_commit' => false,
         ],
 
