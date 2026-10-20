@@ -14,6 +14,7 @@ import 'prediction_history_screen.dart';
 import 'upload_screen.dart';
 import 'user_activity_screen.dart';
 import 'user_home_screen.dart';
+import '../assistant/research_assistant_screen.dart';
 
 /// Navigation destinations available to a researcher.
 ///
@@ -24,7 +25,8 @@ enum UserSection {
   analysis('New Analysis', Icons.auto_awesome_outlined),
   history('Results & History', Icons.folder_outlined),
   activity('My Activity', Icons.history),
-  messages('Messages', Icons.forum_outlined);
+  messages('Messages', Icons.forum_outlined),
+  assistant('Asisten riset', Icons.auto_awesome_outlined);
 
   const UserSection(this.label, this.icon);
 
@@ -102,6 +104,8 @@ class _UserShellState extends State<UserShell> {
         );
       case UserSection.activity:
         return const UserActivityScreen();
+      case UserSection.assistant:
+        return const ResearchAssistantScreen();
       case UserSection.analysis:
         return UploadScreen(
           // Jump straight to the queue so the user sees their job progressing.

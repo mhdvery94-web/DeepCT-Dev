@@ -1,0 +1,33 @@
+{
+  "generator": "scikit-image 0.25.2",
+  "reference_formula": "a[y,x]=(x*1237+y*1973+x*y*83)%65536",
+  "candidate_formula": "perturbed: clip(a+((x+2*y)%5-2)*311,0,65535); inverted: 65535-a; both uint16",
+  "parameters": {
+    "data_range": 65535,
+    "win_size": 7,
+    "gaussian_weights": false,
+    "use_sample_covariance": true,
+    "K1": 0.01,
+    "K2": 0.03
+  },
+  "cases": [
+    {
+      "width": 7,
+      "height": 7,
+      "kind": "perturbed",
+      "ssim": 0.9970377947648673
+    },
+    {
+      "width": 11,
+      "height": 9,
+      "kind": "perturbed",
+      "ssim": 0.9972187370991985
+    },
+    {
+      "width": 13,
+      "height": 10,
+      "kind": "inverted",
+      "ssim": -0.6051852977831791
+    }
+  ]
+}
