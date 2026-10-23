@@ -9,7 +9,7 @@ use App\Models\User;
 use App\Services\AiContext;
 use App\Services\AiGroundedReply;
 use App\Services\AiProviderException;
-use App\Services\OllamaClient;
+use App\Services\AssistantProvider;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\TimeoutExceededException;
@@ -40,7 +40,7 @@ class GenerateAiReply implements ShouldQueue
             && AiConversation::where('user_id', $request->user_id)->whereKey($request->ai_conversation_id)->exists();
     }
 
-    public function handle(AiContext $context, OllamaClient $client): void
+    public function handle(AiContext $context, AssistantProvider $client): void
     {
         $request = AiRequest::find($this->requestId);
         if (! $request || $request->status !== 'queued') {
@@ -87,7 +87,8 @@ class GenerateAiReply implements ShouldQueue
                 $message = AiMessage::create(['ai_conversation_id' => $request->ai_conversation_id,
                     'role' => 'assistant', 'content' => $reply['answer']]);
                 $request->update(['status' => 'completed', 'assistant_message_id' => $message->id,
-                    'sources' => $sources, 'metrics' => $reply['metrics'], 'finished_at' => now()]);
+                    'model' => $reply['model'], 'sources' => $sources,
+                    'metrics' => $reply['metrics'], 'finished_at' => now()]);
                 AiConversation::whereKey($request->ai_conversation_id)->update(['updated_at' => now()]);
             });
         } catch (AiProviderException $e) {

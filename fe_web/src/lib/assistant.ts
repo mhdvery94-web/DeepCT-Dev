@@ -1,7 +1,7 @@
 export type AiMessage = { id: number; role: "user" | "assistant"; content: string; created_at: string };
 export type AiConversation = { id: number; title: string; created_at: string; updated_at: string };
 export type AiPagination = { current_page: number; last_page: number; per_page: number; total: number };
-export type AiStatus = { mode?: "metadata" | "freeform"; enabled: boolean; model: string; experimental: true; prompt_version: string; limits: { message_characters: number; requests_per_day: number; queue: number; context_tokens: number; output_tokens: number; history_messages: number; history_characters: number; active_requests_per_user: number } };
+export type AiStatus = { mode?: "metadata" | "freeform"; provider?: "ollama" | "gemini" | "hybrid"; enabled: boolean; model: string; experimental: true; prompt_version: string; limits: { message_characters: number; requests_per_day: number; queue: number; context_tokens: number; output_tokens: number; history_messages: number; history_characters: number; active_requests_per_user: number } };
 export type EvidenceFact = { label: string; value: string };
 export type EvidenceMetrics = Record<string, number | null>;
 export type EvidenceMeasurement = { metrics: EvidenceMetrics; metricStatus: { psnr: string; ssim: string } };
@@ -151,7 +151,7 @@ export function assistantErrorMessage(value: unknown): string {
   return text && !/(?:exception|[a-z]*error:|stack trace|[{}])/i.test(text) ? text : "Permintaan tidak dapat diselesaikan. Coba lagi.";
 }
 export function requestFailureLabel(code: unknown): string {
-  const labels: Record<string, string> = { provider_timeout: "Batas waktu jawaban terlampaui (provider_timeout)", worker_timeout: "Batas waktu pemrosesan terlampaui (worker_timeout)", context_unavailable: "Konteks tidak tersedia (context_unavailable)", generation_busy: "Pemrosesan sedang sibuk (generation_busy)", access_revoked: "Akses tidak tersedia (access_revoked)" };
+  const labels: Record<string, string> = { provider_timeout: "Batas waktu jawaban terlampaui (provider_timeout)", provider_rate_limited: "Layanan AI mencapai batas permintaan (provider_rate_limited)", provider_unavailable: "Layanan AI sedang tidak tersedia (provider_unavailable)", provider_configuration: "Konfigurasi layanan AI belum valid (provider_configuration)", provider_blocked: "Permintaan diblokir oleh kebijakan keamanan AI (provider_blocked)", invalid_output: "Jawaban AI tidak valid (invalid_output)", worker_timeout: "Batas waktu pemrosesan terlampaui (worker_timeout)", context_unavailable: "Konteks tidak tersedia (context_unavailable)", generation_busy: "Pemrosesan sedang sibuk (generation_busy)", access_revoked: "Akses tidak tersedia (access_revoked)" };
   return typeof code === "string" && Object.hasOwn(labels, code) ? labels[code] : "Jawaban gagal dibuat";
 }
 export const analysisStatusLabels: Record<string, string> = { uploaded: "Unggahan siap ditinjau", pending: "Dalam antrean", processing: "Sedang diproses", completed: "Selesai", failed: "Gagal", unknown: "Status tidak diketahui" };

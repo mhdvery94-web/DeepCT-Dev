@@ -298,6 +298,35 @@ owned runtime and CT work under the existing lock; see the
 [model-server recovery procedure](../deepct-model-server/README.md#private-gpu-assistant-gateway).
 Do not clear that marker merely because a health endpoint responds.
 
+### Gemini Flash classifier
+
+The bounded metadata profile can use Gemini without making prediction evidence
+external. Set `AI_ASSISTANT_PROVIDER=gemini` for Gemini only or `hybrid` for
+Gemini primary with the approved Ollama model as a bounded fallback. Configure
+`AI_GEMINI_MODEL=gemini-2.5-flash`, `AI_GEMINI_TIMEOUT=30`, and store
+`GEMINI_API_KEY` only in the backend deployment secret manager. The key is sent
+in the `x-goog-api-key` header to the fixed
+`generativelanguage.googleapis.com` endpoint; it is never accepted from a
+frontend, placed in a URL, or logged. Restrict the key in Google Cloud to the
+Generative Language API and rotate any key exposed in chat, source, logs, or a
+shell command.
+
+Gemini receives only the existing topic-classification instruction and the
+current user question. It never receives the owned analysis snapshot, metrics,
+model identity, filenames, TIFF data, prior history, bearer tokens, or database
+access. Laravel still validates the one-field topic JSON and renders the final
+answer deterministically from authorized evidence. Gemini is fail-closed when
+metadata mode is disabled. In hybrid mode, only timeout, rate-limit, transient
+availability, or malformed-output failures fall back to Ollama. Authentication,
+configuration, and provider safety blocks do not fall back. The completed
+request records the model that actually classified it.
+
+Before deployment, call `GET /api/ai/status` and confirm `provider`, `model`,
+`mode=metadata`, and the prompt version. A real-key canary must then prove a
+valid grounded answer, no secret in logs/responses, and expected fallback. Unit
+tests use placeholder keys and mocked provider responses; they are not evidence
+that a real Google credential or quota works.
+
 ## Synthetic freeform comparison (evaluation only)
 
 `scripts/evaluate-assistant.py` compares exactly `deepseek-r1:7b` or

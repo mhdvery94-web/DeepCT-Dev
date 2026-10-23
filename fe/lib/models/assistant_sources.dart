@@ -390,6 +390,15 @@ String assistantErrorMessage(dynamic value) {
 String requestFailureLabel(dynamic code) =>
     const {
       'provider_timeout': 'Batas waktu jawaban terlampaui (provider_timeout)',
+      'provider_rate_limited':
+          'Layanan AI mencapai batas permintaan (provider_rate_limited)',
+      'provider_unavailable':
+          'Layanan AI sedang tidak tersedia (provider_unavailable)',
+      'provider_configuration':
+          'Konfigurasi layanan AI belum valid (provider_configuration)',
+      'provider_blocked':
+          'Permintaan diblokir oleh kebijakan keamanan AI (provider_blocked)',
+      'invalid_output': 'Jawaban AI tidak valid (invalid_output)',
       'worker_timeout': 'Batas waktu pemrosesan terlampaui (worker_timeout)',
       'context_unavailable': 'Konteks tidak tersedia (context_unavailable)',
       'generation_busy': 'Pemrosesan sedang sibuk (generation_busy)',

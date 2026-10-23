@@ -323,6 +323,15 @@ void main() {
       requestFailureLabel('provider_timeout'),
       contains('provider_timeout'),
     );
+    for (final code in [
+      'provider_rate_limited',
+      'provider_unavailable',
+      'provider_configuration',
+      'provider_blocked',
+      'invalid_output',
+    ]) {
+      expect(requestFailureLabel(code), contains(code));
+    }
   });
   final corpus =
       jsonDecode(File('../be/resources/ai/sop.json').readAsStringSync())

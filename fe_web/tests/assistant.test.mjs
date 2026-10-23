@@ -37,6 +37,9 @@ test('unknown errors never reveal raw paths, JSON or parser exceptions',async()=
   for(const value of ['/etc/private','{"exception":"bad"}','TypeError: invalid data',{},null]) assert.equal(assistantErrorMessage(value),'Permintaan tidak dapat diselesaikan. Coba lagi.');
   assert.equal(requestFailureLabel('/etc/private'),'Jawaban gagal dibuat');
   assert.match(requestFailureLabel('provider_timeout'),/provider_timeout/);
+  for (const code of ['provider_rate_limited','provider_unavailable','provider_configuration','provider_blocked','invalid_output']) {
+    assert.match(requestFailureLabel(code),new RegExp(code));
+  }
 });
 test('picker distinguishes follow-up inheritance from an explicit clear',async()=>{
   const {contextSelection}=await import('../src/lib/assistant.ts');

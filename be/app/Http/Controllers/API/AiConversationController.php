@@ -20,7 +20,8 @@ class AiConversationController extends Controller
     public function status()
     {
         return response()->json(['success' => true, 'data' => [
-            'enabled' => config('ai.enabled'), 'model' => config('ai.model'),
+            'enabled' => config('ai.enabled'), 'provider' => config('ai.provider'),
+            'model' => config('ai.model'),
             'mode' => config('ai.metadata_mode') ? 'metadata' : 'freeform',
             'prompt_version' => (config('ai.metadata_mode') ? AiGroundedReply::PROMPT_VERSION : config('ai.prompt_version')), 'experimental' => true,
             'limits' => [
