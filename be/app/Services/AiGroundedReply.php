@@ -29,7 +29,7 @@ class AiGroundedReply
         } catch (\JsonException) {
             // Deterministic owned overview is the safe classifier fallback.
         }
-        $topic = $this->intent($question) ?? $topic;
+        $topic = $this->classifyIntent($question) ?? $topic;
         if ($topic === 'scope') {
             return 'Saya dapat menjelaskan status, metrik, dan ketersediaan berkas dari metadata analisis milik Anda. '
                 .'Saya tidak membaca piksel TIFF, menjalankan prediksi, mengubah data, atau mengakses rahasia maupun analisis pengguna lain.';
@@ -69,7 +69,7 @@ class AiGroundedReply
     }
 
     /** Explicit requests outrank advisory classification; ordinary scientific terms stay in scope. */
-    private function intent(string $question): ?string
+    public function classifyIntent(string $question): ?string
     {
         // Quoted prohibitions are context unless the request explicitly reverses them.
         // Keep their target when asked to ignore a rule or do its opposite.
