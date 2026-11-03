@@ -69,8 +69,14 @@ class CanaryGeminiAssistant extends Command
                 ]]);
                 $decoded = json_decode($result['answer'] ?? '', true, 8, JSON_THROW_ON_ERROR);
                 $actual = is_array($decoded) ? ($decoded['topic'] ?? null) : null;
-            } catch (AiProviderException|\JsonException $exception) {
-                $this->error(sprintf('case=%d expected=%s result=provider_failure', $index + 1, $expected));
+            } catch (AiProviderException $exception) {
+                // AiProviderException contains only our bounded public code,
+                // never an upstream body or credential.
+                $this->error(sprintf('case=%d expected=%s result=%s', $index + 1, $expected, $exception->getMessage()));
+
+                return self::FAILURE;
+            } catch (\JsonException) {
+                $this->error(sprintf('case=%d expected=%s result=invalid_output', $index + 1, $expected));
 
                 return self::FAILURE;
             }
