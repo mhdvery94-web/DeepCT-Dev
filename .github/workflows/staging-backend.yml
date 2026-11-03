@@ -6,6 +6,12 @@ on:
     branches: [staging]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      activate_gemini:
+        description: 'Run the real-provider canary and activate Gemini only if it passes'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -78,6 +84,7 @@ jobs:
             --single-transaction --quick --routines \
             -h "${DB_HOST:-127.0.0.1}" -u "${DB_USERNAME:-root}" \
             "$DB_DATABASE" | gzip > "storage/backups/db-$STAMP.sql.gz"
+          # shellcheck disable=SC2012
           ls -1t storage/backups/db-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm --
 
           php artisan migrate --force
@@ -98,7 +105,7 @@ jobs:
             deepct-staging-scheduler
 
           ready=false
-          for attempt in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -fsS http://100.85.94.74:8001/api/health >/dev/null; then
               ready=true
               break
@@ -108,7 +115,7 @@ jobs:
           test "$ready" = true
 
           VERSION="$(curl -fsS http://127.0.0.1:8003/staging/api/version)"
-          ACTUAL_SHA="$(php -r '$d=json_decode(stream_get_contents(STDIN), true); echo $d["data"]["commit_sha"] ?? "";' <<< "$VERSION")"
+          ACTUAL_SHA="$(php -r "\$d=json_decode(stream_get_contents(STDIN), true); echo \$d['data']['commit_sha'] ?? '';" <<< "$VERSION")"
           test "$ACTUAL_SHA" = "$DEPLOY_SHA"
           curl -fsS http://127.0.0.1:8003/api/health >/dev/null
 
@@ -116,4 +123,94 @@ jobs:
             echo '### Staging backend deployed'
             echo "Commit: $DEPLOY_SHA"
             echo 'Production API and production database were not targeted.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run bounded real-provider Gemini canary
+        if: github.event_name == 'workflow_dispatch' && inputs.activate_gemini
+        env:
+          STAGING_GEMINI_API_KEY: ${{ secrets.STAGING_GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_GEMINI_API_KEY"
+          cd "$DEPLOY_PATH"
+          php artisan app:canary-gemini-assistant
+
+      - name: Back up configuration and record current LLM worker state
+        if: github.event_name == 'workflow_dispatch' && inputs.activate_gemini
+        run: |
+          set -euo pipefail
+          BACKUP_PATH="$DEPLOY_PATH/.env.before-gemini-$GITHUB_RUN_ID"
+          install -m 0600 "$DEPLOY_PATH/.env" "$BACKUP_PATH"
+          echo "BACKUP_PATH=$BACKUP_PATH" >> "$GITHUB_ENV"
+          if sudo -n systemctl is-active --quiet deepct-staging-llm; then
+            echo 'LLM_WAS_ACTIVE=true' >> "$GITHUB_ENV"
+          else
+            echo 'LLM_WAS_ACTIVE=false' >> "$GITHUB_ENV"
+          fi
+
+      - name: Activate Gemini only after canary passes
+        if: github.event_name == 'workflow_dispatch' && inputs.activate_gemini
+        env:
+          STAGING_GEMINI_API_KEY: ${{ secrets.STAGING_GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+          php "$GITHUB_WORKSPACE/be/scripts/configure-staging-gemini.php" "$DEPLOY_PATH/.env"
+          cd "$DEPLOY_PATH"
+          APP_COMMIT_SHA="$DEPLOY_SHA" php artisan config:cache
+
+          sudo -n install -m 0644 \
+            "$GITHUB_WORKSPACE/be/deploy/staging/deepct-staging-llm.service" \
+            /etc/systemd/system/deepct-staging-llm.service
+          sudo -n systemctl daemon-reload
+          sudo -n systemctl enable --now deepct-staging-llm
+          sudo -n systemctl restart deepct-staging-api
+
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl -fsS http://100.85.94.74:8001/api/health >/dev/null \
+              && sudo -n systemctl is-active --quiet deepct-staging-llm; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" = true
+          curl -fsS http://127.0.0.1:8003/staging/api/health >/dev/null
+
+      - name: Roll back Gemini staging activation after failure
+        if: >-
+          failure()
+          && github.event_name == 'workflow_dispatch'
+          && inputs.activate_gemini
+          && env.BACKUP_PATH != ''
+        run: |
+          set -euo pipefail
+          install -m 0600 "$BACKUP_PATH" "$DEPLOY_PATH/.env"
+          cd "$DEPLOY_PATH"
+          php artisan config:cache
+          sudo -n systemctl restart deepct-staging-api
+          if [ "${LLM_WAS_ACTIVE:-false}" = true ]; then
+            sudo -n systemctl restart deepct-staging-llm
+          else
+            sudo -n systemctl disable --now deepct-staging-llm || true
+          fi
+          rm -- "$BACKUP_PATH"
+
+      - name: Remove temporary Gemini configuration backup
+        if: >-
+          success()
+          && github.event_name == 'workflow_dispatch'
+          && inputs.activate_gemini
+          && env.BACKUP_PATH != ''
+        run: rm -- "$BACKUP_PATH"
+
+      - name: Record Gemini activation without secret material
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.activate_gemini
+        run: |
+          {
+            echo '### Staging Gemini canary passed'
+            echo '- Model: gemini-2.5-flash-lite'
+            echo '- Bounded intent cases: 8/8'
+            echo '- Isolated staging LLM worker: active'
+            echo '- Production configuration: unchanged'
           } >> "$GITHUB_STEP_SUMMARY"
