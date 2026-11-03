@@ -94,6 +94,28 @@ class GeminiAssistantTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_staging_canary_reports_only_the_bounded_provider_failure_code(): void
+    {
+        $this->app->detectEnvironment(fn () => 'staging');
+        putenv('STAGING_GEMINI_API_KEY=test-only-staging-secret');
+        Http::fake(['https://generativelanguage.googleapis.com/*' => Http::response([
+            'error' => ['message' => 'PRIVATE-UPSTREAM-DETAIL'],
+        ], 429)]);
+
+        try {
+            $exit = Artisan::call('app:canary-gemini-assistant');
+            $output = Artisan::output();
+        } finally {
+            putenv('STAGING_GEMINI_API_KEY');
+        }
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('result=provider_rate_limited', $output);
+        $this->assertStringNotContainsString('PRIVATE', $output);
+        $this->assertStringNotContainsString('test-only-staging-secret', $output);
+        Http::assertSentCount(1);
+    }
+
     public function test_gemini_uses_fixed_header_authenticated_structured_endpoint(): void
     {
         Http::fake(['https://generativelanguage.googleapis.com/*' => Http::response($this->geminiResponse())]);

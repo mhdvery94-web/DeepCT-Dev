@@ -103,6 +103,11 @@ jobs:
             deepct-staging-api \
             deepct-staging-queue \
             deepct-staging-scheduler
+          # The LLM worker is optional until its first approved canary. Once
+          # installed, it must reload the same freshly cached config as the API.
+          if sudo -n systemctl is-active --quiet deepct-staging-llm; then
+            sudo -n systemctl restart deepct-staging-llm
+          fi
 
           ready=false
           for _ in $(seq 1 30); do
