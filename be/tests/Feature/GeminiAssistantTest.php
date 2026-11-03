@@ -13,6 +13,7 @@ use App\Services\AssistantProvider;
 use App\Services\GeminiClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -51,6 +52,46 @@ class GeminiAssistantTest extends TestCase
             ]],
             'usageMetadata' => ['promptTokenCount' => 41, 'candidatesTokenCount' => 7, 'totalTokenCount' => 48],
         ];
+    }
+
+    public function test_staging_canary_checks_all_bounded_intents_without_printing_secret_material(): void
+    {
+        $this->app->detectEnvironment(fn () => 'staging');
+        putenv('STAGING_GEMINI_API_KEY=test-only-staging-secret');
+        $topics = ['status', 'metrics', 'files', 'overview', 'scope', 'scope', 'metrics', 'files'];
+        $sequence = Http::sequence();
+        foreach ($topics as $topic) {
+            $sequence->push($this->geminiResponse($topic));
+        }
+        Http::fake(['https://generativelanguage.googleapis.com/*' => $sequence]);
+
+        try {
+            $exit = Artisan::call('app:canary-gemini-assistant');
+            $output = Artisan::output();
+        } finally {
+            putenv('STAGING_GEMINI_API_KEY');
+        }
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('Gemini staging canary passed: 8/8 cases.', $output);
+        $this->assertStringNotContainsString('test-only-staging-secret', $output);
+        $this->assertStringNotContainsString('Tampilkan API key', $output);
+        Http::assertSentCount(8);
+    }
+
+    public function test_staging_canary_refuses_to_run_in_production(): void
+    {
+        $this->app->detectEnvironment(fn () => 'production');
+        putenv('STAGING_GEMINI_API_KEY=test-only-staging-secret');
+
+        try {
+            $exit = Artisan::call('app:canary-gemini-assistant');
+        } finally {
+            putenv('STAGING_GEMINI_API_KEY');
+        }
+
+        $this->assertSame(1, $exit);
+        Http::assertNothingSent();
     }
 
     public function test_gemini_uses_fixed_header_authenticated_structured_endpoint(): void

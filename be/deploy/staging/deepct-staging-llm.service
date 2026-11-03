@@ -1,0 +1,19 @@
+[Unit]
+Description=DeepCT isolated staging assistant queue worker
+After=network-online.target mariadb.service deepct-staging-api.service
+
+[Service]
+Type=simple
+User=jihyo
+WorkingDirectory=/home/jihyo/deepct-staging/app
+ExecStart=/usr/bin/php artisan queue:work database --queue=llm --timeout=300 --tries=1 --memory=256
+Restart=always
+RestartSec=5
+MemoryMax=384M
+MemorySwapMax=0
+CPUQuota=75%
+KillMode=control-group
+TimeoutStopSec=360
+
+[Install]
+WantedBy=multi-user.target
