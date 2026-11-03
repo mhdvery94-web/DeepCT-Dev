@@ -4,7 +4,7 @@ use App\Services\AiGroundedReply;
 
 $provider = strtolower((string) env('AI_ASSISTANT_PROVIDER', 'ollama'));
 $ollamaModel = (string) env('AI_OLLAMA_MODEL', env('AI_ASSISTANT_MODEL', 'deepseek-r1:1.5b'));
-$geminiModel = (string) env('AI_GEMINI_MODEL', 'gemini-2.5-flash');
+$geminiModel = (string) env('AI_GEMINI_MODEL', 'gemini-2.5-flash-lite');
 
 return [
     // Both switches are required. A provider configuration alone must never

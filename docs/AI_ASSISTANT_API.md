@@ -303,7 +303,7 @@ Do not clear that marker merely because a health endpoint responds.
 The bounded metadata profile can use Gemini without making prediction evidence
 external. Set `AI_ASSISTANT_PROVIDER=gemini` for Gemini only or `hybrid` for
 Gemini primary with the approved Ollama model as a bounded fallback. Configure
-`AI_GEMINI_MODEL=gemini-2.5-flash`, `AI_GEMINI_TIMEOUT=30`, and store
+`AI_GEMINI_MODEL=gemini-2.5-flash-lite`, `AI_GEMINI_TIMEOUT=30`, and store
 `GEMINI_API_KEY` only in the backend deployment secret manager. The key is sent
 in the `x-goog-api-key` header to the fixed
 `generativelanguage.googleapis.com` endpoint; it is never accepted from a
@@ -326,6 +326,15 @@ Before deployment, call `GET /api/ai/status` and confirm `provider`, `model`,
 valid grounded answer, no secret in logs/responses, and expected fallback. Unit
 tests use placeholder keys and mocked provider responses; they are not evidence
 that a real Google credential or quota works.
+
+The 3 November 2026 direct-provider screening found that
+`gemini-2.5-flash` returned `NOT_FOUND`, while
+`gemini-2.5-flash-lite` classified all 8 bounded DeepCT intent cases correctly
+with 0.948 s median and 1.396 s maximum response time. The comparison
+`gemini-3.5-flash-lite` also scored 8/8 but was slower (1.248 s median,
+1.734 s maximum). This screening contained synthetic questions only and no
+prediction metadata. It selects the staging candidate; it does not replace the
+authenticated application canary or authorize production activation.
 
 ## Synthetic freeform comparison (evaluation only)
 

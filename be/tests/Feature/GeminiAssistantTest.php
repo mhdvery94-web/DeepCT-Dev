@@ -28,8 +28,8 @@ class GeminiAssistantTest extends TestCase
             'ai.enabled' => true,
             'ai.metadata_mode' => true,
             'ai.provider' => 'gemini',
-            'ai.model' => 'gemini-2.5-flash',
-            'ai.gemini_model' => 'gemini-2.5-flash',
+            'ai.model' => 'gemini-2.5-flash-lite',
+            'ai.gemini_model' => 'gemini-2.5-flash-lite',
             'ai.gemini_api_key' => 'test-only-gemini-key',
             'ai.gemini_timeout' => 30,
             'ai.output_tokens' => 128,
@@ -57,7 +57,7 @@ class GeminiAssistantTest extends TestCase
     {
         Http::fake(['https://generativelanguage.googleapis.com/*' => Http::response($this->geminiResponse())]);
 
-        $reply = app(GeminiClient::class)->generate('gemini-2.5-flash', [[
+        $reply = app(GeminiClient::class)->generate('gemini-2.5-flash-lite', [[
             'role' => 'user', 'content' => 'Klasifikasikan pertanyaan ini.',
         ]]);
 
@@ -65,7 +65,7 @@ class GeminiAssistantTest extends TestCase
         $this->assertSame(['prompt_eval_count' => 41, 'eval_count' => 7], $reply['metrics']);
         Http::assertSent(function ($request) {
             $this->assertSame(
-                'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+                'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
                 $request->url(),
             );
             $this->assertTrue($request->hasHeader('x-goog-api-key', 'test-only-gemini-key'));
@@ -90,7 +90,7 @@ class GeminiAssistantTest extends TestCase
             Http::preventStrayRequests();
             Http::fake(['https://generativelanguage.googleapis.com/*' => Http::response($body, $status)]);
             try {
-                app(AssistantProvider::class)->generate('gemini-2.5-flash', [['role' => 'user', 'content' => 'Question']]);
+                app(AssistantProvider::class)->generate('gemini-2.5-flash-lite', [['role' => 'user', 'content' => 'Question']]);
                 $this->fail('Unsafe or misconfigured provider output must not be accepted.');
             } catch (AiProviderException $exception) {
                 $this->assertSame($expected, $exception->getMessage());
@@ -117,7 +117,7 @@ class GeminiAssistantTest extends TestCase
                     'message' => ['content' => '{"topic":"status"}'], 'prompt_eval_count' => 9]);
             });
 
-            $reply = app(AssistantProvider::class)->generate('gemini-2.5-flash', [['role' => 'user', 'content' => 'Status?']]);
+            $reply = app(AssistantProvider::class)->generate('gemini-2.5-flash-lite', [['role' => 'user', 'content' => 'Status?']]);
             $this->assertSame('deepseek-r1:7b', $reply['model']);
             $this->assertSame('{"topic":"status"}', $reply['answer']);
             $this->assertCount(2, Http::recorded());
@@ -131,7 +131,7 @@ class GeminiAssistantTest extends TestCase
         foreach ([['ai.gemini_api_key' => null], ['ai.metadata_mode' => false]] as $override) {
             config($override);
             try {
-                app(AssistantProvider::class)->generate('gemini-2.5-flash', [['role' => 'user', 'content' => 'Question']]);
+                app(AssistantProvider::class)->generate('gemini-2.5-flash-lite', [['role' => 'user', 'content' => 'Question']]);
                 $this->fail('Gemini must be fail-closed outside the bounded metadata profile.');
             } catch (AiProviderException $exception) {
                 $this->assertSame('provider_configuration', $exception->getMessage());
@@ -166,7 +166,7 @@ class GeminiAssistantTest extends TestCase
 
         $request = AiRequest::findOrFail($requestId);
         $this->assertSame('completed', $request->status);
-        $this->assertSame('gemini-2.5-flash', $request->model);
+        $this->assertSame('gemini-2.5-flash-lite', $request->model);
         $this->assertEquals(['prompt_eval_count' => 41, 'eval_count' => 7], $request->metrics);
         $answer = AiMessage::findOrFail($request->assistant_message_id)->content;
         $this->assertStringContainsString('MAE: 0.25', $answer);
@@ -182,6 +182,6 @@ class GeminiAssistantTest extends TestCase
         });
         $this->apiAs($token)->getJson('/api/ai/status')->assertOk()
             ->assertJsonPath('data.provider', 'gemini')
-            ->assertJsonPath('data.model', 'gemini-2.5-flash');
+            ->assertJsonPath('data.model', 'gemini-2.5-flash-lite');
     }
 }
