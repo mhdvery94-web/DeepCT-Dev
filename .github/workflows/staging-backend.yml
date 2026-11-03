@@ -1,0 +1,119 @@
+name: Deploy staging backend
+
+on:
+  workflow_run:
+    workflows: [Release]
+    branches: [staging]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raspi-staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy isolated Raspberry Pi staging
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/staging')
+    runs-on: [self-hosted, Linux, ARM64, deepct-raspi]
+    env:
+      DEPLOY_PATH: /home/jihyo/deepct-staging/app
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Synchronize staging source
+        run: |
+          set -euo pipefail
+          test -f "$DEPLOY_PATH/.env"
+          rsync -az --delete --human-readable --stats \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='storage/' \
+            --exclude='vendor/' \
+            --exclude='node_modules/' \
+            --exclude='rr' \
+            --exclude='rr.exe' \
+            --exclude='.rr.yaml' \
+            --exclude='public/build' \
+            --exclude='public/storage' \
+            --exclude='auth.json' \
+            --exclude='.git/' \
+            be/ "$DEPLOY_PATH"/
+
+      - name: Install, back up and migrate staging
+        run: |
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+
+          mkdir -p \
+            storage/app/private \
+            storage/app/public \
+            storage/framework/cache/data \
+            storage/framework/sessions \
+            storage/framework/testing \
+            storage/framework/views \
+            storage/logs \
+            storage/backups
+
+          composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+          npm ci --omit=dev --no-audit --no-fund
+
+          env_value() { sed -n "s/^$1=//p" .env | tail -1 | tr -d "\"'"; }
+          DB_DATABASE="$(env_value DB_DATABASE)"
+          DB_USERNAME="$(env_value DB_USERNAME)"
+          DB_PASSWORD="$(env_value DB_PASSWORD)"
+          DB_HOST="$(env_value DB_HOST)"
+          test "$DB_DATABASE" = "deepct_staging"
+
+          STAMP="$(date +%Y%m%d-%H%M%S)"
+          MYSQL_PWD="$DB_PASSWORD" mysqldump \
+            --single-transaction --quick --routines \
+            -h "${DB_HOST:-127.0.0.1}" -u "${DB_USERNAME:-root}" \
+            "$DB_DATABASE" | gzip > "storage/backups/db-$STAMP.sql.gz"
+          ls -1t storage/backups/db-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm --
+
+          php artisan migrate --force
+          php artisan app:cleanup-retired-data
+          APP_COMMIT_SHA="$DEPLOY_SHA" \
+            APP_BUILD_TIME_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+          chmod -R ug+rwX bootstrap/cache storage || true
+
+      - name: Restart and verify isolated services
+        run: |
+          set -euo pipefail
+          sudo -n systemctl restart \
+            deepct-staging-api \
+            deepct-staging-queue \
+            deepct-staging-scheduler
+
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://100.85.94.74:8001/api/health >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" = true
+
+          VERSION="$(curl -fsS http://127.0.0.1:8003/staging/api/version)"
+          ACTUAL_SHA="$(php -r '$d=json_decode(stream_get_contents(STDIN), true); echo $d["data"]["commit_sha"] ?? "";' <<< "$VERSION")"
+          test "$ACTUAL_SHA" = "$DEPLOY_SHA"
+          curl -fsS http://127.0.0.1:8003/api/health >/dev/null
+
+          {
+            echo '### Staging backend deployed'
+            echo "Commit: $DEPLOY_SHA"
+            echo 'Production API and production database were not targeted.'
+          } >> "$GITHUB_STEP_SUMMARY"
