@@ -27,6 +27,13 @@ class GenerateAiReply implements ShouldQueue
 
     public bool $failOnTimeout = true;
 
+    /** Provider failures that retain a safe deterministic metadata answer. */
+    private const CLASSIFIER_FALLBACK_CODES = [
+        'provider_timeout',
+        'provider_rate_limited',
+        'provider_unavailable',
+    ];
+
     public function __construct(public int $requestId)
     {
         $this->onConnection('llm')->onQueue('llm');
@@ -40,7 +47,7 @@ class GenerateAiReply implements ShouldQueue
             && AiConversation::where('user_id', $request->user_id)->whereKey($request->ai_conversation_id)->exists();
     }
 
-    public function handle(AiContext $context, AssistantProvider $client): void
+    public function handle(AiContext $context, AssistantProvider $client, AiGroundedReply $grounded): void
     {
         $request = AiRequest::find($this->requestId);
         if (! $request || $request->status !== 'queued') {
@@ -70,9 +77,28 @@ class GenerateAiReply implements ShouldQueue
                 throw new AiProviderException('access_revoked');
             }
             $sources = $context->sources($request);
-            $reply = $client->generate($request->model, $context->messages($request, $sources));
+            $question = $context->question($request);
+            $intent = config('ai.metadata_mode') ? $grounded->classifyIntent($question) : null;
+            if ($intent === 'scope') {
+                // Secret, cross-user and mutation requests have an exact local
+                // refusal. They do not need to reach an external provider.
+                $reply = $this->classifierFallback('scope');
+            } else {
+                try {
+                    $reply = $client->generate($request->model, $context->messages($request, $sources));
+                } catch (AiProviderException $exception) {
+                    if (! config('ai.metadata_mode')
+                        || ! in_array($exception->getMessage(), self::CLASSIFIER_FALLBACK_CODES, true)) {
+                        throw $exception;
+                    }
+                    // The provider only chooses a topic. The final prose still
+                    // comes from owned backend evidence, so overview is a safe
+                    // default for an ambiguous question during provider outage.
+                    $reply = $this->classifierFallback($intent ?? 'overview');
+                }
+            }
             if (config('ai.metadata_mode')) {
-                $reply['answer'] = app(AiGroundedReply::class)->render($reply['answer'], $sources, $context->question($request));
+                $reply['answer'] = $grounded->render($reply['answer'], $sources, $question);
             }
             DB::transaction(function () use ($reply, $sources) {
                 $request = AiRequest::whereKey($this->requestId)->lockForUpdate()->first();
@@ -105,6 +131,16 @@ class GenerateAiReply implements ShouldQueue
                 $lock->release();
             }
         }
+    }
+
+    /** @return array{answer: string, metrics: array{classifier_fallback: int}, model: string} */
+    private function classifierFallback(string $topic): array
+    {
+        return [
+            'answer' => json_encode(['topic' => $topic], JSON_THROW_ON_ERROR),
+            'metrics' => ['classifier_fallback' => 1],
+            'model' => 'deterministic:'.AiGroundedReply::PROMPT_VERSION,
+        ];
     }
 
     private function markFailed(string $code): void
