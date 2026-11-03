@@ -17,7 +17,6 @@ type NavigationItem = readonly [string, IconName, string];
 
 const adminNavigation: readonly NavigationItem[] = [
   ["/dashboard", "dashboard", "Dashboard"],
-  ["/workspace/assistant", "message", "Asisten riset"],
   ["/admin/users", "users", "User management"],
   ["/admin/access-requests", "request", "Access requests"],
   ["/admin/messages", "message", "Messages"],
@@ -32,7 +31,6 @@ const adminNavigation: readonly NavigationItem[] = [
 
 const userNavigation: readonly NavigationItem[] = [
   ["/dashboard", "dashboard", "Dashboard"],
-  ["/workspace/assistant", "message", "Asisten riset"],
   ["/workspace/predictions", "prediction", "Predictions"],
   ["/workspace/models", "model", "Available models"],
   ["/workspace/messages", "message", "Messages"],

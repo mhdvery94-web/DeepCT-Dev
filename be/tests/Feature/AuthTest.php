@@ -176,6 +176,25 @@ class AuthTest extends TestCase
         $this->getJson('/api/health')->assertOk()->assertJsonPath('success', true);
     }
 
+    public function test_version_endpoint_is_public_and_exposes_only_deployment_identity(): void
+    {
+        config([
+            'app.env' => 'testing',
+            'build.commit_sha' => str_repeat('a', 40),
+            'build.built_at' => '2026-11-03T12:00:00Z',
+        ]);
+
+        $this->getJson('/api/version')->assertOk()->assertExactJson([
+            'success' => true,
+            'data' => [
+                'service' => 'deepct-api',
+                'environment' => 'testing',
+                'commit_sha' => str_repeat('a', 40),
+                'built_at' => '2026-11-03T12:00:00Z',
+            ],
+        ]);
+    }
+
     // -------------------------------------------------------- own password
 
     public function test_a_user_can_change_their_own_password(): void
