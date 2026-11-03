@@ -1,8 +1,12 @@
 <?php
 
 return [
-    // Activation requires a separate quality gate; disabled in every fresh environment.
-    'enabled' => (bool) env('AI_ASSISTANT_ENABLED', false),
+    // Two independent switches prevent an experimental provider from becoming
+    // public merely because an older deployment already enabled the worker.
+    // Release approval is added only after the real-provider canary passes.
+    'release_approved' => (bool) env('AI_ASSISTANT_RELEASE_APPROVED', false),
+    'enabled' => (bool) env('AI_ASSISTANT_ENABLED', false)
+        && (bool) env('AI_ASSISTANT_RELEASE_APPROVED', false),
     'metadata_mode' => (bool) env('AI_METADATA_MODE', false),
     'base_url' => env('AI_OLLAMA_BASE_URL', 'http://127.0.0.1:11434'),
     'token' => env('AI_OLLAMA_TOKEN'),

@@ -481,7 +481,9 @@ jobs:
           php artisan app:cleanup-retired-data
 
           echo "--- Caches"
-          php artisan config:cache
+          APP_COMMIT_SHA="$GITHUB_SHA" \
+            APP_BUILD_TIME_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            php artisan config:cache
           php artisan route:cache
           php artisan view:cache
 
