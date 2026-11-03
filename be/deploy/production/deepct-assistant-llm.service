@@ -1,0 +1,16 @@
+[Unit]
+Description=DeepCT dedicated production assistant queue worker
+After=network.target deepct-assistant-ollama.service
+Wants=deepct-assistant-ollama.service
+
+[Service]
+Type=simple
+User=jihyo
+WorkingDirectory=/var/www/deepct-ai
+ExecStart=/usr/bin/php artisan queue:work llm --queue=llm --timeout=300 --tries=1 --memory=256
+Restart=always
+RestartSec=5
+TimeoutStopSec=360
+
+[Install]
+WantedBy=multi-user.target
