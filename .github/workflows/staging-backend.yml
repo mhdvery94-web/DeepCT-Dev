@@ -162,7 +162,10 @@ jobs:
             "$GITHUB_WORKSPACE/be/deploy/staging/deepct-staging-llm.service" \
             /etc/systemd/system/deepct-staging-llm.service
           sudo -n systemctl daemon-reload
-          sudo -n systemctl enable --now deepct-staging-llm
+          sudo -n systemctl enable deepct-staging-llm
+          # queue:work is long-lived and keeps the configuration loaded at
+          # process start. Always restart it after replacing .env/config cache.
+          sudo -n systemctl restart deepct-staging-llm
           sudo -n systemctl restart deepct-staging-api
 
           ready=false
