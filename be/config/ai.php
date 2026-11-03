@@ -7,8 +7,11 @@ $ollamaModel = (string) env('AI_OLLAMA_MODEL', env('AI_ASSISTANT_MODEL', 'deepse
 $geminiModel = (string) env('AI_GEMINI_MODEL', 'gemini-2.5-flash');
 
 return [
-    // Activation requires a separate quality gate; disabled in every fresh environment.
-    'enabled' => (bool) env('AI_ASSISTANT_ENABLED', false),
+    // Both switches are required. A provider configuration alone must never
+    // publish an experimental assistant outside its approved canary.
+    'release_approved' => (bool) env('AI_ASSISTANT_RELEASE_APPROVED', false),
+    'enabled' => (bool) env('AI_ASSISTANT_ENABLED', false)
+        && (bool) env('AI_ASSISTANT_RELEASE_APPROVED', false),
     'metadata_mode' => (bool) env('AI_METADATA_MODE', false),
     // Gemini is restricted to metadata mode so prediction facts remain
     // deterministically rendered from owned backend evidence.

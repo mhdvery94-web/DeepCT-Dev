@@ -206,6 +206,32 @@ class AiAssistantTest extends TestCase
         $this->send($id)->assertStatus(503);
     }
 
+    public function test_environment_enable_switch_cannot_bypass_release_approval(): void
+    {
+        $environment = Env::getRepository();
+        $originalEnabled = $environment->get('AI_ASSISTANT_ENABLED');
+        $originalApproval = $environment->get('AI_ASSISTANT_RELEASE_APPROVED');
+        try {
+            $environment->set('AI_ASSISTANT_ENABLED', 'true');
+            $environment->clear('AI_ASSISTANT_RELEASE_APPROVED');
+            $candidate = require config_path('ai.php');
+            $this->assertFalse($candidate['enabled']);
+            $this->assertFalse($candidate['release_approved']);
+
+            $environment->set('AI_ASSISTANT_RELEASE_APPROVED', 'true');
+            $candidate = require config_path('ai.php');
+            $this->assertTrue($candidate['enabled']);
+            $this->assertTrue($candidate['release_approved']);
+        } finally {
+            $originalEnabled === null
+                ? $environment->clear('AI_ASSISTANT_ENABLED')
+                : $environment->set('AI_ASSISTANT_ENABLED', $originalEnabled);
+            $originalApproval === null
+                ? $environment->clear('AI_ASSISTANT_RELEASE_APPROVED')
+                : $environment->set('AI_ASSISTANT_RELEASE_APPROVED', $originalApproval);
+        }
+    }
+
     public function test_idempotency_and_one_active_request_apply_across_conversations(): void
     {
         $id = $this->conversation();
