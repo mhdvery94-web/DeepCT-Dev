@@ -78,7 +78,7 @@ class ActivateStagingModelCommandTest extends TestCase
                     'name' => 'fixture-v1-0-0', 'display_name' => 'Fixture', 'model_id' => 'fixture',
                     'version' => '1.0.0', 'sha256' => str_repeat('a', 64),
                     'endpoint' => '/predict/fixture/1.0.0', 'active' => true,
-                ]]);
+                ]]]);
             }
             if ($request->url() === 'https://tuf.internal/') {
                 return Http::response(['status' => 'ok']);
