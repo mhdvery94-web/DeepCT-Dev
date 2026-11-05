@@ -1,0 +1,67 @@
+name: Staging model acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Audit first; activation mutates staging availability only'
+        required: true
+        type: choice
+        options: [audit, activate]
+        default: audit
+      model_id:
+        description: 'Immutable managed model identifier'
+        required: true
+        default: 'ginet-tcd-revisi'
+      version:
+        description: 'Immutable semantic version'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-model-availability
+  cancel-in-progress: false
+
+jobs:
+  operator:
+    if: github.ref == 'refs/heads/staging'
+    name: Audit or activate retained staging model
+    runs-on: [self-hosted, Linux, ARM64, deepct-raspi]
+    steps:
+      - name: Require exact deployed staging source
+        env:
+          DEPLOY_PATH: /home/jihyo/deepct-staging/app
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          VERSION="$(curl -fsS http://127.0.0.1:8003/staging/api/version)"
+          ACTUAL_SHA="$(php -r '$d=json_decode(stream_get_contents(STDIN), true); echo $d["data"]["commit_sha"] ?? "";' <<< "$VERSION")"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+
+      - name: Run bounded staging operator control
+        env:
+          DEPLOY_PATH: /home/jihyo/deepct-staging/app
+          MODEL_ID: ${{ inputs.model_id }}
+          MODEL_VERSION: ${{ inputs.version }}
+          OPERATOR_ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          args=(models:activate-staging "$MODEL_ID" "$MODEL_VERSION" --no-interaction)
+          if [ "$OPERATOR_ACTION" = activate ]; then
+            args+=(--apply)
+          fi
+          php artisan "${args[@]}"
+
+      - name: Record safe result
+        run: |
+          {
+            echo '### Staging model operator completed'
+            echo "Action: ${{ inputs.action }}"
+            echo "Model: ${{ inputs.model_id }} ${{ inputs.version }}"
+            echo 'No production service or database was targeted.'
+          } >> "$GITHUB_STEP_SUMMARY"
