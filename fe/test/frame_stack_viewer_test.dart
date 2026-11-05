@@ -32,6 +32,19 @@ Widget _host(List<PredictionFrame> frames) => MaterialApp(
 );
 
 void main() {
+  testWidgets('preview has an explicit high-contrast back control', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_frames()));
+    await tester.pumpAndSettle();
+
+    final back = tester.widget<IconButton>(
+      find.byKey(const Key('frame-viewer-back')),
+    );
+    expect(back.tooltip, 'Back to frames');
+    expect((back.icon as Icon).color, Colors.white);
+  });
+
   testWidgets('a slider stands in for stepping through the stack', (
     tester,
   ) async {

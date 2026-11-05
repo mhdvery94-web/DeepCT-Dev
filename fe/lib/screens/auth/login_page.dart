@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../services/auth_provider.dart';
 import '../admin/admin_shell.dart';
 import 'password_gate.dart';
+import 'password_reset_request_page.dart';
 import '../messages/public_message_sheet.dart';
 import '../user/user_shell.dart';
 
@@ -306,9 +307,13 @@ class _LoginPageState extends State<LoginPage> {
 
           const SizedBox(height: 32),
 
-          // Footer Links
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          // Footer links wrap on narrow devices so the reset action never
+          // falls outside the viewport.
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 4,
+            runSpacing: 4,
             children: [
               TextButton(
                 onPressed: () {
@@ -317,6 +322,22 @@ class _LoginPageState extends State<LoginPage> {
                 },
                 child: Text(
                   'Request Access',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+              Text(' | ', style: Theme.of(context).textTheme.bodySmall),
+              TextButton(
+                key: const Key('reset-password-link'),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const PasswordResetRequestPage(),
+                  ),
+                ),
+                child: Text(
+                  'Reset Password to Default',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     decoration: TextDecoration.underline,
                   ),

@@ -33,6 +33,7 @@ class AccessRequestService {
     required String firstName,
     required String lastName,
     required String email,
+    required String phone,
     required String institution,
     String? reason,
   }) async {
@@ -42,6 +43,7 @@ class AccessRequestService {
         'first_name': firstName,
         'last_name': lastName,
         'email': email,
+        'phone': phone,
         'institution': institution,
         if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
       },
