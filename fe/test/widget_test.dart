@@ -214,4 +214,18 @@ void main() {
       expect(find.text('LOGIN'), findsOneWidget);
     });
   });
+
+  testWidgets('join request asks for the phone used by password recovery', (
+    tester,
+  ) async {
+    await _pumpAppAt(tester, const Size(390, 844));
+
+    expect(find.text('PHONE NUMBER'), findsOneWidget);
+    expect(
+      find.text(
+        'Use this same registered number when requesting a password reset.',
+      ),
+      findsOneWidget,
+    );
+  });
 }
