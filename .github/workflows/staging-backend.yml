@@ -12,6 +12,20 @@ on:
         required: false
         type: boolean
         default: false
+      model_operation:
+        description: 'Audit or activate one retained model in isolated staging'
+        required: false
+        type: choice
+        options: [none, audit, activate]
+        default: none
+      model_id:
+        description: 'Immutable managed model identifier'
+        required: false
+        default: 'ginet-tcd-revisi'
+      model_version:
+        description: 'Immutable semantic version'
+        required: false
+        default: '1.0.0'
 
 permissions:
   contents: read
@@ -139,6 +153,30 @@ jobs:
           test -n "$STAGING_GEMINI_API_KEY"
           cd "$DEPLOY_PATH"
           php artisan app:canary-gemini-assistant
+
+      - name: Audit or activate retained staging model
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && inputs.model_operation != 'none'
+        env:
+          MODEL_OPERATION: ${{ inputs.model_operation }}
+          MODEL_ID: ${{ inputs.model_id }}
+          MODEL_VERSION: ${{ inputs.model_version }}
+        run: |
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          args=(models:activate-staging "$MODEL_ID" "$MODEL_VERSION" --no-interaction)
+          if [ "$MODEL_OPERATION" = activate ]; then
+            args+=(--apply)
+          fi
+          php artisan "${args[@]}"
+
+          {
+            echo '### Staging model operator completed'
+            echo "Action: $MODEL_OPERATION"
+            echo "Model: $MODEL_ID $MODEL_VERSION"
+            echo 'No production service or database was targeted.'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Back up configuration and record current LLM worker state
         if: github.event_name == 'workflow_dispatch' && inputs.activate_gemini
