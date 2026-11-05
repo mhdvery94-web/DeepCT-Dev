@@ -35,6 +35,7 @@ class _LandingPageState extends State<LandingPage> {
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _institutionController = TextEditingController();
   final TextEditingController _reasonController = TextEditingController();
 
@@ -85,6 +86,7 @@ class _LandingPageState extends State<LandingPage> {
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _institutionController.dispose();
     _reasonController.dispose();
     super.dispose();
@@ -826,6 +828,27 @@ class _LandingPageState extends State<LandingPage> {
           const SizedBox(height: 24),
           _buildFormField(
             context,
+            'Phone Number',
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
+            hint: '+6281234567890',
+            validator: (v) {
+              final phone = v?.trim() ?? '';
+              if (phone.isEmpty) return 'Phone number is required';
+              if (!RegExp(r'^\+?[0-9][0-9 .()-]{7,28}$').hasMatch(phone)) {
+                return 'Enter a valid phone number';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Use this same registered number when requesting a password reset.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 24),
+          _buildFormField(
+            context,
             'Department / Institution',
             controller: _institutionController,
             validator: (v) => (v == null || v.trim().isEmpty)
@@ -904,6 +927,7 @@ class _LandingPageState extends State<LandingPage> {
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
         email: _emailController.text.trim(),
+        phone: _phoneController.text.trim(),
         institution: _institutionController.text.trim(),
         reason: _reasonController.text,
       );

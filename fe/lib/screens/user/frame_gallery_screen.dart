@@ -128,6 +128,12 @@ class _FrameGalleryScreenState extends State<FrameGalleryScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
+        leading: IconButton(
+          key: const Key('frame-gallery-back'),
+          tooltip: 'Back to prediction history',
+          onPressed: () => Navigator.maybePop(context),
+          icon: const Icon(Icons.arrow_back),
+        ),
         title: const Text('Frames'),
         backgroundColor: AppTheme.surface,
         shape: const Border(bottom: BorderSide(color: AppTheme.border)),

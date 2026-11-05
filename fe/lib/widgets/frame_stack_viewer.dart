@@ -209,6 +209,12 @@ class _FrameStackViewerState extends State<FrameStackViewer> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        leading: IconButton(
+          key: const Key('frame-viewer-back'),
+          tooltip: 'Back to frames',
+          onPressed: () => Navigator.maybePop(context),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+        ),
         title: Text(
           frame.name,
           style: const TextStyle(fontSize: 15, color: Colors.white),

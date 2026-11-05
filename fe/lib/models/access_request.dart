@@ -7,6 +7,7 @@ class AccessRequest {
   final String firstName;
   final String lastName;
   final String email;
+  final String? phone;
   final String institution;
   final String? reason;
 
@@ -27,6 +28,7 @@ class AccessRequest {
     required this.firstName,
     required this.lastName,
     required this.email,
+    this.phone,
     required this.institution,
     this.reason,
     required this.status,
@@ -51,6 +53,7 @@ class AccessRequest {
       firstName: json['first_name']?.toString() ?? '',
       lastName: json['last_name']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
+      phone: json['phone']?.toString(),
       institution: json['institution']?.toString() ?? '',
       reason: json['reason']?.toString(),
       status: json['status']?.toString() ?? 'pending',
