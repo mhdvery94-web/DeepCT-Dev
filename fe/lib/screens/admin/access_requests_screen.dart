@@ -458,6 +458,12 @@ class _RequestCard extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (request.phone?.isNotEmpty ?? false)
+                      Text(
+                        request.phone!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                   ],
                 ),
               ),

@@ -137,7 +137,7 @@ export function PredictionWorkspace() {
       </form>
     </section>
     {selected && <section ref={review} className="module-panel prediction-review" aria-labelledby="prediction-review-title">
-      <div className="module-actions"><h2 id="prediction-review-title">{selected.status === "completed" ? "Prediction results" : selected.status === "uploaded" ? "Review uploaded frames" : "Analysis progress"}</h2><button type="button" className="button button--secondary" disabled={busy} onClick={() => { selection.current = undefined; setSelected(undefined); setSelectedId(undefined); }}>Close preview</button></div>
+      <div className="prediction-review__header"><button type="button" className="button prediction-review__back" disabled={busy} onClick={() => { selection.current = undefined; setSelected(undefined); setSelectedId(undefined); document.getElementById("prediction-history-title")?.scrollIntoView({ block: "start" }); }}>← Back to prediction history</button><h2 id="prediction-review-title">{selected.status === "completed" ? "Prediction results" : selected.status === "uploaded" ? "Review uploaded frames" : "Analysis progress"}</h2></div>
       <p>{display(selected.file_name || selected.job_id)} · {display(asRow(selected.model).name)} · {display(selected.input_files_count)} input frames</p>
       <PredictionProgress prediction={selected} />
       <Link className="button button--secondary" href={`/workspace/assistant?analysis_record_id=${selected.id}`}>Jelaskan hasil dengan asisten</Link>

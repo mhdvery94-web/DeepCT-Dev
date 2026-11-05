@@ -46,6 +46,7 @@ class ApiConfig {
 
   // Public: request an account from the landing page
   static const String accessRequests = '/access-requests';
+  static const String passwordResetRequests = '/password-reset-requests';
 
   // IT support, as messaging. The researcher's thread takes no id: they have
   // exactly one, so "mine" is the only thing it could mean.
